@@ -1,0 +1,469 @@
+{% extends "base.html" %}
+{% block title %}Reporte clínico — DiabetesTracker{% endblock %}
+
+{% block content %}
+
+<style>
+  /* ── Estilos específicos del reporte ── */
+  .report-header { border-bottom: 3px solid #1e293b; padding-bottom: 1rem; margin-bottom: 1.5rem; }
+  .metric-card {
+    background: white; border-radius: 10px; border: 1px solid #e2e8f0;
+    padding: 1rem 1.25rem; height: 100%;
+  }
+  .metric-card .val { font-size: 1.9rem; font-weight: 700; line-height: 1.1; }
+  .metric-card .label { font-size: .75rem; color: #64748b; margin-top: .2rem; }
+  .metric-card .meta  { font-size: .7rem; color: #94a3b8; margin-top: .15rem; }
+  .target-ok   { color: #16a34a; }
+  .target-warn { color: #d97706; }
+  .target-bad  { color: #dc2626; }
+  .section-title {
+    font-size: .75rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .08em; color: #64748b;
+    border-bottom: 1px solid #e2e8f0; padding-bottom: .35rem; margin-bottom: .75rem;
+  }
+
+  @media print {
+    .no-print { display: none !important; }
+    .sidebar, .mobile-topbar, .bottom-nav { display: none !important; }
+    .main-content { margin-left: 0 !important; padding: 0 !important; }
+    .chart-box, .metric-card { break-inside: avoid; }
+    body { background: white !important; }
+    a { text-decoration: none !important; color: inherit !important; }
+    .page-break { page-break-before: always; }
+  }
+</style>
+
+<!-- Controles (se ocultan al imprimir) -->
+<div class="d-flex justify-content-between align-items-start mb-3 no-print">
+  <div>
+    <h1 class="h4 fw-bold mb-0">
+      <i class="bi bi-file-medical-fill me-2 text-primary"></i>Reporte clínico
+    </h1>
+    <small class="text-muted">Para llevar a tu endocrinólogo</small>
+  </div>
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+    <span class="text-muted" style="font-size:.85rem;">Período:</span>
+    {% for d in [7, 14, 30] %}
+      <a href="{{ url_for('reporte_semanal', dias=d) }}"
+         class="btn btn-sm {{ 'btn-primary' if dias == d else 'btn-outline-secondary' }}">{{ d }}d</a>
+    {% endfor %}
+    <button onclick="window.print()" class="btn btn-sm btn-success ms-2">
+      <i class="bi bi-printer-fill me-1"></i>Imprimir
+    </button>
+    <a href="{{ url_for('reporte_semanal_pdf', dias=dias) }}"
+       class="btn btn-sm btn-danger ms-1">
+      <i class="bi bi-file-earmark-pdf-fill me-1"></i>Descargar PDF
+    </a>
+  </div>
+</div>
+
+<!-- ═══ ENCABEZADO DEL REPORTE ═══ -->
+<div class="chart-box report-header mb-3">
+  <div class="row align-items-center">
+    <div class="col">
+      <h2 class="h5 fw-bold mb-1">
+        <i class="bi bi-heart-pulse-fill text-danger me-2"></i>DiabetesTracker — Reporte de Glucemia
+      </h2>
+      <div class="text-muted" style="font-size:.9rem;">
+        Período analizado:
+        <strong>{{ desde.strftime('%d de %B de %Y') }}</strong> al
+        <strong>{{ hasta.strftime('%d de %B de %Y') }}</strong>
+        ({{ dias }} días)
+      </div>
+    </div>
+    <div class="col-auto text-end text-muted" style="font-size:.8rem;">
+      Generado: {{ hasta.strftime('%d/%m/%Y %H:%M') }}<br>
+      <span class="badge bg-primary mt-1">Diabetes Tipo 1</span>
+    </div>
+  </div>
+</div>
+
+{% if stats %}
+
+<!-- ═══ MÉTRICAS PRINCIPALES ═══ -->
+<div class="section-title">Métricas principales ({{ stats.n }} lecturas)</div>
+<div class="row g-2 mb-3">
+
+  <!-- GMI -->
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="metric-card text-center">
+      <div class="val {{ 'target-ok' if stats.gmi < 7.0 else ('target-warn' if stats.gmi < 8.0 else 'target-bad') }}">
+        {{ stats.gmi }}%
+      </div>
+      <div class="label">GMI (≈ HbA1c)</div>
+      <div class="meta">Meta &lt;7%</div>
+    </div>
+  </div>
+
+  <!-- TIR -->
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="metric-card text-center">
+      <div class="val {{ 'target-ok' if stats.tir >= 70 else ('target-warn' if stats.tir >= 50 else 'target-bad') }}">
+        {{ stats.tir }}%
+      </div>
+      <div class="label">Tiempo en rango</div>
+      <div class="meta">70–180 mg/dL · Meta ≥70%</div>
+    </div>
+  </div>
+
+  <!-- TBR -->
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="metric-card text-center">
+      <div class="val {{ 'target-ok' if stats.tbr <= 4 else 'target-bad' }}">
+        {{ stats.tbr }}%
+      </div>
+      <div class="label">Tiempo bajo rango</div>
+      <div class="meta">&lt;70 mg/dL · Meta ≤4%</div>
+    </div>
+  </div>
+
+  <!-- TAR -->
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="metric-card text-center">
+      <div class="val {{ 'target-ok' if stats.tar <= 25 else ('target-warn' if stats.tar <= 40 else 'target-bad') }}">
+        {{ stats.tar }}%
+      </div>
+      <div class="label">Tiempo alto rango</div>
+      <div class="meta">&gt;180 mg/dL · Meta ≤25%</div>
+    </div>
+  </div>
+
+  <!-- Media -->
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="metric-card text-center">
+      <div class="val {{ 'target-ok' if 100 <= stats.mean <= 154 else 'target-warn' }}">
+        {{ stats.mean }}
+      </div>
+      <div class="label">Glucemia media</div>
+      <div class="meta">mg/dL</div>
+    </div>
+  </div>
+
+  <!-- CV -->
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="metric-card text-center">
+      <div class="val {{ 'target-ok' if stats.cv <= 36 else 'target-warn' }}">
+        {{ stats.cv }}%
+      </div>
+      <div class="label">Coef. variación</div>
+      <div class="meta">Meta ≤36%</div>
+    </div>
+  </div>
+</div>
+
+<!-- Fila secundaria de métricas -->
+<div class="row g-2 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="metric-card text-center">
+      <div class="val" style="font-size:1.4rem;">{{ stats.min }}</div>
+      <div class="label">Mínimo</div>
+      <div class="meta">mg/dL en el período</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="metric-card text-center">
+      <div class="val" style="font-size:1.4rem;">{{ stats.max }}</div>
+      <div class="label">Máximo</div>
+      <div class="meta">mg/dL en el período</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="metric-card text-center">
+      <div class="val {{ 'target-bad' if stats.tbr54 > 1 else 'target-ok' }}" style="font-size:1.4rem;">
+        {{ stats.tbr54 }}%
+      </div>
+      <div class="label">Hipoglucemia grave</div>
+      <div class="meta">&lt;54 mg/dL · Meta ≤1%</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="metric-card text-center">
+      <div class="val {{ 'target-bad' if stats.tar250 > 5 else 'target-warn' }}" style="font-size:1.4rem;">
+        {{ stats.tar250 }}%
+      </div>
+      <div class="label">Hiperglucemia grave</div>
+      <div class="meta">&gt;250 mg/dL · Meta ≤5%</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ GRÁFICAS ═══ -->
+<div class="row g-3 mb-3">
+  <div class="col-lg-4">
+    <div class="chart-box">
+      <div id="r-chart-tir" style="min-height:240px;"></div>
+    </div>
+  </div>
+  <div class="col-lg-8">
+    <div class="chart-box">
+      <div id="r-chart-hora" style="min-height:240px;"></div>
+    </div>
+  </div>
+</div>
+<div class="row g-3 mb-3">
+  <div class="col-12">
+    <div class="chart-box">
+      <div id="r-chart-timeline" style="min-height:220px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ DISTRIBUCIÓN POR FRANJA HORARIA ═══ -->
+<div class="row g-3 mb-3">
+  <div class="col-lg-6">
+    <div class="chart-box">
+      <div class="section-title">Glucemia por franja horaria</div>
+      <table class="table table-sm mb-0" style="font-size:.88rem;">
+        <thead>
+          <tr>
+            <th>Franja</th>
+            <th class="text-center">Promedio</th>
+            <th class="text-center">Min</th>
+            <th class="text-center">Max</th>
+            <th class="text-center">TIR</th>
+            <th class="text-center">N</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in franjas %}
+          <tr>
+            <td><strong>{{ f.nombre }}</strong><br><small class="text-muted">{{ f.label }}</small></td>
+            {% if f.sin_datos is defined %}
+            <td colspan="5" class="text-muted text-center" style="font-size:.8rem;">Sin datos</td>
+            {% else %}
+            <td class="text-center fw-semibold
+              {% if f.avg > 180 %}text-danger{% elif f.avg < 70 %}text-primary{% else %}text-success{% endif %}">
+              {{ f.avg }} mg/dL
+            </td>
+            <td class="text-center text-muted">{{ f.min }}</td>
+            <td class="text-center text-muted">{{ f.max }}</td>
+            <td class="text-center">
+              <span class="fw-semibold {{ 'text-success' if f.tir >= 70 else ('text-warning' if f.tir >= 50 else 'text-danger') }}">
+                {{ f.tir }}%
+              </span>
+            </td>
+            <td class="text-center text-muted">{{ f.n }}</td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══ RESUMEN TRATAMIENTO ═══ -->
+  <div class="col-lg-6">
+    <div class="chart-box h-100">
+      <div class="section-title">Resumen de tratamiento</div>
+      <div class="row g-2 mb-3">
+        <div class="col-6">
+          <div class="metric-card text-center">
+            <div class="val text-purple" style="color:#7c3aed; font-size:1.5rem;">{{ bolus_total }}U</div>
+            <div class="label">Insulina rápida (total)</div>
+            <div class="meta">{{ bolus_diario }}U/día promedio</div>
+          </div>
+        </div>
+        <div class="col-6">
+          <div class="metric-card text-center">
+            <div class="val text-info" style="font-size:1.5rem;">{{ basal_total }}U</div>
+            <div class="label">Insulina basal (total)</div>
+            <div class="meta">{{ basal_diario }}U/día promedio</div>
+          </div>
+        </div>
+        <div class="col-6">
+          <div class="metric-card text-center">
+            <div class="val" style="font-size:1.5rem; color:#f59e0b;">{{ carbs_diario|int }}g</div>
+            <div class="label">Carbohidratos/día</div>
+            <div class="meta">{{ n_comidas }} comidas registradas</div>
+          </div>
+        </div>
+        <div class="col-6">
+          <div class="metric-card text-center">
+            <div class="val text-success" style="font-size:1.5rem;">{{ min_actividad }}</div>
+            <div class="label">Minutos de ejercicio</div>
+            <div class="meta">{{ n_actividades }} sesiones registradas</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ EPISODIOS DE HIPOGLUCEMIA ═══ -->
+{% if hipos %}
+<div class="chart-box mb-3">
+  <div class="section-title">
+    <i class="bi bi-exclamation-triangle-fill text-danger me-1"></i>
+    Episodios de hipoglucemia (&lt;70 mg/dL) — últimos {{ dias }} días
+  </div>
+  <div style="max-height:220px; overflow-y:auto;">
+    <table class="table table-sm mb-0" style="font-size:.88rem;">
+      <thead class="table-light sticky-top">
+        <tr>
+          <th>Fecha y hora</th>
+          <th class="text-center">Valor</th>
+          <th class="text-center">Gravedad</th>
+          <th>Fuente</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in hipos %}
+        <tr>
+          <td>{{ r.timestamp.strftime('%d/%m/%Y %H:%M') }}</td>
+          <td class="text-center fw-bold text-danger">{{ r.value_mgdl | int }} mg/dL</td>
+          <td class="text-center">
+            {% if r.value_mgdl < 54 %}
+              <span class="badge bg-danger">Grave (&lt;54)</span>
+            {% else %}
+              <span class="badge bg-warning text-dark">Leve</span>
+            {% endif %}
+          </td>
+          <td class="text-muted" style="font-size:.8rem;">
+            {% if r.source == 'cgm_historic' %}CGM
+            {% elif r.source == 'cgm_scan' %}Escáner
+            {% else %}Manual{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- ═══ IMPACTO DE COMIDAS ═══ -->
+{% if tabla_comidas or resumen_comidas %}
+<div class="row g-3 mb-3">
+
+  <!-- Tabla detallada por comida -->
+  {% if tabla_comidas %}
+  <div class="col-lg-7">
+    <div class="chart-box">
+      <div class="section-title">
+        <i class="bi bi-egg-fried text-warning me-1"></i>
+        Impacto de comidas en glucemia
+      </div>
+      <div style="max-height:320px; overflow-y:auto;">
+        <table class="table table-sm mb-0" style="font-size:.82rem;">
+          <thead class="table-light sticky-top">
+            <tr>
+              <th>Fecha</th>
+              <th>Alimento</th>
+              <th class="text-center">CH</th>
+              <th class="text-center">Insulina</th>
+              <th class="text-center">Pre</th>
+              <th class="text-center">Pico</th>
+              <th class="text-center">Δ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for f in tabla_comidas %}
+            <tr>
+              <td class="text-muted" style="white-space:nowrap;">{{ f.fecha }}</td>
+              <td>{{ f.nombre[:24] }}</td>
+              <td class="text-center fw-semibold text-warning">{{ f.carbs }}g</td>
+              <td class="text-center">
+                {% if f.insulina %}
+                  {% for d in f.insulina %}
+                    <span class="d-block" style="white-space:nowrap; line-height:1.3; color:#7c3aed; font-weight:600;">
+                      {{ d.units }}U <small class="text-muted fw-normal">{{ d.timing }}</small>
+                    </span>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-center text-muted">{{ f.pre }}</td>
+              <td class="text-center fw-semibold
+                {% if f.pico > 180 %}text-danger{% elif f.pico < 70 %}text-primary{% else %}text-success{% endif %}">
+                {{ f.pico }}
+              </td>
+              <td class="text-center fw-bold
+                {% if f.delta > 80 %}text-danger{% elif f.delta > 40 %}text-warning{% elif f.delta < 0 %}text-primary{% else %}text-success{% endif %}">
+                {{ '+' if f.delta > 0 else '' }}{{ f.delta }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Resumen por alimento -->
+  {% if resumen_comidas %}
+  <div class="col-lg-5">
+    <div class="chart-box">
+      <div class="section-title">
+        <i class="bi bi-sort-down text-danger me-1"></i>
+        Alimentos por mayor impacto (promedio)
+      </div>
+      <table class="table table-sm mb-0" style="font-size:.82rem;">
+        <thead class="table-light">
+          <tr>
+            <th>Alimento</th>
+            <th class="text-center">Veces</th>
+            <th class="text-center">Δ prom.</th>
+            <th class="text-center">Pico prom.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in resumen_comidas[:10] %}
+          <tr>
+            <td>{{ r.nombre[:22] }}</td>
+            <td class="text-center text-muted">{{ r.n }}</td>
+            <td class="text-center fw-bold
+              {% if r.avg_delta > 80 %}text-danger{% elif r.avg_delta > 40 %}text-warning{% else %}text-success{% endif %}">
+              {{ '+' if r.avg_delta > 0 else '' }}{{ r.avg_delta }}
+            </td>
+            <td class="text-center fw-semibold
+              {% if r.avg_pico > 180 %}text-danger{% else %}text-success{% endif %}">
+              {{ r.avg_pico }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div class="text-muted mt-2" style="font-size:.75rem;">
+        Δ = alza de glucemia post-comida (mg/dL)
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endif %}
+
+<!-- ═══ NOTA CLÍNICA ═══ -->
+<div class="alert alert-light border" style="font-size:.82rem;">
+  <strong>Nota metodológica:</strong>
+  GMI calculado con fórmula ADA/EASD: GMI = 3.31 + 0.02392 × glucemia media (mg/dL).
+  Metas de referencia según estándares internacionales para Diabetes Tipo 1 (ADA 2024 / TIR Consensus 2019).
+  Este reporte no reemplaza la evaluación clínica de tu médico tratante.
+</div>
+
+{% else %}
+<div class="alert alert-warning">
+  <i class="bi bi-exclamation-triangle me-2"></i>
+  No hay lecturas de glucemia registradas en los últimos {{ dias }} días.
+  Importa datos del Freestyle Libre o registrá lecturas manuales.
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const rc = {
+    tir:      {{ charts.tir      | tojson }},
+    porHora:  {{ charts.por_hora | tojson }},
+    timeline: {{ charts.timeline | tojson }},
+  };
+  document.addEventListener('DOMContentLoaded', function() {
+    renderChart('r-chart-tir',      rc.tir);
+    renderChart('r-chart-hora',     rc.porHora);
+    renderChart('r-chart-timeline', rc.timeline);
+  });
+</script>
+{% endblock %}

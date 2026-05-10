@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+{% block title %}Calculadora de corrección — DiabetesTracker{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+  <div>
+    <h1><i class="bi bi-calculator-fill me-2 text-info"></i>Calculadora de corrección</h1>
+    <small class="text-muted">Basada en tu historial real de glucemia e insulina</small>
+  </div>
+</div>
+
+<div class="row g-3">
+
+  <!-- ── Panel principal ── -->
+  <div class="col-lg-6">
+    <div class="chart-box">
+
+      <!-- ISF personal -->
+      <div class="mb-4">
+        <div class="d-flex align-items-center justify-content-between mb-1">
+          <span class="fw-semibold">Tu Factor de Sensibilidad a la Insulina (ISF)</span>
+          {% if isf_personal %}
+            <span class="badge bg-success">{{ n_muestras }} correcciones analizadas</span>
+          {% else %}
+            <span class="badge bg-secondary">Sin datos suficientes</span>
+          {% endif %}
+        </div>
+
+        {% if isf_personal %}
+        <div class="alert alert-success py-2 mb-2" style="font-size:.9rem;">
+          <i class="bi bi-graph-down-arrow me-1"></i>
+          Tu ISF personal es <strong>{{ isf_personal }} mg/dL por unidad</strong>.
+          Cada unidad de insulina rápida te baja aproximadamente
+          <strong>{{ isf_personal | int }} mg/dL</strong>.
+        </div>
+        {% else %}
+        <div class="alert alert-warning py-2 mb-2" style="font-size:.85rem;">
+          <i class="bi bi-exclamation-triangle me-1"></i>
+          Aún no hay suficientes correcciones registradas para calcular tu ISF personal.
+          Podés ingresarlo manualmente abajo, o seguir usando la app y se calculará automáticamente.
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Formulario -->
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Glucemia actual (mg/dL)</label>
+        <div class="input-group">
+          <input type="number" id="inp-glucemia" class="form-control form-control-lg"
+                 min="40" max="600" placeholder="ej. 220"
+                 value="{{ ultima.value_mgdl | int if ultima else '' }}">
+          <span class="input-group-text">mg/dL</span>
+        </div>
+        {% if ultima %}
+        <div class="form-text">
+          Última lectura registrada: <strong>{{ ultima.value_mgdl | int }} mg/dL</strong>
+          ({{ ultima.timestamp.strftime('%d/%m %H:%M') }})
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Glucemia objetivo (mg/dL)</label>
+        <div class="d-flex gap-2 mb-2">
+          {% for obj in [90, 100, 110, 120] %}
+          <button type="button" class="btn btn-sm btn-outline-secondary objetivo-chip"
+                  onclick="setObjetivo({{ obj }})">{{ obj }}</button>
+          {% endfor %}
+        </div>
+        <div class="input-group" style="max-width:200px;">
+          <input type="number" id="inp-objetivo" class="form-control"
+                 min="70" max="180" value="100">
+          <span class="input-group-text">mg/dL</span>
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold">
+          ISF (mg/dL por unidad)
+          <span class="text-muted fw-normal" style="font-size:.85rem;">
+            — dejá en blanco para usar el calculado automáticamente
+          </span>
+        </label>
+        <div class="input-group" style="max-width:200px;">
+          <input type="number" id="inp-isf" class="form-control"
+                 min="5" max="200" step="0.5"
+                 placeholder="{{ isf_personal or 'manual' }}">
+          <span class="input-group-text">mg/dL·U⁻¹</span>
+        </div>
+      </div>
+
+      <button class="btn btn-info btn-lg w-100 text-white fw-semibold" id="btn-calcular">
+        <i class="bi bi-calculator me-2"></i>Calcular corrección
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Resultado ── -->
+  <div class="col-lg-6">
+    <div class="chart-box d-flex flex-column justify-content-center" id="resultado-box"
+         style="min-height: 260px;">
+      <div id="resultado-vacio" class="text-center text-muted py-5">
+        <i class="bi bi-arrow-left-circle fs-1 d-block mb-2 opacity-25"></i>
+        Ingresá tu glucemia actual y presioná Calcular
+      </div>
+      <div id="resultado-contenido" style="display:none;">
+        <!-- Relleno por JS -->
+      </div>
+    </div>
+
+    <!-- Advertencia clínica -->
+    <div class="alert alert-light border mt-3" style="font-size:.8rem;">
+      <i class="bi bi-shield-exclamation text-warning me-1"></i>
+      <strong>Solo orientativo.</strong>
+      Esta calculadora usa tu historial para estimar la corrección, pero no considera
+      insulina activa, ejercicio reciente, ingesta pendiente ni otros factores.
+      Siempre consultá con tu médico antes de cambiar dosis.
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Explicación del ISF ── -->
+<div class="chart-box mt-3">
+  <h6 class="fw-semibold mb-3">¿Cómo se calcula tu ISF personal?</h6>
+  <div class="row g-3" style="font-size:.88rem;">
+    <div class="col-md-4">
+      <div class="d-flex gap-2">
+        <div class="flex-shrink-0">
+          <span class="badge bg-primary rounded-circle" style="width:28px;height:28px;line-height:28px;">1</span>
+        </div>
+        <div>
+          <strong>Busca correcciones puras</strong><br>
+          <span class="text-muted">Dosis de insulina rápida donde no hubo comida en los 30 minutos anteriores o posteriores.</span>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="d-flex gap-2">
+        <div class="flex-shrink-0">
+          <span class="badge bg-primary rounded-circle" style="width:28px;height:28px;line-height:28px;">2</span>
+        </div>
+        <div>
+          <strong>Mide la caída real</strong><br>
+          <span class="text-muted">Compara la glucemia justo antes de la dosis con el valor mínimo alcanzado en las 3 horas siguientes.</span>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="d-flex gap-2">
+        <div class="flex-shrink-0">
+          <span class="badge bg-primary rounded-circle" style="width:28px;height:28px;line-height:28px;">3</span>
+        </div>
+        <div>
+          <strong>Calcula el promedio</strong><br>
+          <span class="text-muted">ISF = (glucemia antes − mínimo alcanzado) ÷ unidades usadas. Se promedian todas las correcciones válidas.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function setObjetivo(val) {
+    document.getElementById('inp-objetivo').value = val;
+    document.querySelectorAll('.objetivo-chip').forEach(b => {
+      b.classList.toggle('btn-info', b.textContent.trim() == val);
+      b.classList.toggle('text-white', b.textContent.trim() == val);
+      b.classList.toggle('btn-outline-secondary', b.textContent.trim() != val);
+    });
+  }
+
+  document.getElementById('btn-calcular').addEventListener('click', async function() {
+    const glucemia = document.getElementById('inp-glucemia').value;
+    const objetivo = document.getElementById('inp-objetivo').value || 100;
+    const isf      = document.getElementById('inp-isf').value;
+
+    if (!glucemia) {
+      alert('Ingresá tu glucemia actual.');
+      return;
+    }
+
+    const btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Calculando...';
+
+    let url = `/api/calculadora/correccion?glucemia=${glucemia}&objetivo=${objetivo}`;
+    if (isf) url += `&isf=${isf}`;
+
+    try {
+      const res = await fetch(url);
+      const d   = await res.json();
+      mostrarResultado(d);
+    } catch(e) {
+      mostrarError('Error de conexión. Intentá de nuevo.');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-calculator me-2"></i>Calcular corrección';
+    }
+  });
+
+  function mostrarResultado(d) {
+    document.getElementById('resultado-vacio').style.display = 'none';
+    const box = document.getElementById('resultado-contenido');
+    box.style.display = 'block';
+
+    if (d.error) { mostrarError(d.error); return; }
+
+    if (d.correccion === 0) {
+      box.innerHTML = `
+        <div class="text-center py-3">
+          <i class="bi bi-check-circle-fill text-success fs-1 d-block mb-2"></i>
+          <div class="fw-semibold fs-5">Sin corrección necesaria</div>
+          <div class="text-muted mt-1">${d.info}</div>
+        </div>`;
+      return;
+    }
+
+    const isfLabel = d.fuente_isf === 'personal'
+      ? `ISF personal (${d.n_muestras} muestras)`
+      : 'ISF ingresado manualmente';
+
+    const unidadesColor = d.sugerida >= 4 ? 'text-danger' : (d.sugerida >= 2 ? 'text-warning' : 'text-success');
+
+    box.innerHTML = `
+      <div class="text-center mb-4">
+        <div class="text-muted mb-1" style="font-size:.85rem;">Corrección sugerida</div>
+        <div class="display-4 fw-bold ${unidadesColor}">${d.sugerida} U</div>
+        <div class="text-muted" style="font-size:.85rem;">
+          (cálculo exacto: ${d.correccion.toFixed(2)} U — redondeado a 0.5U)
+        </div>
+      </div>
+      <hr>
+      <div class="row g-2 text-center" style="font-size:.85rem;">
+        <div class="col-4">
+          <div class="fw-semibold text-danger">${d.glucemia}</div>
+          <div class="text-muted">Glucemia actual</div>
+        </div>
+        <div class="col-4">
+          <div class="fw-semibold text-primary">${d.objetivo}</div>
+          <div class="text-muted">Objetivo</div>
+        </div>
+        <div class="col-4">
+          <div class="fw-semibold text-success">${d.resultado_esperado}</div>
+          <div class="text-muted">Esperado post-corrección</div>
+        </div>
+      </div>
+      <div class="mt-3 text-center">
+        <span class="badge bg-light text-dark border" style="font-size:.78rem;">
+          <i class="bi bi-info-circle me-1"></i>${isfLabel}: 1U baja ~${d.isf} mg/dL
+        </span>
+      </div>`;
+  }
+
+  function mostrarError(msg) {
+    document.getElementById('resultado-vacio').style.display = 'none';
+    const box = document.getElementById('resultado-contenido');
+    box.style.display = 'block';
+    box.innerHTML = `
+      <div class="text-center py-4">
+        <i class="bi bi-exclamation-circle-fill text-warning fs-2 d-block mb-2"></i>
+        <div class="text-muted">${msg}</div>
+      </div>`;
+  }
+
+  // Calcular automáticamente si hay última lectura cargada
+  {% if ultima and ultima.value_mgdl > 100 %}
+  window.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('btn-calcular').click();
+  });
+  {% endif %}
+</script>
+{% endblock %}

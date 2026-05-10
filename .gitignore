@@ -1,0 +1,22 @@
+# Base de datos local
+*.db
+*.sqlite
+
+# Variables de entorno
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+venv/
+.venv/
+env/
+
+# macOS
+.DS_Store
+
+# Uploads temporales
+uploads/
+*.csv

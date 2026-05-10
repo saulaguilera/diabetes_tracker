@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if editar else 'Nueva' }} glucemia — DiabetesTracker{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><i class="bi bi-droplet-fill me-2 text-primary"></i>
+    {{ 'Editar lectura' if editar else 'Registrar glucemia' }}
+  </h1>
+</div>
+
+<div class="form-card">
+  <form method="post">
+    <div class="row g-3 mb-3">
+      <div class="col-6">
+        <label class="form-label fw-semibold">Fecha</label>
+        <input type="date" name="fecha" class="form-control" value="{{ fecha }}" required>
+      </div>
+      <div class="col-6">
+        <label class="form-label fw-semibold">Hora</label>
+        <input type="time" name="hora" class="form-control" value="{{ hora }}" required>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Glucemia (mg/dL)</label>
+      <div class="input-group">
+        <input type="number" name="valor" class="form-control form-control-lg"
+               step="0.1" min="20" max="600"
+               value="{{ item.value_mgdl if editar else '' }}"
+               placeholder="ej. 120" required autofocus>
+        <span class="input-group-text">mg/dL</span>
+      </div>
+      <div class="form-text">Rango objetivo: 70–180 mg/dL</div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Fuente</label>
+      <select name="fuente" class="form-select">
+        <option value="manual"    {{ 'selected' if not editar or item.source == 'manual' }}>Glucómetro manual</option>
+        <option value="cgm_scan"  {{ 'selected' if editar and item.source == 'cgm_scan' }}>Escáner Freestyle Libre</option>
+        <option value="cgm_strip" {{ 'selected' if editar and item.source == 'cgm_strip' }}>Tira reactiva</option>
+      </select>
+    </div>
+
+    <div class="mb-4">
+      <label class="form-label fw-semibold">Notas <span class="text-muted fw-normal">(opcional)</span></label>
+      <input type="text" name="notas" class="form-control"
+             value="{{ item.notes if editar and item.notes else '' }}"
+             placeholder="ej. antes de comer, después de ejercicio...">
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-primary">
+        <i class="bi bi-check-lg"></i> {{ 'Actualizar' if editar else 'Guardar' }}
+      </button>
+      <a href="{{ url_for('glucemia') }}" class="btn btn-outline-secondary">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

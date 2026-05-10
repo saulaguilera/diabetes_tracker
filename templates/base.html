@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}DiabetesTracker{% endblock %}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+  <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+  <style>
+    /* ── Variables modo claro (default) ── */
+    :root {
+      --sidebar-width: 230px;
+      --bg:        #f8fafc;
+      --surface:   #ffffff;
+      --surface2:  #f1f5f9;
+      --border:    #e2e8f0;
+      --text:      #0f172a;
+      --text-muted:#64748b;
+      --table-th:  #64748b;
+      --input-bg:  #ffffff;
+      --input-border: #cbd5e1;
+      --alert-light-bg: #f8fafc;
+      --alert-light-border: #e2e8f0;
+      --plotly-bg: rgba(248,250,252,1);
+    }
+
+    /* ── Variables modo oscuro ── */
+    [data-theme="dark"] {
+      --bg:        #0f172a;
+      --surface:   #1e293b;
+      --surface2:  #273549;
+      --border:    #334155;
+      --text:      #e2e8f0;
+      --text-muted:#94a3b8;
+      --table-th:  #94a3b8;
+      --input-bg:  #1e293b;
+      --input-border: #475569;
+      --alert-light-bg: #1e293b;
+      --alert-light-border: #334155;
+      --plotly-bg: rgba(30,41,59,1);
+    }
+
+    /* ── Base ── */
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      transition: background .2s, color .2s;
+    }
+
+    /* ── Sidebar (siempre oscuro) ── */
+    .sidebar {
+      width: var(--sidebar-width);
+      min-height: 100vh;
+      background: #1e293b;
+      color: #cbd5e1;
+      position: fixed;
+      top: 0; left: 0;
+      z-index: 100;
+      padding-top: 1rem;
+      transition: transform .2s;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar .nav-scroll { flex: 1; overflow-y: auto; }
+    .sidebar .brand {
+      font-size: 1.1rem; font-weight: 700; color: #f1f5f9;
+      padding: 0.5rem 1.25rem 1.25rem;
+      display: flex; align-items: center; gap: .5rem;
+    }
+    .sidebar .brand span.badge-t1 {
+      background: #ef4444; color: white;
+      font-size: .65rem; padding: .2em .5em; border-radius: 4px;
+    }
+    .sidebar .nav-link {
+      color: #94a3b8; padding: .55rem 1.25rem;
+      border-radius: 6px; margin: 1px 8px;
+      font-size: .92rem; display: flex; align-items: center; gap: .6rem;
+    }
+    .sidebar .nav-link:hover, .sidebar .nav-link.active {
+      background: #334155; color: #f1f5f9;
+    }
+    .sidebar .nav-link i { font-size: 1rem; width: 20px; }
+    .sidebar .nav-section {
+      font-size: .7rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .08em;
+      color: #64748b; padding: .75rem 1.25rem .25rem;
+    }
+
+    /* ── Botón dark mode al fondo del sidebar ── */
+    .sidebar-footer {
+      padding: .75rem 1rem 1rem;
+      border-top: 1px solid #334155;
+      margin-top: .5rem;
+    }
+    #btn-darkmode {
+      width: 100%; background: transparent; border: 1px solid #334155;
+      color: #94a3b8; border-radius: 8px; padding: .45rem .75rem;
+      font-size: .82rem; display: flex; align-items: center; gap: .5rem;
+      cursor: pointer; transition: background .15s, color .15s;
+    }
+    #btn-darkmode:hover { background: #334155; color: #f1f5f9; }
+
+    /* ── Main content ── */
+    .main-content {
+      margin-left: var(--sidebar-width);
+      padding: 1.5rem 2rem;
+      min-height: 100vh;
+    }
+    .page-header {
+      margin-bottom: 1.5rem; padding-bottom: .75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .page-header h1 { font-size: 1.5rem; font-weight: 700; margin: 0; }
+
+    /* ── Cards ── */
+    .stat-card {
+      background: var(--surface);
+      border-radius: 12px; padding: 1.25rem;
+      border: 1px solid var(--border); height: 100%;
+      transition: background .2s, border-color .2s;
+    }
+    .stat-card .stat-value { font-size: 2rem; font-weight: 700; line-height: 1; }
+    .stat-card .stat-label { font-size: .8rem; color: var(--text-muted); margin-top: .25rem; }
+    .stat-card .stat-icon  { font-size: 1.5rem; opacity: .3; float: right; margin-top: -1.75rem; }
+
+    /* ── Chart box ── */
+    .chart-box {
+      background: var(--surface);
+      border-radius: 12px; border: 1px solid var(--border); padding: 1rem;
+      transition: background .2s, border-color .2s;
+    }
+
+    /* ── Form card ── */
+    .form-card {
+      background: var(--surface);
+      border-radius: 12px; border: 1px solid var(--border);
+      padding: 1.75rem; max-width: 560px;
+      transition: background .2s, border-color .2s;
+    }
+
+    /* ── Inputs y selects ── */
+    .form-control, .form-select {
+      background-color: var(--input-bg) !important;
+      border-color: var(--input-border) !important;
+      color: var(--text) !important;
+    }
+    .form-control:focus, .form-select:focus {
+      background-color: var(--input-bg) !important;
+      color: var(--text) !important;
+    }
+    .form-control::placeholder { color: var(--text-muted) !important; }
+
+    /* ── Tables ── */
+    .table { color: var(--text); }
+    .table th { font-size: .8rem; font-weight: 600; color: var(--table-th); text-transform: uppercase; letter-spacing: .04em; }
+    .table td { border-color: var(--border); }
+    .table-hover > tbody > tr:hover > * { background-color: var(--surface2); }
+    .table-light, thead.table-light > tr > th { background-color: var(--surface2) !important; color: var(--table-th) !important; }
+    [data-theme="dark"] .table { --bs-table-bg: var(--surface); --bs-table-striped-bg: var(--surface2); }
+    [data-theme="dark"] .table-light { background-color: var(--surface2) !important; }
+    [data-theme="dark"] .sticky-top { background-color: var(--surface2) !important; }
+
+    /* ── Alerts ── */
+    [data-theme="dark"] .alert-light {
+      background-color: var(--alert-light-bg) !important;
+      border-color: var(--alert-light-border) !important;
+      color: var(--text) !important;
+    }
+    [data-theme="dark"] .alert-warning {
+      background-color: #422006 !important;
+      border-color: #92400e !important;
+      color: #fde68a !important;
+    }
+    [data-theme="dark"] .alert-danger {
+      background-color: #450a0a !important;
+      border-color: #991b1b !important;
+      color: #fecaca !important;
+    }
+    [data-theme="dark"] .alert-success {
+      background-color: #052e16 !important;
+      border-color: #166534 !important;
+      color: #bbf7d0 !important;
+    }
+    [data-theme="dark"] .alert-info {
+      background-color: #0c1a2e !important;
+      border-color: #1e3a5f !important;
+      color: #bae6fd !important;
+    }
+
+    /* ── Modal ── */
+    [data-theme="dark"] .modal-content {
+      background: var(--surface); border-color: var(--border); color: var(--text);
+    }
+    [data-theme="dark"] .modal-header { border-color: var(--border); }
+    [data-theme="dark"] .modal-footer { border-color: var(--border); }
+
+    /* ── Offcanvas ── */
+    [data-theme="dark"] .offcanvas { background: var(--surface); color: var(--text); }
+
+    /* ── Badges claros ── */
+    [data-theme="dark"] .badge.bg-light { background: var(--surface2) !important; color: var(--text-muted) !important; }
+
+    /* ── Helpers de color de glucemia (se mantienen siempre) ── */
+    .text-hipo  { color: #ef4444 !important; }
+    .text-hiper { color: #f97316 !important; }
+    .text-rango { color: #22c55e !important; }
+    .badge-hipo  { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .badge-rango { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .badge-hiper { background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; }
+
+    /* ── Dropdown / offcanvas body oscuro ── */
+    [data-theme="dark"] .offcanvas-body { background: #0f172a !important; }
+
+    /* ── Responsive sidebar ── */
+    @media (max-width: 768px) {
+      .sidebar { transform: translateX(-100%); }
+      .sidebar.open { transform: translateX(0); }
+      .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 99; }
+      .sidebar-overlay.show { display: block; }
+      .main-content { margin-left: 0; padding: 1rem; }
+      .mobile-topbar { display: flex !important; }
+    }
+    .mobile-topbar {
+      display: none; position: sticky; top: 0; z-index: 98;
+      background: #1e293b; padding: .6rem 1rem;
+      align-items: center; gap: .75rem;
+    }
+    .mobile-topbar .brand-text { color: #f1f5f9; font-weight: 700; font-size: 1rem; }
+
+    /* ── Bottom nav mobile ── */
+    .bottom-nav {
+      display: none; position: fixed; bottom: 0; left: 0; right: 0;
+      background: #1e293b; z-index: 200;
+      padding: .4rem 0 calc(.4rem + env(safe-area-inset-bottom));
+    }
+    @media (max-width: 768px) {
+      .bottom-nav { display: flex; }
+      .main-content { padding-bottom: 5rem; }
+    }
+    .bottom-nav a {
+      flex: 1; color: #94a3b8;
+      display: flex; flex-direction: column; align-items: center;
+      font-size: .65rem; gap: .15rem; text-decoration: none; padding: .25rem 0;
+    }
+    .bottom-nav a i { font-size: 1.3rem; }
+    .bottom-nav a.active, .bottom-nav a:hover { color: #f1f5f9; }
+    .bottom-nav a.active i { color: #38bdf8; }
+  </style>
+
+  <!-- Aplicar tema antes de pintar para evitar flash -->
+  <script>
+    (function() {
+      const t = localStorage.getItem('theme') || 'light';
+      if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    })();
+  </script>
+</head>
+<body>
+
+<!-- Mobile topbar -->
+<div class="mobile-topbar">
+  <button class="btn btn-sm btn-dark" id="sidebar-toggle" style="border-color:#334155;">
+    <i class="bi bi-list fs-5"></i>
+  </button>
+  <span class="brand-text"><i class="bi bi-heart-pulse-fill text-danger me-1"></i>DiabetesTracker</span>
+</div>
+
+<!-- Sidebar overlay (mobile) -->
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<!-- Sidebar -->
+<nav class="sidebar" id="sidebar">
+  <div class="nav-scroll">
+  <div class="brand">
+    <i class="bi bi-heart-pulse-fill text-danger"></i>
+    DiabetesTracker
+    <span class="badge-t1">T1D</span>
+  </div>
+
+  <div class="nav-section">Principal</div>
+  <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">
+    <i class="bi bi-speedometer2"></i> Dashboard
+  </a>
+
+  <div class="nav-section">Registrar</div>
+  <a href="{{ url_for('glucemia') }}" class="nav-link {% if 'glucemia' in request.endpoint %}active{% endif %}">
+    <i class="bi bi-droplet-fill"></i> Glucemia
+  </a>
+  <a href="{{ url_for('comidas') }}" class="nav-link {% if request.endpoint in ['comidas','comida_nueva','comida_editar'] %}active{% endif %}">
+    <i class="bi bi-egg-fried"></i> Comidas
+  </a>
+  <a href="{{ url_for('insulina') }}" class="nav-link {% if 'insulina' in request.endpoint %}active{% endif %}">
+    <i class="bi bi-capsule-pill"></i> Insulina
+  </a>
+  <a href="{{ url_for('actividad') }}" class="nav-link {% if 'actividad' in request.endpoint %}active{% endif %}">
+    <i class="bi bi-bicycle"></i> Actividad física
+  </a>
+  <a href="{{ url_for('alimentos') }}" class="nav-link {% if 'alimento' in request.endpoint %}active{% endif %}">
+    <i class="bi bi-journal-bookmark-fill"></i> Mis alimentos
+  </a>
+  <a href="{{ url_for('comidas_grupos') }}" class="nav-link {% if request.endpoint == 'comidas_grupos' %}active{% endif %}">
+    <i class="bi bi-tags-fill"></i> Grupos de comidas
+  </a>
+
+  <div class="nav-section">Análisis</div>
+  <a href="{{ url_for('agp') }}" class="nav-link {% if request.endpoint == 'agp' %}active{% endif %}">
+    <i class="bi bi-layers-fill"></i> AGP
+  </a>
+  <a href="{{ url_for('reportes') }}" class="nav-link {% if request.endpoint == 'reportes' %}active{% endif %}">
+    <i class="bi bi-diagram-3-fill"></i> Correlaciones
+  </a>
+  <a href="{{ url_for('recomendaciones') }}" class="nav-link {% if request.endpoint == 'recomendaciones' %}active{% endif %}">
+    <i class="bi bi-lightbulb-fill"></i> Recomendaciones
+  </a>
+  <a href="{{ url_for('calculadora') }}" class="nav-link {% if request.endpoint == 'calculadora' %}active{% endif %}">
+    <i class="bi bi-calculator-fill"></i> Calculadora ISF
+  </a>
+
+  <div class="nav-section">Clínico</div>
+  <a href="{{ url_for('reporte_semanal') }}" class="nav-link {% if request.endpoint == 'reporte_semanal' %}active{% endif %}">
+    <i class="bi bi-file-medical-fill"></i> Reporte clínico
+  </a>
+  <a href="{{ url_for('importar') }}" class="nav-link {% if request.endpoint == 'importar' %}active{% endif %}">
+    <i class="bi bi-upload"></i> Importar Libre
+  </a>
+
+  </div><!-- /nav-scroll -->
+
+  <!-- Footer: dark mode + logout -->
+  <div class="sidebar-footer">
+    <button id="btn-darkmode" title="Cambiar tema">
+      <i class="bi bi-moon-stars-fill" id="icon-darkmode"></i>
+      <span id="label-darkmode">Modo oscuro</span>
+    </button>
+    <a href="{{ url_for('logout') }}"
+       class="d-flex align-items-center gap-2 mt-2 text-decoration-none"
+       style="color:#64748b; font-size:.82rem; padding:.35rem .5rem; border-radius:6px;"
+       onmouseover="this.style.color='#f1f5f9'" onmouseout="this.style.color='#64748b'">
+      <i class="bi bi-box-arrow-left" style="width:20px;"></i>
+      Cerrar sesión
+    </a>
+  </div>
+</nav>
+
+<!-- Bottom nav (mobile) -->
+<nav class="bottom-nav">
+  <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}">
+    <i class="bi bi-speedometer2"></i>Inicio
+  </a>
+  <a href="{{ url_for('glucemia_nueva') }}" class="{% if request.endpoint == 'glucemia_nueva' %}active{% endif %}">
+    <i class="bi bi-droplet-fill"></i>Glucemia
+  </a>
+  <a href="{{ url_for('comida_nueva') }}" class="{% if request.endpoint == 'comida_nueva' %}active{% endif %}">
+    <i class="bi bi-egg-fried"></i>Comida
+  </a>
+  <a href="{{ url_for('actividad_nueva') }}" class="{% if request.endpoint == 'actividad_nueva' %}active{% endif %}">
+    <i class="bi bi-bicycle"></i>Ejercicio
+  </a>
+  <a href="{{ url_for('recomendaciones') }}" class="{% if request.endpoint == 'recomendaciones' %}active{% endif %}">
+    <i class="bi bi-lightbulb-fill"></i>Consejos
+  </a>
+  <a href="{{ url_for('reportes') }}" class="{% if request.endpoint == 'reportes' %}active{% endif %}">
+    <i class="bi bi-bar-chart-line-fill"></i>Reportes
+  </a>
+</nav>
+
+<!-- Main -->
+<main class="main-content">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ 'danger' if category == 'danger' else ('success' if category == 'success' else 'info') }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  function renderChart(divId, chartData) {
+    const el = document.getElementById(divId);
+    if (!el) return;
+
+    // Siempre limpia el spinner primero
+    if (!chartData || !chartData.data || chartData.data.length === 0) {
+      el.innerHTML = '<p class="text-center text-muted py-4" style="font-size:.88rem;">'
+        + '<i class="bi bi-bar-chart text-muted d-block fs-2 mb-2"></i>'
+        + 'Sin datos suficientes aún.<br>'
+        + '<small>Registra comidas y glucemia para ver esta gráfica.</small></p>';
+      return;
+    }
+
+    try {
+      Plotly.newPlot(divId, chartData.data, chartData.layout, {
+        responsive: true,
+        displayModeBar: false,
+      });
+    } catch(e) {
+      el.innerHTML = '<p class="text-center text-muted py-4" style="font-size:.88rem;">'
+        + 'Error al renderizar la gráfica.</p>';
+    }
+  }
+
+  // Mobile sidebar toggle
+  const sidebar   = document.getElementById('sidebar');
+  const overlay   = document.getElementById('sidebar-overlay');
+  const toggleBtn = document.getElementById('sidebar-toggle');
+  function openSidebar()  { sidebar.classList.add('open');  overlay.classList.add('show'); }
+  function closeSidebar() { sidebar.classList.remove('open'); overlay.classList.remove('show'); }
+  if (toggleBtn) toggleBtn.addEventListener('click', openSidebar);
+  if (overlay)   overlay.addEventListener('click', closeSidebar);
+  sidebar.querySelectorAll('.nav-link').forEach(l => l.addEventListener('click', closeSidebar));
+
+  // ── Dark mode toggle ──────────────────────────────────────────────────────
+  const btnDark   = document.getElementById('btn-darkmode');
+  const iconDark  = document.getElementById('icon-darkmode');
+  const labelDark = document.getElementById('label-darkmode');
+  const html      = document.documentElement;
+
+  function applyTheme(theme) {
+    if (theme === 'dark') {
+      html.setAttribute('data-theme', 'dark');
+      iconDark.className  = 'bi bi-sun-fill';
+      labelDark.textContent = 'Modo claro';
+      // Actualizar fondo de gráficas Plotly ya renderizadas
+      document.querySelectorAll('.js-plotly-plot').forEach(el => {
+        Plotly.relayout(el, {
+          'paper_bgcolor': 'rgba(0,0,0,0)',
+          'plot_bgcolor':  'rgba(30,41,59,1)',
+          'font.color':    '#e2e8f0',
+          'xaxis.gridcolor': '#334155',
+          'yaxis.gridcolor': '#334155',
+        });
+      });
+    } else {
+      html.removeAttribute('data-theme');
+      iconDark.className  = 'bi bi-moon-stars-fill';
+      labelDark.textContent = 'Modo oscuro';
+      document.querySelectorAll('.js-plotly-plot').forEach(el => {
+        Plotly.relayout(el, {
+          'paper_bgcolor': 'rgba(0,0,0,0)',
+          'plot_bgcolor':  'rgba(248,250,252,1)',
+          'font.color':    '#0f172a',
+          'xaxis.gridcolor': '#e2e8f0',
+          'yaxis.gridcolor': '#e2e8f0',
+        });
+      });
+    }
+    localStorage.setItem('theme', theme);
+  }
+
+  // Sincronizar ícono al cargar
+  applyTheme(localStorage.getItem('theme') || 'light');
+
+  btnDark.addEventListener('click', function() {
+    const current = localStorage.getItem('theme') || 'light';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+  });
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

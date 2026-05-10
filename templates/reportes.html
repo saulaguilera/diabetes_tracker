@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Correlaciones — DiabetesTracker{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+  <div>
+    <h1><i class="bi bi-diagram-3-fill me-2 text-primary"></i>Correlaciones</h1>
+    <small class="text-muted">Relación entre glucemia, comidas, insulina y ejercicio</small>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <span class="text-muted" style="font-size:.85rem;">Período:</span>
+    {% for d in [7, 14, 30, 90] %}
+      <a href="{{ url_for('reportes', dias=d) }}"
+         class="btn btn-sm {{ 'btn-primary' if dias == d else 'btn-outline-secondary' }}">{{ d }}d</a>
+    {% endfor %}
+    <a href="{{ url_for('agp', dias=dias) }}" class="btn btn-sm btn-outline-primary ms-1"
+       title="Ver distribución estadística en el AGP">
+      <i class="bi bi-layers me-1"></i>Ver AGP
+    </a>
+  </div>
+</div>
+
+<!-- 1 · Timeline con eventos (comidas, insulina, ejercicio) -->
+<div class="chart-box mb-3">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h6 class="fw-semibold mb-0">
+      <i class="bi bi-activity me-1 text-primary"></i>Timeline con eventos
+    </h6>
+    <div class="d-flex gap-3" style="font-size:.78rem; color:#64748b;">
+      <span><span style="display:inline-block;width:10px;height:10px;background:#f59e0b;clip-path:polygon(50% 0%,0% 100%,100% 100%);margin-right:4px;"></span>Comida</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#8b5cf6;clip-path:polygon(50% 100%,0% 0%,100% 0%);margin-right:4px;"></span>Insulina</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#22c55e;transform:rotate(45deg);margin-right:4px;"></span>Ejercicio</span>
+    </div>
+  </div>
+  <div id="chart-timeline-full" style="min-height:320px;"></div>
+</div>
+
+<!-- 2 · Patrón circadiano -->
+<div class="chart-box mb-3">
+  <h6 class="fw-semibold mb-2">
+    <i class="bi bi-clock me-1 text-primary"></i>Patrón circadiano
+    <small class="text-muted fw-normal">— glucemia promedio por hora del día</small>
+  </h6>
+  <div id="chart-por-hora" style="min-height:240px;"></div>
+</div>
+
+<!-- 3 · Ejercicio y glucemia -->
+<div class="chart-box mb-3">
+  <h6 class="fw-semibold mb-2">
+    <i class="bi bi-bicycle me-1 text-primary"></i>Impacto del ejercicio sobre la glucemia
+    <small class="text-muted fw-normal">— cada línea es una sesión · 0 = inicio</small>
+  </h6>
+  <div id="chart-actividad" style="min-height:300px;"></div>
+</div>
+
+<!-- 4 · Impacto comidas -->
+<div class="row g-3 mb-3">
+
+  <!-- Tabla individual -->
+  <div class="col-lg-7">
+    <div class="chart-box h-100">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-semibold mb-0">
+          <i class="bi bi-table text-warning me-1"></i>Impacto por comida
+        </h6>
+        <a href="{{ url_for('comidas_grupos') }}" class="btn btn-sm btn-outline-secondary"
+           style="font-size:.75rem;">
+          <i class="bi bi-tags me-1"></i>Ver por grupos
+        </a>
+      </div>
+      {% if tabla_filas %}
+      <div style="max-height:380px; overflow-y:auto;">
+        <table class="table table-sm table-hover mb-0" style="font-size:.84rem;">
+          <thead class="table-light sticky-top">
+            <tr>
+              <th>Fecha</th>
+              <th>Alimento</th>
+              <th class="text-center">CH</th>
+              <th class="text-center">Insulina</th>
+              <th class="text-center">Pre</th>
+              <th class="text-center">Pico 2h</th>
+              <th class="text-center">Δ</th>
+              <th class="text-center">Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for f in tabla_filas %}
+            <tr>
+              <td class="text-muted" style="white-space:nowrap; font-size:.78rem;">{{ f.fecha }}</td>
+              <td>{{ f.nombre[:26] }}</td>
+              <td class="text-center fw-semibold text-warning">{{ f.carbs }}g</td>
+              <td class="text-center">
+                {% if f.insulina %}
+                  {% for d in f.insulina %}
+                    <span class="d-block" style="white-space:nowrap; line-height:1.3;">
+                      <span class="fw-semibold" style="color:#7c3aed;">{{ d.units }}U</span>
+                      <small class="text-muted">{{ d.timing }}</small>
+                    </span>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-center text-muted">{{ f.pre }}</td>
+              <td class="text-center fw-semibold
+                {% if f.pico > 180 %}text-danger
+                {% elif f.pico < 70 %}text-primary
+                {% else %}text-success{% endif %}">{{ f.pico }}</td>
+              <td class="text-center fw-bold
+                {% if f.delta > 80 %}text-danger
+                {% elif f.delta > 40 %}text-warning
+                {% elif f.delta < 0 %}text-primary
+                {% else %}text-success{% endif %}">
+                {{ '+' if f.delta > 0 else '' }}{{ f.delta }}
+              </td>
+              <td class="text-center">
+                {% if f.estado == 'hiper' %}
+                  <span class="badge bg-danger" style="font-size:.68rem;">Hiper</span>
+                {% elif f.estado == 'hipo' %}
+                  <span class="badge bg-primary" style="font-size:.68rem;">Hipo</span>
+                {% else %}
+                  <span class="badge bg-success" style="font-size:.68rem;">OK</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted text-center py-4" style="font-size:.85rem;">
+        <i class="bi bi-info-circle d-block mb-2 fs-4 opacity-25"></i>
+        Registrá comidas y glucemias cercanas para ver el impacto.
+      </p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Scatter CH vs Δ glucemia -->
+  <div class="col-lg-5">
+    <div class="chart-box h-100">
+      <h6 class="fw-semibold mb-2">
+        <i class="bi bi-scatter-chart me-1 text-primary"></i>Carbohidratos vs alza glucémica
+      </h6>
+      <div id="chart-carbs" style="min-height:320px;"></div>
+      <p class="text-muted mt-1 mb-0" style="font-size:.76rem;">
+        Cada punto es una comida. Idealmente los puntos de más CH deberían
+        correlacionar con mayor alza, ajustada por la insulina usada.
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<!-- Nota de referencia -->
+<div class="alert alert-light border" style="font-size:.78rem;">
+  <i class="bi bi-info-circle text-primary me-1"></i>
+  <strong>Δ glucemia</strong> = pico en las 2h post-comida menos lectura previa (30 min antes).
+  Para el análisis estadístico de distribución, TIR y GMI andá al
+  <a href="{{ url_for('agp', dias=dias) }}">AGP</a>.
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    renderChart('chart-timeline-full', {{ charts.timeline_full | tojson }});
+    renderChart('chart-por-hora',      {{ charts.por_hora      | tojson }});
+    renderChart('chart-actividad',     {{ charts.actividad     | tojson }});
+    renderChart('chart-carbs',         {{ charts.carbs         | tojson }});
+  });
+</script>
+{% endblock %}

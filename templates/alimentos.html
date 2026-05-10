@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Alimentos frecuentes — DiabetesTracker{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+  <div>
+    <h1><i class="bi bi-journal-bookmark-fill me-2 text-warning"></i>Alimentos frecuentes</h1>
+    <small class="text-muted">Tu base de datos personal de alimentos</small>
+  </div>
+  <a href="{{ url_for('alimento_nuevo') }}" class="btn btn-warning">
+    <i class="bi bi-plus-lg"></i> Nuevo alimento
+  </a>
+</div>
+
+<!-- Búsqueda y filtro -->
+<form method="get" class="row g-2 mb-3">
+  <div class="col-auto flex-grow-1">
+    <input type="text" name="q" class="form-control" placeholder="Buscar alimento..." value="{{ q }}">
+  </div>
+  {% if categorias %}
+  <div class="col-auto">
+    <select name="categoria" class="form-select" onchange="this.form.submit()">
+      <option value="">Todas las categorías</option>
+      {% for cat in categorias %}
+        <option value="{{ cat }}" {{ 'selected' if categoria == cat }}>{{ cat | capitalize }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="col-auto">
+    <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-search"></i></button>
+    {% if q or categoria %}
+      <a href="{{ url_for('alimentos') }}" class="btn btn-outline-danger"><i class="bi bi-x"></i></a>
+    {% endif %}
+  </div>
+</form>
+
+{% if not items %}
+<div class="chart-box text-center py-5">
+  <i class="bi bi-journal-x fs-1 text-muted"></i>
+  <p class="text-muted mt-3 mb-1">No tienes alimentos guardados todavía.</p>
+  <p class="text-muted" style="font-size:.9rem;">
+    Guarda tus comidas habituales una vez y úsalas rápidamente cada vez que comas.
+  </p>
+  <a href="{{ url_for('alimento_nuevo') }}" class="btn btn-warning mt-2">
+    <i class="bi bi-plus-lg"></i> Agregar primer alimento
+  </a>
+</div>
+{% else %}
+
+<!-- Cards de alimentos -->
+<div class="row g-3">
+  {% for item in items %}
+  <div class="col-6 col-md-4 col-lg-3">
+    <div class="stat-card h-100 d-flex flex-column">
+      <!-- Categoría -->
+      {% if item.category %}
+        <span class="badge bg-light text-secondary mb-2" style="font-size:.7rem; align-self:flex-start;">
+          {{ item.category | capitalize }}
+        </span>
+      {% endif %}
+
+      <div class="fw-semibold mb-1" style="font-size:.95rem;">{{ item.name }}</div>
+
+      {% if item.serving_desc %}
+        <div class="text-muted" style="font-size:.8rem;">{{ item.serving_desc }}</div>
+      {% endif %}
+
+      <!-- Macros -->
+      <div class="mt-2 mb-auto">
+        <span class="fw-bold text-warning" style="font-size:1.1rem;">{{ item.carbs_per_serving | int }}g</span>
+        <span class="text-muted" style="font-size:.8rem;"> CH</span>
+        {% if item.protein_per_serving %}
+          <span class="text-muted ms-2" style="font-size:.8rem;">{{ item.protein_per_serving | int }}g P</span>
+        {% endif %}
+        {% if item.fat_per_serving %}
+          <span class="text-muted ms-1" style="font-size:.8rem;">{{ item.fat_per_serving | int }}g G</span>
+        {% endif %}
+        {% if item.calories_per_serving %}
+          <div class="text-muted" style="font-size:.78rem;">{{ item.calories_per_serving | int }} kcal</div>
+        {% endif %}
+      </div>
+
+      {% if item.times_used > 0 %}
+        <div class="text-muted mt-2" style="font-size:.75rem;">
+          <i class="bi bi-arrow-repeat"></i> Usado {{ item.times_used }}x
+        </div>
+      {% endif %}
+
+      <!-- Acciones -->
+      <div class="d-flex gap-1 mt-2">
+        <a href="{{ url_for('comida_nueva') }}?food_id={{ item.id }}"
+           class="btn btn-sm btn-success flex-grow-1">
+          <i class="bi bi-plus-lg"></i> Registrar
+        </a>
+        <a href="{{ url_for('alimento_editar', id=item.id) }}" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-pencil"></i>
+        </a>
+        <form method="post" action="{{ url_for('alimento_eliminar', id=item.id) }}"
+              onsubmit="return confirm('¿Eliminar {{ item.name }}?')">
+          <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash3"></i></button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if editar else 'Nueva' }} dosis — DiabetesTracker{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><i class="bi bi-capsule-pill me-2 text-warning"></i>
+    {{ 'Editar dosis' if editar else 'Registrar dosis de insulina' }}
+  </h1>
+</div>
+
+<div class="form-card">
+  <form method="post">
+    <div class="row g-3 mb-3">
+      <div class="col-6">
+        <label class="form-label fw-semibold">Fecha</label>
+        <input type="date" name="fecha" class="form-control" value="{{ fecha }}" required>
+      </div>
+      <div class="col-6">
+        <label class="form-label fw-semibold">Hora</label>
+        <input type="time" name="hora" class="form-control" value="{{ hora }}" required>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Tipo de insulina</label>
+      <div class="d-flex gap-3">
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="tipo" id="bolus" value="bolus"
+                 {{ 'checked' if not editar or item.type == 'bolus' }}>
+          <label class="form-check-label" for="bolus">
+            <span class="badge bg-warning text-dark me-1">Bolo</span> Rápida / corrección
+          </label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="tipo" id="basal" value="basal"
+                 {{ 'checked' if editar and item.type == 'basal' }}>
+          <label class="form-check-label" for="basal">
+            <span class="badge bg-secondary me-1">Basal</span> Lenta / prolongada
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Unidades</label>
+      <div class="input-group">
+        <input type="number" name="units" class="form-control form-control-lg"
+               step="0.5" min="0.5" max="100"
+               value="{{ item.units if editar else '' }}"
+               placeholder="ej. 6" required autofocus>
+        <span class="input-group-text">U</span>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Marca / Nombre <span class="text-muted fw-normal">(opcional)</span></label>
+      <input type="text" name="brand" class="form-control"
+             value="{{ item.brand if editar and item.brand else '' }}"
+             placeholder="ej. Novorapid, Lantus, Tresiba...">
+    </div>
+
+    <div class="mb-4">
+      <label class="form-label fw-semibold">Notas <span class="text-muted fw-normal">(opcional)</span></label>
+      <input type="text" name="notas" class="form-control"
+             value="{{ item.notes if editar and item.notes else '' }}"
+             placeholder="ej. corrección por hiperglucemia, antes de comer...">
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-warning">
+        <i class="bi bi-check-lg"></i> {{ 'Actualizar' if editar else 'Guardar' }}
+      </button>
+      <a href="{{ url_for('insulina') }}" class="btn btn-outline-secondary">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

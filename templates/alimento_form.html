@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if item else 'Nuevo' }} alimento — DiabetesTracker{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><i class="bi bi-journal-bookmark-fill me-2 text-warning"></i>
+    {{ 'Editar alimento' if item else 'Nuevo alimento frecuente' }}
+  </h1>
+</div>
+
+<div class="form-card">
+  <form method="post">
+    <input type="hidden" name="next" value="{{ next }}">
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Nombre del alimento</label>
+      <input type="text" name="nombre" class="form-control"
+             value="{{ item.name if item else '' }}"
+             placeholder="ej. Tortilla de maíz, Avena con leche, Manzana..." required autofocus>
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-7">
+        <label class="form-label fw-semibold">Descripción de la porción</label>
+        <input type="text" name="serving_desc" class="form-control"
+               value="{{ item.serving_desc if item else '' }}"
+               placeholder="ej. 1 pieza, 1 taza, 100g...">
+      </div>
+      <div class="col-5">
+        <label class="form-label fw-semibold">Peso (g) <span class="text-muted fw-normal">opcional</span></label>
+        <input type="number" name="serving_g" class="form-control"
+               step="1" min="1"
+               value="{{ item.serving_g | int if item and item.serving_g else '' }}"
+               placeholder="ej. 150">
+      </div>
+    </div>
+
+    <!-- Macros -->
+    <div class="mb-1 fw-semibold">Valores por porción</div>
+    <div class="row g-3 mb-3">
+      <div class="col-6 col-md-3">
+        <label class="form-label text-warning fw-semibold">Carbohidratos (g)</label>
+        <input type="number" name="carbs_per_serving" class="form-control form-control-lg"
+               step="0.5" min="0"
+               value="{{ item.carbs_per_serving if item else '' }}"
+               placeholder="0" required>
+      </div>
+      <div class="col-6 col-md-3">
+        <label class="form-label fw-semibold">Proteínas (g)</label>
+        <input type="number" name="protein_per_serving" class="form-control"
+               step="0.5" min="0"
+               value="{{ item.protein_per_serving if item else '' }}"
+               placeholder="0">
+      </div>
+      <div class="col-6 col-md-3">
+        <label class="form-label fw-semibold">Grasas (g)</label>
+        <input type="number" name="fat_per_serving" class="form-control"
+               step="0.5" min="0"
+               value="{{ item.fat_per_serving if item else '' }}"
+               placeholder="0">
+      </div>
+      <div class="col-6 col-md-3">
+        <label class="form-label fw-semibold">Calorías</label>
+        <input type="number" name="calories_per_serving" class="form-control"
+               step="1" min="0"
+               value="{{ item.calories_per_serving | int if item else '' }}"
+               placeholder="0">
+      </div>
+    </div>
+
+    <div class="mb-4">
+      <label class="form-label fw-semibold">Categoría <span class="text-muted fw-normal">opcional</span></label>
+      <input type="text" name="category" class="form-control"
+             value="{{ item.category if item else '' }}"
+             placeholder="ej. cereal, fruta, lácteo, proteína, snack, bebida...">
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-warning">
+        <i class="bi bi-check-lg"></i> Guardar
+      </button>
+      <a href="{{ url_for('alimentos') }}" class="btn btn-outline-secondary">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Importar Freestyle Libre — DiabetesTracker{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><i class="bi bi-upload me-2"></i>Importar Freestyle Libre</h1>
+  <small class="text-muted">Carga el CSV exportado desde la app LibreLink para importar lecturas de CGM</small>
+</div>
+
+<div class="row g-4">
+  <!-- Formulario de carga -->
+  <div class="col-md-6">
+    <div class="form-card">
+      <h5 class="fw-semibold mb-3"><i class="bi bi-file-earmark-csv me-2 text-success"></i>Cargar archivo CSV</h5>
+
+      <form method="post" enctype="multipart/form-data">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Archivo CSV del Freestyle Libre</label>
+          <input type="file" name="archivo" class="form-control" accept=".csv" required>
+          <div class="form-text">Archivo exportado desde la app FreeStyle LibreLink</div>
+        </div>
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-cloud-upload"></i> Importar
+        </button>
+      </form>
+
+      <hr class="my-4">
+
+      <h6 class="fw-semibold mb-2">¿Cómo exportar desde FreeStyle LibreLink?</h6>
+      <ol class="text-muted" style="font-size:.88rem; padding-left:1.2rem;">
+        <li>Abre la app <strong>FreeStyle LibreLink</strong> en tu teléfono</li>
+        <li>Ve a <strong>Menú → Mi cuenta → Conexiones</strong></li>
+        <li>Conecta con <strong>LibreView</strong> (web: libreview.com)</li>
+        <li>En LibreView, ve a <strong>Reportes → Exportar datos</strong></li>
+        <li>Descarga el archivo <code>.csv</code> y cárgalo aquí</li>
+      </ol>
+      <div class="alert alert-info py-2 mb-0" style="font-size:.85rem;">
+        <i class="bi bi-info-circle me-1"></i>
+        Los duplicados se detectan automáticamente — puedes importar el mismo archivo varias veces sin problemas.
+      </div>
+    </div>
+  </div>
+
+  <!-- Historial de importaciones -->
+  <div class="col-md-6">
+    <div class="chart-box">
+      <h5 class="fw-semibold mb-3"><i class="bi bi-clock-history me-2"></i>Historial de importaciones</h5>
+      {% if imports %}
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr>
+            <th>Archivo</th>
+            <th>Registros</th>
+            <th>Período</th>
+            <th>Importado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for imp in imports %}
+          <tr>
+            <td style="font-size:.82rem; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+              {{ imp.filename }}
+            </td>
+            <td><span class="badge bg-success">{{ imp.records_count }}</span></td>
+            <td style="font-size:.8rem; color:#64748b;">
+              {% if imp.date_from and imp.date_to %}
+                {{ imp.date_from.strftime('%d/%m') }} – {{ imp.date_to.strftime('%d/%m/%Y') }}
+              {% else %}—{% endif %}
+            </td>
+            <td style="font-size:.8rem; color:#64748b;">{{ imp.imported_at.strftime('%d/%m %H:%M') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="text-muted text-center py-4">Aún no se han importado archivos.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

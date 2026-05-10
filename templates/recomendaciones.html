@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Recomendaciones — DiabetesTracker{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+  <div>
+    <h1><i class="bi bi-lightbulb-fill me-2 text-warning"></i>Recomendaciones</h1>
+    <small class="text-muted">Basadas en tus datos reales — no en promedios generales</small>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <span class="text-muted" style="font-size:.85rem;">Analizar últimos:</span>
+    {% for d in [7, 14, 30, 90] %}
+      <a href="{{ url_for('recomendaciones', dias=d) }}"
+         class="btn btn-sm {{ 'btn-primary' if dias == d else 'btn-outline-secondary' }}">
+        {{ d }}d
+      </a>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Aviso médico -->
+<div class="alert alert-light border d-flex gap-3 align-items-start mb-4" style="font-size:.88rem;">
+  <i class="bi bi-shield-check text-primary fs-5 mt-1 flex-shrink-0"></i>
+  <div>
+    <strong>Estas recomendaciones son orientativas, no diagnósticos médicos.</strong>
+    Están generadas automáticamente a partir de tus datos registrados. Antes de cambiar
+    cualquier dosis de insulina o rutina, consulta con tu endocrinólogo.
+  </div>
+</div>
+
+{% if not recs %}
+  <div class="chart-box text-center py-5">
+    <i class="bi bi-hourglass-split fs-1 text-muted"></i>
+    <p class="text-muted mt-3">Sin datos suficientes para generar recomendaciones.</p>
+  </div>
+{% else %}
+
+<!-- Resumen rápido de prioridades -->
+{% set urgentes   = recs | selectattr('priority', 'eq', 'urgente')    | list %}
+{% set importantes = recs | selectattr('priority', 'eq', 'importante') | list %}
+{% set informativos = recs | selectattr('priority', 'eq', 'informativo') | list %}
+
+{% if urgentes or importantes %}
+<div class="row g-2 mb-4">
+  {% if urgentes %}
+  <div class="col-auto">
+    <span class="badge bg-danger fs-6 px-3 py-2">
+      <i class="bi bi-exclamation-triangle-fill me-1"></i>
+      {{ urgentes | length }} urgente{{ 's' if urgentes | length > 1 }}
+    </span>
+  </div>
+  {% endif %}
+  {% if importantes %}
+  <div class="col-auto">
+    <span class="badge bg-warning text-dark fs-6 px-3 py-2">
+      <i class="bi bi-arrow-up-circle-fill me-1"></i>
+      {{ importantes | length }} importante{{ 's' if importantes | length > 1 }}
+    </span>
+  </div>
+  {% endif %}
+  {% if informativos %}
+  <div class="col-auto">
+    <span class="badge bg-info text-dark fs-6 px-3 py-2">
+      <i class="bi bi-info-circle-fill me-1"></i>
+      {{ informativos | length }} informativo{{ 's' if informativos | length > 1 }}
+    </span>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Tarjetas de recomendaciones -->
+<div class="d-flex flex-column gap-3">
+{% for rec in recs %}
+  <div class="chart-box border-start border-4 border-{{ rec.color }}"
+       style="border-left-width: 4px !important;">
+
+    <div class="d-flex justify-content-between align-items-start mb-2">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi {{ rec.icon }} text-{{ rec.color }} fs-5"></i>
+        <h5 class="mb-0 fw-semibold" style="font-size:1rem;">{{ rec.title }}</h5>
+      </div>
+      <div class="d-flex gap-2 align-items-center flex-shrink-0 ms-2">
+        <!-- Categoría -->
+        <span class="badge bg-light text-secondary border" style="font-size:.72rem;">
+          {% if rec.category == 'glucemia' %}<i class="bi bi-droplet-fill"></i> Glucemia
+          {% elif rec.category == 'comidas' %}<i class="bi bi-egg-fried"></i> Comidas
+          {% elif rec.category == 'insulina' %}<i class="bi bi-capsule-pill"></i> Insulina
+          {% elif rec.category == 'ejercicio' %}<i class="bi bi-bicycle"></i> Ejercicio
+          {% else %}<i class="bi bi-journal"></i> Hábitos{% endif %}
+        </span>
+        <!-- Prioridad -->
+        <span class="badge
+          {% if rec.priority == 'urgente' %}bg-danger
+          {% elif rec.priority == 'importante' %}bg-warning text-dark
+          {% else %}bg-info text-dark{% endif %}"
+          style="font-size:.72rem;">
+          {{ rec.priority | capitalize }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Cuerpo -->
+    <p class="mb-2" style="font-size:.92rem; color:#374151;">{{ rec.body }}</p>
+
+    <!-- Acción recomendada -->
+    <div class="d-flex gap-2 align-items-start p-2 rounded"
+         style="background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.15);">
+      <i class="bi bi-arrow-right-circle-fill text-primary mt-1 flex-shrink-0"></i>
+      <span style="font-size:.88rem; color:#1e40af;"><strong>Qué hacer:</strong> {{ rec.action }}</span>
+    </div>
+
+    <!-- Datos de soporte (colapsable) -->
+    {% if rec.data %}
+    <div class="mt-2">
+      <button class="btn btn-link btn-sm text-muted p-0" type="button"
+              data-bs-toggle="collapse" data-bs-target="#data-{{ loop.index }}">
+        <i class="bi bi-chevron-down" style="font-size:.75rem;"></i>
+        Ver datos
+      </button>
+      <div class="collapse" id="data-{{ loop.index }}">
+        <div class="mt-2 p-2 rounded" style="background:#f8fafc; font-size:.8rem; font-family: monospace;">
+          {% for key, val in rec.data.items() %}
+            <span class="text-muted">{{ key }}:</span>
+            <strong>{{ val }}</strong>
+            {% if not loop.last %} &nbsp;·&nbsp; {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+{% endfor %}
+</div>
+
+<!-- Nota sobre frecuencia de actualización -->
+<div class="text-center text-muted mt-4" style="font-size:.82rem;">
+  <i class="bi bi-arrow-clockwise me-1"></i>
+  Las recomendaciones se recalculan cada vez que abres esta página con tus datos más recientes.
+</div>
+
+{% endif %}
+{% endblock %}

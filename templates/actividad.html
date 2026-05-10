@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Actividad física — DiabetesTracker{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+  <div>
+    <h1><i class="bi bi-bicycle me-2 text-success"></i>Actividad física</h1>
+    <small class="text-muted">El ejercicio puede bajar tu glucemia hasta 24h después</small>
+  </div>
+  <a href="{{ url_for('actividad_nueva') }}" class="btn btn-success">
+    <i class="bi bi-plus-lg"></i> Registrar actividad
+  </a>
+</div>
+
+<!-- Filtro días -->
+<div class="mb-3 d-flex gap-2 align-items-center">
+  <span class="text-muted" style="font-size:.85rem;">Mostrar:</span>
+  {% for d in [3, 7, 14, 30] %}
+    <a href="{{ url_for('actividad', dias=d) }}"
+       class="btn btn-sm {{ 'btn-success' if dias == d else 'btn-outline-secondary' }}">
+      {{ d }}d
+    </a>
+  {% endfor %}
+</div>
+
+<!-- Resumen rápido -->
+{% if actividades.items %}
+{% set total_min = actividades.items | sum(attribute='duration_min') %}
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-value text-success">{{ actividades.total }}</div>
+      <div class="stat-label">Sesiones en {{ dias }} días</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-value text-success">{{ total_min }}</div>
+      <div class="stat-label">Minutos totales</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-value text-success">{{ (total_min / dias) | round(0) | int }}</div>
+      <div class="stat-label">Min/día promedio</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-value text-info" style="font-size:1.2rem;">
+        {{ actividad_frecuente or '—' }}
+      </div>
+      <div class="stat-label">Actividad más frecuente</div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Tabla -->
+<div class="chart-box">
+  <table class="table table-hover mb-0">
+    <thead>
+      <tr>
+        <th>Fecha y hora</th>
+        <th>Actividad</th>
+        <th>Duración</th>
+        <th>Intensidad</th>
+        <th>Notas</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in actividades.items %}
+      <tr>
+        <td>{{ a.timestamp.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td>
+          <span class="fw-semibold">
+            {% if 'camina' in a.activity_type.lower() %}<i class="bi bi-person-walking text-success me-1"></i>
+            {% elif 'corr' in a.activity_type.lower() or 'run' in a.activity_type.lower() %}<i class="bi bi-person-running text-warning me-1"></i>
+            {% elif 'cicl' in a.activity_type.lower() or 'bici' in a.activity_type.lower() %}<i class="bi bi-bicycle text-info me-1"></i>
+            {% elif 'nata' in a.activity_type.lower() or 'swim' in a.activity_type.lower() %}<i class="bi bi-tsunami text-primary me-1"></i>
+            {% elif 'pesa' in a.activity_type.lower() or 'gym' in a.activity_type.lower() %}<i class="bi bi-dumbbell text-danger me-1"></i>
+            {% else %}<i class="bi bi-activity text-secondary me-1"></i>{% endif %}
+            {{ a.activity_type }}
+          </span>
+        </td>
+        <td>
+          {% if a.duration_min %}
+            <span class="fw-semibold">{{ a.duration_min }}</span>
+            <small class="text-muted">min</small>
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          {% if a.intensity == 'alta' %}
+            <span class="badge bg-danger">Alta</span>
+          {% elif a.intensity == 'media' %}
+            <span class="badge bg-warning text-dark">Media</span>
+          {% elif a.intensity == 'baja' %}
+            <span class="badge bg-success">Baja</span>
+          {% else %}—{% endif %}
+        </td>
+        <td><small class="text-muted">{{ a.notes or '' }}</small></td>
+        <td>
+          <div class="d-flex gap-2">
+            <a href="{{ url_for('actividad_editar', id=a.id) }}"
+               class="btn btn-sm btn-link text-primary p-0">
+              <i class="bi bi-pencil"></i>
+            </a>
+            <form method="post" action="{{ url_for('actividad_eliminar', id=a.id) }}"
+                  onsubmit="return confirm('¿Eliminar esta actividad?')">
+              <button class="btn btn-sm btn-link text-danger p-0"><i class="bi bi-trash3"></i></button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="6" class="text-center text-muted py-4">
+          Sin actividad registrada en este período.
+          <a href="{{ url_for('actividad_nueva') }}">Registrar una ahora</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if actividades.pages > 1 %}
+  <nav class="mt-3">
+    <ul class="pagination pagination-sm justify-content-center mb-0">
+      {% if actividades.has_prev %}
+        <li class="page-item">
+          <a class="page-link" href="{{ url_for('actividad', page=actividades.prev_num, dias=dias) }}">‹</a>
+        </li>
+      {% endif %}
+      <li class="page-item disabled">
+        <span class="page-link">{{ actividades.page }} / {{ actividades.pages }}</span>
+      </li>
+      {% if actividades.has_next %}
+        <li class="page-item">
+          <a class="page-link" href="{{ url_for('actividad', page=actividades.next_num, dias=dias) }}">›</a>
+        </li>
+      {% endif %}
+    </ul>
+  </nav>
+  {% endif %}
+</div>
+
+<!-- Info sobre ejercicio y T1D -->
+<div class="alert alert-light border mt-3" style="font-size:.85rem;">
+  <i class="bi bi-info-circle text-primary me-1"></i>
+  <strong>Ejercicio y diabetes tipo 1:</strong>
+  El ejercicio aeróbico (caminar, correr, ciclismo) tiende a <strong>bajar</strong> la glucemia durante y después.
+  El ejercicio anaeróbico intenso (pesas) puede <strong>subirla</strong> temporalmente.
+  Registrar la actividad ayuda a entender episodios de hipo o hiper inexplicables.
+</div>
+{% endblock %}

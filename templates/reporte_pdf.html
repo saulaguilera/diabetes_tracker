@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page {
+    size: A4;
+    margin: 1.8cm 1.5cm 1.8cm 1.5cm;
+    @bottom-right {
+      content: "Página " counter(page) " de " counter(pages);
+      font-size: 8pt; color: #94a3b8;
+    }
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 9.5pt;
+    color: #1e293b;
+    line-height: 1.45;
+  }
+
+  /* ── Encabezado ── */
+  .report-header {
+    border-bottom: 2.5pt solid #1e293b;
+    padding-bottom: 8pt;
+    margin-bottom: 12pt;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .report-header h1 { font-size: 15pt; font-weight: 700; color: #1e293b; }
+  .report-header .sub { font-size: 9pt; color: #64748b; margin-top: 3pt; }
+  .report-header .meta { font-size: 8pt; color: #64748b; text-align: right; }
+  .badge-t1 {
+    display: inline-block;
+    background: #ef4444; color: white;
+    font-size: 7.5pt; font-weight: 700;
+    padding: 1.5pt 5pt; border-radius: 3pt;
+    margin-left: 5pt; vertical-align: middle;
+  }
+
+  /* ── Secciones ── */
+  .section-title {
+    font-size: 7.5pt; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: #64748b;
+    border-bottom: 1pt solid #e2e8f0;
+    padding-bottom: 3pt; margin-bottom: 7pt;
+    margin-top: 14pt;
+  }
+
+  /* ── Cards de métricas ── */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 6pt;
+    margin-bottom: 10pt;
+  }
+  .metrics-grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6pt;
+    margin-bottom: 10pt;
+  }
+  .metric-card {
+    border: 1pt solid #e2e8f0;
+    border-radius: 5pt;
+    padding: 6pt 8pt;
+    text-align: center;
+    background: #ffffff;
+  }
+  .metric-card .val  { font-size: 16pt; font-weight: 700; line-height: 1; }
+  .metric-card .label{ font-size: 7pt;  color: #64748b; margin-top: 2pt; }
+  .metric-card .meta { font-size: 6.5pt; color: #94a3b8; }
+  .ok   { color: #16a34a; }
+  .warn { color: #d97706; }
+  .bad  { color: #dc2626; }
+  .purple { color: #7c3aed; }
+
+  /* ── Tablas ── */
+  table {
+    width: 100%; border-collapse: collapse;
+    font-size: 8.5pt;
+    margin-bottom: 8pt;
+  }
+  th {
+    background: #f1f5f9;
+    font-size: 7pt; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em;
+    color: #64748b;
+    padding: 4pt 5pt;
+    text-align: left;
+    border-bottom: 1pt solid #e2e8f0;
+  }
+  td {
+    padding: 4pt 5pt;
+    border-bottom: 1pt solid #f1f5f9;
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  .tc { text-align: center; }
+  .fw  { font-weight: 700; }
+
+  /* ── Gráficas ── */
+  .charts-row {
+    display: flex; gap: 10pt;
+    margin-bottom: 10pt;
+    align-items: flex-start;
+  }
+  .chart-tir  { flex: 0 0 36%; }
+  .chart-circ { flex: 1; }
+  .chart-full { width: 100%; }
+  img { max-width: 100%; height: auto; display: block; }
+
+  /* ── Layout de dos columnas ── */
+  .two-col { display: flex; gap: 12pt; margin-bottom: 10pt; }
+  .two-col > div { flex: 1; }
+
+  /* ── Franjas ── */
+  .franja-bar {
+    height: 7pt; border-radius: 2pt;
+    display: inline-block; margin-right: 4pt;
+    vertical-align: middle;
+  }
+
+  /* ── Alerta clínica ── */
+  .nota {
+    border: 1pt solid #e2e8f0;
+    border-radius: 4pt;
+    background: #f8fafc;
+    padding: 7pt 9pt;
+    font-size: 7.5pt;
+    color: #64748b;
+    margin-top: 12pt;
+  }
+
+  /* ── Salto de página ── */
+  .page-break { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<!-- ENCABEZADO -->
+<div class="report-header">
+  <div>
+    <h1>Reporte de Glucemia <span class="badge-t1">T1D</span></h1>
+    <div class="sub">
+      Período: <strong>{{ desde.strftime('%d de %B de %Y') }}</strong>
+      al <strong>{{ hasta.strftime('%d de %B de %Y') }}</strong> ({{ dias }} días)
+    </div>
+  </div>
+  <div class="meta">
+    Generado: {{ hasta.strftime('%d/%m/%Y %H:%M') }}<br>
+    DiabetesTracker · Uso personal
+  </div>
+</div>
+
+{% if stats %}
+
+<!-- MÉTRICAS PRINCIPALES -->
+<div class="section-title">Métricas principales — {{ stats.n }} lecturas registradas</div>
+<div class="metrics-grid">
+  <div class="metric-card">
+    <div class="val {{ 'ok' if stats.gmi < 7.0 else ('warn' if stats.gmi < 8.0 else 'bad') }}">{{ stats.gmi }}%</div>
+    <div class="label">GMI ≈ HbA1c</div>
+    <div class="meta">Meta &lt;7%</div>
+  </div>
+  <div class="metric-card">
+    <div class="val {{ 'ok' if stats.tir >= 70 else ('warn' if stats.tir >= 50 else 'bad') }}">{{ stats.tir }}%</div>
+    <div class="label">Tiempo en rango</div>
+    <div class="meta">70–180 mg/dL · ≥70%</div>
+  </div>
+  <div class="metric-card">
+    <div class="val {{ 'ok' if stats.tbr <= 4 else 'bad' }}">{{ stats.tbr }}%</div>
+    <div class="label">Bajo rango</div>
+    <div class="meta">&lt;70 mg/dL · ≤4%</div>
+  </div>
+  <div class="metric-card">
+    <div class="val {{ 'ok' if stats.tar <= 25 else ('warn' if stats.tar <= 40 else 'bad') }}">{{ stats.tar }}%</div>
+    <div class="label">Alto rango</div>
+    <div class="meta">&gt;180 mg/dL · ≤25%</div>
+  </div>
+  <div class="metric-card">
+    <div class="val">{{ stats.mean }}</div>
+    <div class="label">Glucemia media</div>
+    <div class="meta">mg/dL</div>
+  </div>
+  <div class="metric-card">
+    <div class="val {{ 'ok' if stats.cv <= 36 else 'warn' }}">{{ stats.cv }}%</div>
+    <div class="label">Coef. variación</div>
+    <div class="meta">≤36%</div>
+  </div>
+</div>
+
+<div class="metrics-grid-4">
+  <div class="metric-card">
+    <div class="val" style="font-size:13pt;">{{ stats.min }}</div>
+    <div class="label">Mínimo (mg/dL)</div>
+  </div>
+  <div class="metric-card">
+    <div class="val" style="font-size:13pt;">{{ stats.max }}</div>
+    <div class="label">Máximo (mg/dL)</div>
+  </div>
+  <div class="metric-card">
+    <div class="val {{ 'bad' if stats.tbr54 > 1 else 'ok' }}" style="font-size:13pt;">{{ stats.tbr54 }}%</div>
+    <div class="label">Hipo grave &lt;54</div>
+    <div class="meta">Meta ≤1%</div>
+  </div>
+  <div class="metric-card">
+    <div class="val {{ 'bad' if stats.tar250 > 5 else 'warn' }}" style="font-size:13pt;">{{ stats.tar250 }}%</div>
+    <div class="label">Hiper grave &gt;250</div>
+    <div class="meta">Meta ≤5%</div>
+  </div>
+</div>
+
+<!-- GRÁFICAS -->
+{% if img_tir or img_circ %}
+<div class="charts-row">
+  {% if img_tir %}
+  <div class="chart-tir">
+    <img src="{{ img_tir }}" alt="Tiempo en rango">
+  </div>
+  {% endif %}
+  {% if img_circ %}
+  <div class="chart-circ">
+    <img src="{{ img_circ }}" alt="Patrón circadiano">
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if img_timeline %}
+<div style="margin-bottom:10pt;">
+  <img src="{{ img_timeline }}" alt="Línea de tiempo" class="chart-full">
+</div>
+{% endif %}
+
+<!-- DISTRIBUCIÓN POR FRANJA HORARIA -->
+<div class="two-col">
+  <div>
+    <div class="section-title">Glucemia por franja horaria</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Franja</th>
+          <th class="tc">Promedio</th>
+          <th class="tc">Min</th>
+          <th class="tc">Max</th>
+          <th class="tc">TIR</th>
+          <th class="tc">N</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in franjas %}
+        <tr>
+          <td><strong>{{ f.nombre }}</strong> <span style="color:#94a3b8;">{{ f.label }}</span></td>
+          {% if f.sin_datos is defined %}
+          <td colspan="5" class="tc" style="color:#94a3b8;">Sin datos</td>
+          {% else %}
+          <td class="tc fw {{ 'bad' if f.avg > 180 else ('ok' if f.avg <= 180 and f.avg >= 70 else 'bad') }}">{{ f.avg }}</td>
+          <td class="tc" style="color:#64748b;">{{ f.min }}</td>
+          <td class="tc" style="color:#64748b;">{{ f.max }}</td>
+          <td class="tc fw {{ 'ok' if f.tir >= 70 else ('warn' if f.tir >= 50 else 'bad') }}">{{ f.tir }}%</td>
+          <td class="tc" style="color:#64748b;">{{ f.n }}</td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- RESUMEN TRATAMIENTO -->
+  <div>
+    <div class="section-title">Resumen de tratamiento</div>
+    <table>
+      <thead><tr><th>Parámetro</th><th class="tc">Total</th><th class="tc">Diario</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Insulina rápida (bolus)</td>
+          <td class="tc fw purple">{{ bolus_total }}U</td>
+          <td class="tc" style="color:#64748b;">{{ bolus_diario }}U/día</td>
+        </tr>
+        <tr>
+          <td>Insulina basal</td>
+          <td class="tc fw" style="color:#0ea5e9;">{{ basal_total }}U</td>
+          <td class="tc" style="color:#64748b;">{{ basal_diario }}U/día</td>
+        </tr>
+        <tr>
+          <td>Carbohidratos</td>
+          <td class="tc fw" style="color:#f59e0b;">—</td>
+          <td class="tc" style="color:#64748b;">{{ carbs_diario|int }}g/día</td>
+        </tr>
+        <tr>
+          <td>Comidas registradas</td>
+          <td class="tc">{{ n_comidas }}</td>
+          <td class="tc" style="color:#64748b;">{{ (n_comidas / dias)|round(1) }}/día</td>
+        </tr>
+        <tr>
+          <td>Actividad física</td>
+          <td class="tc fw ok">{{ min_actividad }} min</td>
+          <td class="tc" style="color:#64748b;">{{ n_actividades }} sesiones</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- EPISODIOS DE HIPOGLUCEMIA -->
+{% if hipos %}
+<div class="section-title" style="color:#dc2626;">
+  ⚠ Episodios de hipoglucemia (&lt;70 mg/dL) — {{ hipos|length }} en el período
+</div>
+<table>
+  <thead>
+    <tr>
+      <th>Fecha y hora</th>
+      <th class="tc">Valor</th>
+      <th class="tc">Gravedad</th>
+      <th>Fuente</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in hipos %}
+    <tr>
+      <td>{{ r.timestamp.strftime('%d/%m/%Y %H:%M') }}</td>
+      <td class="tc fw bad">{{ r.value_mgdl | int }} mg/dL</td>
+      <td class="tc">
+        {% if r.value_mgdl < 54 %}<span class="bad fw">Grave (&lt;54)</span>
+        {% else %}<span class="warn">Leve</span>{% endif %}
+      </td>
+      <td style="color:#64748b;">
+        {% if r.source == 'cgm_historic' %}CGM
+        {% elif r.source == 'cgm_scan' %}Escáner
+        {% else %}Manual{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<!-- IMPACTO DE COMIDAS -->
+{% if tabla_comidas or resumen_comidas %}
+<div class="page-break"></div>
+<div class="section-title">Impacto de comidas en glucemia</div>
+<div class="two-col">
+  {% if tabla_comidas %}
+  <div>
+    <table>
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Alimento</th>
+          <th class="tc">CH</th>
+          <th class="tc">Insulina</th>
+          <th class="tc">Pre</th>
+          <th class="tc">Pico</th>
+          <th class="tc">Δ</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in tabla_comidas %}
+        <tr>
+          <td style="white-space:nowrap; color:#64748b;">{{ f.fecha }}</td>
+          <td>{{ f.nombre[:22] }}</td>
+          <td class="tc fw" style="color:#d97706;">{{ f.carbs }}g</td>
+          <td class="tc">
+            {% if f.insulina %}
+              {% for d in f.insulina %}<span class="purple fw">{{ d.units }}U</span> <span style="color:#94a3b8; font-size:7.5pt;">{{ d.timing }}</span><br>{% endfor %}
+            {% else %}—{% endif %}
+          </td>
+          <td class="tc" style="color:#64748b;">{{ f.pre }}</td>
+          <td class="tc fw {{ 'bad' if f.pico > 180 else 'ok' }}">{{ f.pico }}</td>
+          <td class="tc fw {{ 'bad' if f.delta > 80 else ('warn' if f.delta > 40 else 'ok') }}">
+            {{ '+' if f.delta > 0 else '' }}{{ f.delta }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if resumen_comidas %}
+  <div>
+    <strong style="font-size:8.5pt; color:#1e293b;">Alimentos por mayor impacto promedio</strong>
+    <table style="margin-top:5pt;">
+      <thead>
+        <tr>
+          <th>Alimento</th>
+          <th class="tc">N</th>
+          <th class="tc">Δ prom.</th>
+          <th class="tc">Pico prom.</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in resumen_comidas[:12] %}
+        <tr>
+          <td>{{ r.nombre[:20] }}</td>
+          <td class="tc" style="color:#64748b;">{{ r.n }}</td>
+          <td class="tc fw {{ 'bad' if r.avg_delta > 80 else ('warn' if r.avg_delta > 40 else 'ok') }}">
+            {{ '+' if r.avg_delta > 0 else '' }}{{ r.avg_delta }}
+          </td>
+          <td class="tc fw {{ 'bad' if r.avg_pico > 180 else 'ok' }}">{{ r.avg_pico }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div style="font-size:7pt; color:#94a3b8; margin-top:4pt;">Δ = alza post-comida en mg/dL</div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<p style="color:#64748b; margin-top:20pt;">
+  No hay lecturas de glucemia registradas en el período seleccionado.
+</p>
+{% endif %}
+
+<!-- NOTA CLÍNICA -->
+<div class="nota">
+  <strong>Nota metodológica:</strong>
+  GMI calculado con fórmula ADA/EASD: GMI = 3.31 + 0.02392 × glucemia media (mg/dL).
+  Metas de referencia según estándares ADA 2024 / TIR Consensus 2019 para Diabetes Tipo 1.
+  Este reporte fue generado automáticamente por DiabetesTracker y no reemplaza la evaluación clínica.
+</div>
+
+</body>
+</html>

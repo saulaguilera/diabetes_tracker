@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — DiabetesTracker{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+  <div>
+    <h1><i class="bi bi-speedometer2 me-2 text-primary"></i>Dashboard</h1>
+    <small class="text-muted">Resumen de las últimas 24 horas</small>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <a href="{{ url_for('glucemia_nueva') }}" class="btn btn-sm btn-outline-primary">
+      <i class="bi bi-plus-lg"></i> Glucemia
+    </a>
+    <a href="{{ url_for('comida_nueva') }}" class="btn btn-sm btn-outline-success">
+      <i class="bi bi-plus-lg"></i> Comida
+    </a>
+    <a href="{{ url_for('insulina_nueva') }}" class="btn btn-sm btn-outline-warning">
+      <i class="bi bi-plus-lg"></i> Insulina
+    </a>
+
+    <!-- Botón notificaciones -->
+    <button class="btn btn-sm btn-outline-secondary position-relative ms-1"
+            type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasAlertas"
+            title="Alertas de patrones">
+      <i class="bi bi-bell-fill"></i>
+      {% if alertas %}
+        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill
+              {{ 'bg-danger' if alertas | selectattr('nivel','equalto','danger') | list else 'bg-warning text-dark' }}"
+              style="font-size:.6rem;">
+          {{ alertas | length }}
+        </span>
+      {% endif %}
+    </button>
+  </div>
+</div>
+
+<!-- Offcanvas de notificaciones -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasAlertas"
+     style="width:360px; max-width:95vw;">
+  <div class="offcanvas-header border-bottom py-3" style="background:#1e293b;">
+    <h6 class="offcanvas-title text-white d-flex align-items-center gap-2 mb-0">
+      <i class="bi bi-bell-fill text-warning"></i>
+      Alertas de patrones
+      <span class="badge bg-secondary ms-1" style="font-size:.7rem;">
+        últimos 30 días
+      </span>
+    </h6>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body p-3" style="background:#f8fafc;">
+    {% if alertas %}
+      {% for a in alertas %}
+      <div class="card mb-2 border-0 shadow-sm" style="border-radius:10px; overflow:hidden;">
+        <div class="card-body p-0">
+          <!-- Barra de color lateral -->
+          <div class="d-flex">
+            <div style="width:4px; background:{{ '#ef4444' if a.nivel == 'danger' else '#f59e0b' }}; border-radius:10px 0 0 10px; flex-shrink:0;"></div>
+            <div class="p-3 w-100">
+              <div class="d-flex align-items-start gap-2">
+                <i class="bi {{ a.icono }} mt-1 flex-shrink-0"
+                   style="color:{{ '#ef4444' if a.nivel == 'danger' else '#f59e0b' }}; font-size:1.1rem;"></i>
+                <div>
+                  <div class="fw-semibold" style="font-size:.88rem; color:#1e293b;">{{ a.titulo }}</div>
+                  <div class="text-muted mt-1" style="font-size:.80rem; line-height:1.4;">{{ a.detalle }}</div>
+                  <div class="mt-2 p-2 rounded" style="background:#f1f5f9; font-size:.78rem; color:#475569;">
+                    <i class="bi bi-lightbulb-fill text-warning me-1"></i>{{ a.accion }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+      <p class="text-center text-muted mt-3 mb-0" style="font-size:.75rem;">
+        <i class="bi bi-info-circle me-1"></i>
+        Los patrones se recalculan cada vez que abrís el dashboard.
+      </p>
+    {% else %}
+      <div class="text-center py-5">
+        <i class="bi bi-check-circle-fill text-success d-block mb-2" style="font-size:2.5rem;"></i>
+        <div class="fw-semibold text-success">Sin patrones detectados</div>
+        <div class="text-muted mt-1" style="font-size:.83rem;">
+          No se encontraron patrones de riesgo en los últimos 30 días.
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Stat cards -->
+<div class="row g-3 mb-4">
+  <!-- Última lectura -->
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <i class="bi bi-droplet-fill stat-icon text-primary"></i>
+      {% if stats.ultima_lectura %}
+        <div class="stat-value
+          {% if stats.ultima_lectura.value_mgdl < 70 %}text-hipo
+          {% elif stats.ultima_lectura.value_mgdl > 180 %}text-hiper
+          {% else %}text-rango{% endif %}">
+          {{ stats.ultima_lectura.value_mgdl | int }}
+        </div>
+        <div class="stat-label">
+          mg/dL ahora
+          <br><span class="text-muted" style="font-size:.75rem;">
+            {{ stats.ultima_lectura.timestamp.strftime('%H:%M') }}
+          </span>
+        </div>
+      {% else %}
+        <div class="stat-value text-muted">—</div>
+        <div class="stat-label">Sin lecturas</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Promedio 24h -->
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <i class="bi bi-graph-up stat-icon text-info"></i>
+      <div class="stat-value text-info">{{ stats.promedio_24h or '—' }}</div>
+      <div class="stat-label">
+        Promedio 24h (mg/dL)
+        {% if stats.minimo_24h %}
+          <br><span class="text-muted" style="font-size:.75rem;">
+            Min {{ stats.minimo_24h }} / Max {{ stats.maximo_24h }}
+          </span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Tiempo en rango -->
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <i class="bi bi-bullseye stat-icon text-success"></i>
+      <div class="stat-value text-rango">{{ stats.tir_24h or '—' }}{% if stats.tir_24h %}<span style="font-size:1rem;">%</span>{% endif %}</div>
+      <div class="stat-label">
+        Tiempo en rango
+        {% if stats.hipo_24h is not none and stats.hipo_24h > 0 %}
+          <br><span class="text-hipo" style="font-size:.75rem;"><i class="bi bi-arrow-down"></i> Hipo {{ stats.hipo_24h }}%</span>
+        {% endif %}
+        {% if stats.hiper_24h is not none and stats.hiper_24h > 0 %}
+          <span class="text-hiper" style="font-size:.75rem;"> <i class="bi bi-arrow-up"></i> Hiper {{ stats.hiper_24h }}%</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Lecturas hoy -->
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <i class="bi bi-activity stat-icon text-secondary"></i>
+      <div class="stat-value">{{ stats.lecturas_24h }}</div>
+      <div class="stat-label">
+        Lecturas 24h
+        <br><span class="text-muted" style="font-size:.75rem;">{{ stats.comidas_7d }} comidas esta semana</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Gráfica principal -->
+<div class="chart-box mb-4">
+  <div id="chart-timeline" style="height: 300px;"></div>
+</div>
+
+<!-- Últimos registros -->
+<div class="row g-3">
+  <div class="col-md-4">
+    <div class="stat-card">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <strong><i class="bi bi-droplet text-primary me-1"></i>Última glucemia</strong>
+        <a href="{{ url_for('glucemia_nueva') }}" class="btn btn-xs btn-outline-primary btn-sm" style="font-size:.75rem; padding:.15rem .5rem;">+ Nueva</a>
+      </div>
+      {% if stats.ultima_lectura %}
+        <div class="fs-4 fw-bold
+          {% if stats.ultima_lectura.value_mgdl < 70 %}text-hipo
+          {% elif stats.ultima_lectura.value_mgdl > 180 %}text-hiper
+          {% else %}text-rango{% endif %}">
+          {{ stats.ultima_lectura.value_mgdl | int }} mg/dL
+        </div>
+        <div class="text-muted" style="font-size:.85rem;">
+          {{ stats.ultima_lectura.timestamp.strftime('%d/%m/%Y %H:%M') }}
+          · {{ stats.ultima_lectura.source }}
+        </div>
+      {% else %}
+        <p class="text-muted mb-0">Sin registros aún.</p>
+      {% endif %}
+      <a href="{{ url_for('glucemia') }}" class="btn btn-link btn-sm p-0 mt-2">Ver historial →</a>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="stat-card">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <strong><i class="bi bi-egg-fried text-success me-1"></i>Última comida</strong>
+        <a href="{{ url_for('comida_nueva') }}" class="btn btn-sm btn-outline-success" style="font-size:.75rem; padding:.15rem .5rem;">+ Nueva</a>
+      </div>
+      {% if stats.ultima_comida %}
+        <div class="fw-semibold">{{ stats.ultima_comida.name }}</div>
+        <div class="text-muted" style="font-size:.85rem;">
+          {{ stats.ultima_comida.carbs_g }}g CH
+          · {{ stats.ultima_comida.timestamp.strftime('%d/%m/%Y %H:%M') }}
+        </div>
+      {% else %}
+        <p class="text-muted mb-0">Sin registros aún.</p>
+      {% endif %}
+      <a href="{{ url_for('comidas') }}" class="btn btn-link btn-sm p-0 mt-2">Ver historial →</a>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="stat-card">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <strong><i class="bi bi-capsule-pill text-warning me-1"></i>Última insulina</strong>
+        <a href="{{ url_for('insulina_nueva') }}" class="btn btn-sm btn-outline-warning" style="font-size:.75rem; padding:.15rem .5rem;">+ Nueva</a>
+      </div>
+      {% if stats.ultima_insulina %}
+        <div class="fw-semibold">{{ stats.ultima_insulina.units }}U — {{ stats.ultima_insulina.type }}</div>
+        <div class="text-muted" style="font-size:.85rem;">
+          {% if stats.ultima_insulina.brand %}{{ stats.ultima_insulina.brand }} · {% endif %}
+          {{ stats.ultima_insulina.timestamp.strftime('%d/%m/%Y %H:%M') }}
+        </div>
+      {% else %}
+        <p class="text-muted mb-0">Sin registros aún.</p>
+      {% endif %}
+      <a href="{{ url_for('insulina') }}" class="btn btn-link btn-sm p-0 mt-2">Ver historial →</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  renderChart('chart-timeline', {{ chart | tojson }});
+</script>
+{% endblock %}

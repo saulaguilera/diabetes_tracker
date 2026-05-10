@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Comidas — DiabetesTracker{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+  <div>
+    <h1><i class="bi bi-egg-fried me-2 text-success"></i>Comidas</h1>
+    <small class="text-muted">Registro de alimentación y carbohidratos</small>
+  </div>
+  <div class="d-flex gap-2">
+    <button class="btn btn-outline-secondary btn-sm" id="btn-autocategorizar">
+      <i class="bi bi-tags me-1"></i>Auto-categorizar
+    </button>
+    <a href="{{ url_for('comidas_grupos') }}" class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-bar-chart-steps me-1"></i>Ver por grupos
+    </a>
+    <a href="{{ url_for('comida_nueva') }}" class="btn btn-success">
+      <i class="bi bi-plus-lg"></i> Nueva comida
+    </a>
+  </div>
+</div>
+
+<!-- Filtro días -->
+<div class="mb-3 d-flex gap-2 align-items-center">
+  <span class="text-muted" style="font-size:.85rem;">Mostrar:</span>
+  {% for d in [3, 7, 14, 30] %}
+    <a href="{{ url_for('comidas', dias=d) }}"
+       class="btn btn-sm {{ 'btn-success' if dias == d else 'btn-outline-secondary' }}">
+      {{ d }}d
+    </a>
+  {% endfor %}
+</div>
+
+<div class="chart-box">
+  <table class="table table-hover mb-0">
+    <thead>
+      <tr>
+        <th>Fecha y hora</th>
+        <th>Comida</th>
+        <th>Categoría</th>
+        <th>Carbohidratos</th>
+        <th>Proteínas</th>
+        <th>Grasas</th>
+        <th>Calorías</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in comidas.items %}
+      <tr>
+        <td>{{ c.timestamp.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td class="fw-semibold">{{ c.name }}</td>
+        <td>
+          <span class="categoria-badge" data-id="{{ c.id }}"
+                style="cursor:pointer;" title="Clic para cambiar">
+            {% if c.categoria %}
+              <span class="badge bg-{{ c.categoria | categoria_color }} rounded-pill">
+                {{ c.categoria }}
+              </span>
+            {% else %}
+              <span class="badge bg-light text-muted border rounded-pill" style="font-size:.72rem;">
+                + categoría
+              </span>
+            {% endif %}
+          </span>
+        </td>
+        <td>
+          <span class="fw-bold text-warning">{{ c.carbs_g | int }}g</span>
+          <small class="text-muted">CH</small>
+        </td>
+        <td><small>{{ c.protein_g | int }}g</small></td>
+        <td><small>{{ c.fat_g | int }}g</small></td>
+        <td><small>{{ c.calories | int if c.calories else '—' }} kcal</small></td>
+        <td>
+          <div class="d-flex gap-2">
+            <a href="{{ url_for('comida_editar', id=c.id) }}"
+               class="btn btn-sm btn-link text-primary p-0">
+              <i class="bi bi-pencil"></i>
+            </a>
+            <form method="post" action="{{ url_for('comida_eliminar', id=c.id) }}"
+                  onsubmit="return confirm('¿Eliminar esta comida?')">
+              <button class="btn btn-sm btn-link text-danger p-0"><i class="bi bi-trash3"></i></button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="9" class="text-center text-muted py-4">
+          Sin comidas registradas en este período.
+          <a href="{{ url_for('comida_nueva') }}">Registrar una ahora</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if comidas.pages > 1 %}
+  <nav class="mt-3">
+    <ul class="pagination pagination-sm justify-content-center mb-0">
+      {% if comidas.has_prev %}
+        <li class="page-item">
+          <a class="page-link" href="{{ url_for('comidas', page=comidas.prev_num, dias=dias) }}">‹</a>
+        </li>
+      {% endif %}
+      <li class="page-item disabled">
+        <span class="page-link">{{ comidas.page }} / {{ comidas.pages }}</span>
+      </li>
+      {% if comidas.has_next %}
+        <li class="page-item">
+          <a class="page-link" href="{{ url_for('comidas', page=comidas.next_num, dias=dias) }}">›</a>
+        </li>
+      {% endif %}
+    </ul>
+  </nav>
+  {% endif %}
+</div>
+
+<!-- Modal selector de categoría -->
+<div class="modal fade" id="modalCategoria" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title">Seleccionar categoría</h6>
+        <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body py-2" id="modal-cat-lista"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CATEGORIAS = {{ categorias | tojson }};
+const COLORES    = {{ colores    | tojson }};
+let _activeMealId = null;
+
+document.querySelectorAll('.categoria-badge').forEach(el => {
+  el.addEventListener('click', function() {
+    _activeMealId = this.dataset.id;
+    const lista = document.getElementById('modal-cat-lista');
+    lista.innerHTML =
+      `<button class="btn btn-sm btn-outline-secondary w-100 mb-1 text-start"
+               onclick="setCategoria(null)">
+         <i class="bi bi-x me-1"></i>Sin categoría
+       </button>` +
+      CATEGORIAS.map(c => {
+        const col = COLORES[c] || 'secondary';
+        return `<button class="btn btn-sm btn-${col} w-100 mb-1 text-start"
+                        onclick="setCategoria('${c}')">${c}</button>`;
+      }).join('');
+    new bootstrap.Modal(document.getElementById('modalCategoria')).show();
+  });
+});
+
+async function setCategoria(cat) {
+  bootstrap.Modal.getInstance(document.getElementById('modalCategoria')).hide();
+  await fetch(`/api/comidas/${_activeMealId}/categoria`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({categoria: cat || ''}),
+  });
+  location.reload();
+}
+
+document.getElementById('btn-autocategorizar').addEventListener('click', async function() {
+  this.disabled = true;
+  this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Categorizando...';
+  const res  = await fetch('/api/comidas/auto-categorizar', {method:'POST'});
+  const data = await res.json();
+  alert(`✓ ${data.asignadas} comidas categorizadas.\n${data.sin_match} sin coincidencia (podés asignarlas manualmente).`);
+  location.reload();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if editar else 'Nueva' }} actividad — DiabetesTracker{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><i class="bi bi-bicycle me-2 text-success"></i>
+    {{ 'Editar actividad' if editar else 'Registrar actividad física' }}
+  </h1>
+</div>
+
+<div class="form-card">
+  <form method="post">
+    <div class="row g-3 mb-3">
+      <div class="col-6">
+        <label class="form-label fw-semibold">Fecha</label>
+        <input type="date" name="fecha" class="form-control" value="{{ fecha }}" required>
+      </div>
+      <div class="col-6">
+        <label class="form-label fw-semibold">Hora</label>
+        <input type="time" name="hora" class="form-control" value="{{ hora }}" required>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Tipo de actividad</label>
+      {% if not editar %}
+      <div class="d-flex flex-wrap gap-2 mb-2">
+        {% for act in actividades_comunes %}
+        <button type="button" class="btn btn-sm btn-outline-secondary activity-chip"
+                onclick="selectActivity('{{ act }}')">
+          {% if 'Camina' in act %}<i class="bi bi-person-walking"></i>
+          {% elif 'Correr' in act %}<i class="bi bi-person-running"></i>
+          {% elif 'Cicl' in act %}<i class="bi bi-bicycle"></i>
+          {% elif 'Natac' in act %}<i class="bi bi-tsunami"></i>
+          {% elif 'Pesas' in act or 'Gym' in act %}<i class="bi bi-dumbbell"></i>
+          {% elif 'Yoga' in act or 'Pilates' in act %}<i class="bi bi-peace"></i>
+          {% elif 'Baile' in act %}<i class="bi bi-music-note"></i>
+          {% else %}<i class="bi bi-activity"></i>{% endif %}
+          {{ act }}
+        </button>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <input type="text" id="activity-input" name="activity_type" class="form-control"
+             value="{{ item.activity_type if editar else '' }}"
+             placeholder="ej. Caminata, Ciclismo, Yoga..." required>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Duración (minutos)</label>
+      {% if not editar %}
+      <div class="d-flex flex-wrap gap-2 mb-2">
+        {% for min in [15, 20, 30, 45, 60, 90] %}
+        <button type="button" class="btn btn-sm btn-outline-secondary duration-chip"
+                onclick="selectDuration({{ min }})">{{ min }} min</button>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <div class="input-group" style="max-width:180px;">
+        <input type="number" id="duration-input" name="duration_min" class="form-control"
+               min="1" max="480"
+               value="{{ item.duration_min if editar and item.duration_min else '' }}"
+               placeholder="ej. 40">
+        <span class="input-group-text">min</span>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Intensidad</label>
+      <div class="d-flex gap-3 flex-wrap">
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="intensity" id="int-baja" value="baja"
+                 {{ 'checked' if editar and item.intensity == 'baja' }}>
+          <label class="form-check-label" for="int-baja">
+            <span class="badge bg-success me-1">Baja</span>
+            <small class="text-muted">Caminar, yoga</small>
+          </label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="intensity" id="int-media" value="media"
+                 {{ 'checked' if not editar or item.intensity == 'media' }}>
+          <label class="form-check-label" for="int-media">
+            <span class="badge bg-warning text-dark me-1">Media</span>
+            <small class="text-muted">Trote, ciclismo</small>
+          </label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="intensity" id="int-alta" value="alta"
+                 {{ 'checked' if editar and item.intensity == 'alta' }}>
+          <label class="form-check-label" for="int-alta">
+            <span class="badge bg-danger me-1">Alta</span>
+            <small class="text-muted">Correr, pesas</small>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="mb-4">
+      <label class="form-label fw-semibold">Notas <span class="text-muted fw-normal">(opcional)</span></label>
+      <input type="text" name="notas" class="form-control"
+             value="{{ item.notes if editar and item.notes else '' }}"
+             placeholder="ej. antes de cenar, en ayuno...">
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-success btn-lg w-100">
+        <i class="bi bi-check-lg"></i> {{ 'Actualizar actividad' if editar else 'Guardar actividad' }}
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if not editar %}
+<script>
+  function selectActivity(name) {
+    document.getElementById('activity-input').value = name;
+    document.querySelectorAll('.activity-chip').forEach(b => {
+      b.classList.remove('btn-success', 'text-white');
+      b.classList.add('btn-outline-secondary');
+    });
+    event.target.closest('button').classList.add('btn-success', 'text-white');
+    event.target.closest('button').classList.remove('btn-outline-secondary');
+  }
+  function selectDuration(min) {
+    document.getElementById('duration-input').value = min;
+    document.querySelectorAll('.duration-chip').forEach(b => {
+      b.classList.remove('btn-success', 'text-white');
+      b.classList.add('btn-outline-secondary');
+    });
+    event.target.classList.add('btn-success', 'text-white');
+    event.target.classList.remove('btn-outline-secondary');
+  }
+</script>
+{% endif %}
+{% endblock %}
