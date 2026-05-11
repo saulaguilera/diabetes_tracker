@@ -1,0 +1,431 @@
+{% extends "base.html" %}
+{% block title %}Quick Log — DiabetesTracker{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+  <div>
+    <h1><i class="bi bi-lightning-charge-fill me-2 text-warning"></i>Quick Log</h1>
+    <small class="text-muted">Registrá todo de una sola vez</small>
+  </div>
+</div>
+
+<form method="POST" action="{{ url_for('quicklog') }}" id="quicklog-form">
+
+  <!-- Fecha y hora compartida -->
+  <div class="chart-box mb-3">
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <i class="bi bi-clock-fill text-secondary"></i>
+      <strong style="font-size:.95rem;">Fecha y hora del registro</strong>
+    </div>
+    <div class="row g-2">
+      <div class="col-7">
+        <input type="date" name="fecha" id="fecha" class="form-control"
+               value="{{ fecha }}" required>
+      </div>
+      <div class="col-5">
+        <input type="time" name="hora" id="hora" class="form-control"
+               value="{{ hora }}" required>
+      </div>
+    </div>
+    <div class="d-flex gap-2 mt-2">
+      <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setNow()">
+        <i class="bi bi-clock"></i> Ahora
+      </button>
+    </div>
+  </div>
+
+  <!-- ── GLUCEMIA ── -->
+  <div class="ql-card mb-3" id="card-glucemia">
+    <div class="ql-header" onclick="toggleSection('glucemia')" style="cursor:pointer;">
+      <div class="d-flex align-items-center gap-3">
+        <div class="ql-icon-wrap" style="background:rgba(59,130,246,0.15);">
+          <i class="bi bi-droplet-fill text-primary" style="font-size:1.2rem;"></i>
+        </div>
+        <div>
+          <div class="fw-semibold">Glucemia</div>
+          <div class="text-muted" style="font-size:.78rem;" id="glucemia-preview">
+            {% if ultima_glucemia %}
+              Última: {{ ultima_glucemia.value_mgdl|int }} mg/dL
+              ({{ ultima_glucemia.timestamp.strftime('%H:%M') }})
+            {% else %}Sin registros{% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="form-check form-switch mb-0 ms-auto" onclick="event.stopPropagation();">
+        <input class="form-check-input" type="checkbox" name="reg_glucemia"
+               id="toggle-glucemia" checked style="font-size:1.2rem; cursor:pointer;"
+               onchange="toggleSection('glucemia', this.checked)">
+      </div>
+    </div>
+    <div id="body-glucemia" class="ql-body">
+      <div class="row g-2 align-items-end">
+        <div class="col-8">
+          <label class="form-label mb-1" style="font-size:.82rem;">Valor (mg/dL)</label>
+          <div class="input-group">
+            <input type="number" name="glucemia_valor" id="glucemia_valor"
+                   class="form-control form-control-lg fw-bold"
+                   placeholder="120" min="20" max="600" step="1"
+                   style="font-size:1.4rem; text-align:center;">
+            <span class="input-group-text text-muted">mg/dL</span>
+          </div>
+        </div>
+        <div class="col-4">
+          <div id="glucemia-badge" class="text-center py-2 rounded"
+               style="min-height:48px; background:var(--surface2); border:1px solid var(--border);">
+            <span class="fw-bold" id="glucemia-estado" style="font-size:1rem;">—</span>
+          </div>
+        </div>
+      </div>
+      <!-- Atajos rápidos -->
+      <div class="d-flex gap-2 flex-wrap mt-2">
+        <span class="text-muted" style="font-size:.78rem; align-self:center;">Rápido:</span>
+        {% for v in [70, 80, 100, 120, 140, 160, 180, 200, 250] %}
+        <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2"
+                style="font-size:.78rem;"
+                onclick="document.getElementById('glucemia_valor').value='{{ v }}'; updateGlucemiaBadge({{ v }});">
+          {{ v }}
+        </button>
+        {% endfor %}
+      </div>
+      <div class="mt-2">
+        <input type="text" name="glucemia_notas" class="form-control form-control-sm"
+               placeholder="Notas opcionales (ayuno, post-comida...)" style="font-size:.82rem;">
+      </div>
+    </div>
+  </div>
+
+  <!-- ── COMIDA ── -->
+  <div class="ql-card mb-3" id="card-comida">
+    <div class="ql-header" onclick="toggleSection('comida')" style="cursor:pointer;">
+      <div class="d-flex align-items-center gap-3">
+        <div class="ql-icon-wrap" style="background:rgba(34,197,94,0.15);">
+          <i class="bi bi-egg-fried text-success" style="font-size:1.2rem;"></i>
+        </div>
+        <div>
+          <div class="fw-semibold">Comida</div>
+          <div class="text-muted" id="comida-preview" style="font-size:.78rem;">No registrada aún</div>
+        </div>
+      </div>
+      <div class="form-check form-switch mb-0 ms-auto" onclick="event.stopPropagation();">
+        <input class="form-check-input" type="checkbox" name="reg_comida"
+               id="toggle-comida" checked style="font-size:1.2rem; cursor:pointer;"
+               onchange="toggleSection('comida', this.checked)">
+      </div>
+    </div>
+    <div id="body-comida" class="ql-body">
+      <!-- Búsqueda en biblioteca -->
+      <div class="mb-2">
+        <label class="form-label mb-1" style="font-size:.82rem;">Nombre del alimento</label>
+        <div class="position-relative">
+          <input type="text" id="comida_search" class="form-control"
+                 placeholder="Buscar en mis alimentos o escribir nuevo..."
+                 autocomplete="off" oninput="buscarAlimento(this.value)">
+          <input type="hidden" name="comida_nombre" id="comida_nombre_hidden">
+          <input type="hidden" name="food_item_id" id="food_item_id">
+          <div id="alimento-dropdown" class="list-group position-absolute w-100 shadow"
+               style="z-index:1000; display:none; max-height:200px; overflow-y:auto; top:100%;"></div>
+        </div>
+      </div>
+      <div class="row g-2">
+        <div class="col-6">
+          <label class="form-label mb-1" style="font-size:.82rem;">Carbohidratos (g)</label>
+          <input type="number" name="comida_carbs" id="comida_carbs"
+                 class="form-control fw-bold" placeholder="0" min="0" max="500" step="0.5"
+                 oninput="updateComidaPreview()">
+        </div>
+        <div class="col-6">
+          <label class="form-label mb-1" style="font-size:.82rem;">Proteínas (g)</label>
+          <input type="number" name="comida_protein" class="form-control"
+                 placeholder="0" min="0" max="200" step="0.5">
+        </div>
+        <div class="col-6">
+          <label class="form-label mb-1" style="font-size:.82rem;">Grasas (g)</label>
+          <input type="number" name="comida_fat" class="form-control"
+                 placeholder="0" min="0" max="200" step="0.5">
+        </div>
+        <div class="col-6">
+          <label class="form-label mb-1" style="font-size:.82rem;">Calorías</label>
+          <input type="number" name="comida_cal" class="form-control"
+                 placeholder="0" min="0" max="3000" step="1">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── INSULINA ── -->
+  <div class="ql-card mb-4" id="card-insulina">
+    <div class="ql-header" onclick="toggleSection('insulina')" style="cursor:pointer;">
+      <div class="d-flex align-items-center gap-3">
+        <div class="ql-icon-wrap" style="background:rgba(234,179,8,0.15);">
+          <i class="bi bi-capsule-pill text-warning" style="font-size:1.2rem;"></i>
+        </div>
+        <div>
+          <div class="fw-semibold">Insulina bolus</div>
+          <div class="text-muted" id="insulina-preview" style="font-size:.78rem;">No registrada aún</div>
+        </div>
+      </div>
+      <div class="form-check form-switch mb-0 ms-auto" onclick="event.stopPropagation();">
+        <input class="form-check-input" type="checkbox" name="reg_insulina"
+               id="toggle-insulina" checked style="font-size:1.2rem; cursor:pointer;"
+               onchange="toggleSection('insulina', this.checked)">
+      </div>
+    </div>
+    <div id="body-insulina" class="ql-body">
+      <div class="row g-2 align-items-end">
+        <div class="col-6">
+          <label class="form-label mb-1" style="font-size:.82rem;">Unidades</label>
+          <div class="input-group">
+            <input type="number" name="insulina_units" id="insulina_units"
+                   class="form-control form-control-lg fw-bold"
+                   placeholder="0" min="0.5" max="80" step="0.5"
+                   style="font-size:1.4rem; text-align:center;"
+                   oninput="updateInsulinaPreview()">
+            <span class="input-group-text text-muted">U</span>
+          </div>
+        </div>
+        <div class="col-6">
+          <label class="form-label mb-1" style="font-size:.82rem;">Marca (opcional)</label>
+          <input type="text" name="insulina_brand" class="form-control"
+                 placeholder="Novorapid, Humalog...">
+        </div>
+      </div>
+      <!-- Atajos rápidos de unidades -->
+      <div class="d-flex gap-2 flex-wrap mt-2">
+        <span class="text-muted" style="font-size:.78rem; align-self:center;">Rápido:</span>
+        {% for u in [1, 2, 3, 4, 5, 6, 8, 10, 12] %}
+        <button type="button" class="btn btn-sm btn-outline-warning py-0 px-2"
+                style="font-size:.78rem;"
+                onclick="document.getElementById('insulina_units').value='{{ u }}'; updateInsulinaPreview();">
+          {{ u }}U
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Resumen antes de guardar -->
+  <div id="resumen-box" class="mb-3 p-3 rounded border"
+       style="background:var(--surface2); display:none;">
+    <div class="fw-semibold mb-1" style="font-size:.85rem;">
+      <i class="bi bi-check2-circle text-success me-1"></i>Se va a registrar:
+    </div>
+    <div id="resumen-items" style="font-size:.82rem;"></div>
+  </div>
+
+  <!-- Botón principal -->
+  <div class="d-grid gap-2">
+    <button type="submit" class="btn btn-primary btn-lg fw-bold py-3"
+            style="font-size:1.1rem; border-radius:14px;">
+      <i class="bi bi-lightning-charge-fill me-2"></i>Registrar todo
+    </button>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+      Cancelar
+    </a>
+  </div>
+
+</form>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  /* ── Quick Log cards ── */
+  .ql-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    transition: box-shadow .2s;
+  }
+  .ql-card:has(.form-check-input:checked) {
+    box-shadow: 0 0 0 2px rgba(99,102,241,.25);
+  }
+  .ql-header {
+    display: flex;
+    align-items: center;
+    padding: 1rem 1rem .85rem;
+    user-select: none;
+  }
+  .ql-icon-wrap {
+    width: 42px; height: 42px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .ql-body {
+    padding: 0 1rem 1rem;
+    border-top: 1px solid var(--border);
+  }
+  .ql-card.collapsed .ql-body { display: none; }
+  .ql-card.collapsed .ql-header { padding-bottom: .85rem; }
+  .ql-card.collapsed { opacity: .55; }
+</style>
+
+<script>
+// ── Fecha/hora actual ──────────────────────────────────────────────────────────
+function setNow() {
+  const now = new Date();
+  document.getElementById('fecha').value = now.toLocaleDateString('sv');  // YYYY-MM-DD
+  document.getElementById('hora').value  = now.toTimeString().slice(0,5);
+}
+
+// ── Toggle de sección ─────────────────────────────────────────────────────────
+function toggleSection(section, force) {
+  const card   = document.getElementById('card-' + section);
+  const toggle = document.getElementById('toggle-' + section);
+  const enabled = force !== undefined ? force : !card.classList.contains('collapsed');
+  if (!enabled) {
+    card.classList.add('collapsed');
+    toggle.checked = false;
+  } else {
+    card.classList.remove('collapsed');
+    toggle.checked = true;
+  }
+  updateResumen();
+}
+
+// ── Badge de estado glucémico ─────────────────────────────────────────────────
+function updateGlucemiaBadge(val) {
+  const badge  = document.getElementById('glucemia-badge');
+  const estado = document.getElementById('glucemia-estado');
+  val = parseFloat(val);
+  if (isNaN(val)) { estado.textContent = '—'; badge.style.background = 'var(--surface2)'; return; }
+  if (val < 70)        { estado.textContent = val + ' ↓'; estado.style.color = '#ef4444'; badge.style.background = 'rgba(239,68,68,.1)'; }
+  else if (val > 180)  { estado.textContent = val + ' ↑'; estado.style.color = '#f97316'; badge.style.background = 'rgba(249,115,22,.1)'; }
+  else                 { estado.textContent = val + ' ✓'; estado.style.color = '#22c55e'; badge.style.background = 'rgba(34,197,94,.1)'; }
+  document.getElementById('glucemia-preview').textContent = val + ' mg/dL registrado';
+  updateResumen();
+}
+document.getElementById('glucemia_valor').addEventListener('input', function() {
+  updateGlucemiaBadge(this.value);
+});
+
+// ── Preview comida ─────────────────────────────────────────────────────────────
+function updateComidaPreview() {
+  const nombre = document.getElementById('comida_search').value.trim();
+  const carbs  = document.getElementById('comida_carbs').value;
+  const prev   = document.getElementById('comida-preview');
+  if (nombre) {
+    prev.textContent = nombre + (carbs ? ' · ' + carbs + 'g CH' : '');
+  } else {
+    prev.textContent = 'No registrada aún';
+  }
+  updateResumen();
+}
+
+// ── Preview insulina ──────────────────────────────────────────────────────────
+function updateInsulinaPreview() {
+  const u    = document.getElementById('insulina_units').value;
+  const prev = document.getElementById('insulina-preview');
+  prev.textContent = u ? u + ' U bolus' : 'No registrada aún';
+  updateResumen();
+}
+
+// ── Resumen dinámico ──────────────────────────────────────────────────────────
+function updateResumen() {
+  const items = [];
+  if (document.getElementById('toggle-glucemia').checked) {
+    const v = document.getElementById('glucemia_valor').value;
+    if (v) items.push('<i class="bi bi-droplet-fill text-primary me-1"></i>' + v + ' mg/dL');
+  }
+  if (document.getElementById('toggle-comida').checked) {
+    const n = document.getElementById('comida_search').value.trim();
+    const c = document.getElementById('comida_carbs').value;
+    if (n) items.push('<i class="bi bi-egg-fried text-success me-1"></i>' + n + (c ? ' (' + c + 'g CH)' : ''));
+  }
+  if (document.getElementById('toggle-insulina').checked) {
+    const u = document.getElementById('insulina_units').value;
+    if (u) items.push('<i class="bi bi-capsule-pill text-warning me-1"></i>' + u + 'U bolus');
+  }
+  const box = document.getElementById('resumen-box');
+  const list = document.getElementById('resumen-items');
+  if (items.length) {
+    list.innerHTML = items.map(i => '<div>' + i + '</div>').join('');
+    box.style.display = '';
+  } else {
+    box.style.display = 'none';
+  }
+}
+
+// ── Autocompletado alimentos ───────────────────────────────────────────────────
+let searchTimer;
+function buscarAlimento(q) {
+  document.getElementById('comida_nombre_hidden').value = q;
+  document.getElementById('food_item_id').value = '';
+  clearTimeout(searchTimer);
+  updateComidaPreview();
+  if (q.length < 1) { cerrarDropdown(); return; }
+  searchTimer = setTimeout(() => {
+    fetch('/api/alimentos/buscar?q=' + encodeURIComponent(q))
+      .then(r => r.json())
+      .then(data => {
+        const dd = document.getElementById('alimento-dropdown');
+        if (!data.length) { cerrarDropdown(); return; }
+        dd.innerHTML = data.map(item => `
+          <button type="button" class="list-group-item list-group-item-action py-2 px-3"
+                  style="font-size:.85rem;"
+                  onclick="seleccionarAlimento(${item.id}, '${item.name.replace(/'/g,"\\'")}', ${item.carbs}, ${item.fat}, ${item.protein}, ${item.calories})">
+            <span class="fw-semibold">${item.name}</span>
+            <span class="text-muted ms-2">${item.serving_desc || ''}</span>
+            <span class="badge bg-secondary ms-1">${item.carbs}g CH</span>
+          </button>`).join('');
+        dd.style.display = '';
+      });
+  }, 220);
+}
+
+function seleccionarAlimento(id, nombre, carbs, fat, protein, cal) {
+  document.getElementById('comida_search').value         = nombre;
+  document.getElementById('comida_nombre_hidden').value  = nombre;
+  document.getElementById('food_item_id').value          = id;
+  document.getElementById('comida_carbs').value          = carbs;
+  document.getElementById('comida_fat').value            = fat;
+  document.querySelector('[name=comida_protein]').value  = protein;
+  document.querySelector('[name=comida_cal]').value      = cal;
+  cerrarDropdown();
+  updateComidaPreview();
+  fetch('/api/alimentos/' + id + '/usar', { method: 'POST' });
+}
+
+function cerrarDropdown() {
+  document.getElementById('alimento-dropdown').style.display = 'none';
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('#comida_search') && !e.target.closest('#alimento-dropdown'))
+    cerrarDropdown();
+});
+
+// ── Validación antes de enviar ────────────────────────────────────────────────
+document.getElementById('quicklog-form').addEventListener('submit', function(e) {
+  // Sincronizar nombre de comida en hidden
+  const search = document.getElementById('comida_search').value.trim();
+  if (document.getElementById('toggle-comida').checked && search) {
+    document.getElementById('comida_nombre_hidden').value = search;
+  }
+
+  const regGluc  = document.getElementById('toggle-glucemia').checked;
+  const regCom   = document.getElementById('toggle-comida').checked;
+  const regInsu  = document.getElementById('toggle-insulina').checked;
+
+  if (regGluc && !document.getElementById('glucemia_valor').value) {
+    e.preventDefault();
+    document.getElementById('glucemia_valor').focus();
+    document.getElementById('glucemia_valor').classList.add('is-invalid');
+    setTimeout(() => document.getElementById('glucemia_valor').classList.remove('is-invalid'), 2000);
+    return;
+  }
+  if (regCom && !search) {
+    e.preventDefault();
+    document.getElementById('comida_search').focus();
+    document.getElementById('comida_search').classList.add('is-invalid');
+    setTimeout(() => document.getElementById('comida_search').classList.remove('is-invalid'), 2000);
+    return;
+  }
+  if (regInsu && !document.getElementById('insulina_units').value) {
+    e.preventDefault();
+    document.getElementById('insulina_units').focus();
+    document.getElementById('insulina_units').classList.add('is-invalid');
+    setTimeout(() => document.getElementById('insulina_units').classList.remove('is-invalid'), 2000);
+  }
+});
+</script>
+{% endblock %}

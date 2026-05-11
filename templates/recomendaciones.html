@@ -19,7 +19,7 @@
 </div>
 
 <!-- Aviso médico -->
-<div class="alert alert-light border d-flex gap-3 align-items-start mb-4" style="font-size:.88rem;">
+<div class="alert border d-flex gap-3 align-items-start mb-4" style="font-size:.88rem; background:var(--surface2,#f1f5f9); color:var(--text,inherit);">
   <i class="bi bi-shield-check text-primary fs-5 mt-1 flex-shrink-0"></i>
   <div>
     <strong>Estas recomendaciones son orientativas, no diagnósticos médicos.</strong>
@@ -82,7 +82,7 @@
       </div>
       <div class="d-flex gap-2 align-items-center flex-shrink-0 ms-2">
         <!-- Categoría -->
-        <span class="badge bg-light text-secondary border" style="font-size:.72rem;">
+        <span class="badge border text-muted" style="font-size:.72rem; background:var(--surface2,#f1f5f9);">
           {% if rec.category == 'glucemia' %}<i class="bi bi-droplet-fill"></i> Glucemia
           {% elif rec.category == 'comidas' %}<i class="bi bi-egg-fried"></i> Comidas
           {% elif rec.category == 'insulina' %}<i class="bi bi-capsule-pill"></i> Insulina
@@ -101,13 +101,13 @@
     </div>
 
     <!-- Cuerpo -->
-    <p class="mb-2" style="font-size:.92rem; color:#374151;">{{ rec.body }}</p>
+    <p class="mb-2" style="font-size:.92rem;">{{ rec.body }}</p>
 
     <!-- Acción recomendada -->
     <div class="d-flex gap-2 align-items-start p-2 rounded"
-         style="background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.15);">
+         style="background: rgba(59,130,246,0.10); border: 1px solid rgba(59,130,246,0.25);">
       <i class="bi bi-arrow-right-circle-fill text-primary mt-1 flex-shrink-0"></i>
-      <span style="font-size:.88rem; color:#1e40af;"><strong>Qué hacer:</strong> {{ rec.action }}</span>
+      <span class="text-primary" style="font-size:.88rem;"><strong>Qué hacer:</strong> {{ rec.action }}</span>
     </div>
 
     <!-- Datos de soporte (colapsable) -->
@@ -119,7 +119,7 @@
         Ver datos
       </button>
       <div class="collapse" id="data-{{ loop.index }}">
-        <div class="mt-2 p-2 rounded" style="background:#f8fafc; font-size:.8rem; font-family: monospace;">
+        <div class="mt-2 p-2 rounded" style="background:var(--surface2,#f1f5f9); font-size:.8rem; font-family: monospace;">
           {% for key, val in rec.data.items() %}
             <span class="text-muted">{{ key }}:</span>
             <strong>{{ val }}</strong>

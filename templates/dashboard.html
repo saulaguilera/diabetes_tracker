@@ -8,13 +8,16 @@
     <small class="text-muted">Resumen de las últimas 24 horas</small>
   </div>
   <div class="d-flex gap-2 align-items-center">
+    <a href="{{ url_for('quicklog') }}" class="btn btn-sm btn-warning fw-semibold">
+      <i class="bi bi-lightning-charge-fill"></i> Quick Log
+    </a>
     <a href="{{ url_for('glucemia_nueva') }}" class="btn btn-sm btn-outline-primary">
       <i class="bi bi-plus-lg"></i> Glucemia
     </a>
     <a href="{{ url_for('comida_nueva') }}" class="btn btn-sm btn-outline-success">
       <i class="bi bi-plus-lg"></i> Comida
     </a>
-    <a href="{{ url_for('insulina_nueva') }}" class="btn btn-sm btn-outline-warning">
+    <a href="{{ url_for('insulina_nueva') }}" class="btn btn-sm btn-outline-secondary">
       <i class="bi bi-plus-lg"></i> Insulina
     </a>
 

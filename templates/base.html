@@ -382,6 +382,10 @@
   </a>
 
   <div class="nav-section">Registrar</div>
+  <a href="{{ url_for('quicklog') }}" class="nav-link {% if request.endpoint == 'quicklog' %}active{% endif %}"
+     style="background:rgba(99,102,241,.12); border:1px solid rgba(99,102,241,.25); border-radius:8px; margin-bottom:4px; font-weight:600;">
+    <i class="bi bi-lightning-charge-fill text-warning"></i> Quick Log
+  </a>
   <a href="{{ url_for('glucemia') }}" class="nav-link {% if 'glucemia' in request.endpoint %}active{% endif %}">
     <i class="bi bi-droplet-fill"></i> Glucemia
   </a>
@@ -448,17 +452,23 @@
   <a href="{{ url_for('glucemia_nueva') }}" class="{% if request.endpoint == 'glucemia_nueva' %}active{% endif %}">
     <i class="bi bi-droplet-fill"></i>Glucemia
   </a>
-  <a href="{{ url_for('comida_nueva') }}" class="{% if request.endpoint == 'comida_nueva' %}active{% endif %}">
-    <i class="bi bi-egg-fried"></i>Comida
+  <!-- Botón central Quick Log -->
+  <a href="{{ url_for('quicklog') }}"
+     class="{% if request.endpoint == 'quicklog' %}active{% endif %}"
+     style="flex-direction:column; position:relative;">
+    <span style="background:#6366f1; border-radius:50%; width:44px; height:44px;
+                 display:flex; align-items:center; justify-content:center;
+                 margin-top:-18px; box-shadow:0 4px 12px rgba(99,102,241,.55);
+                 border:3px solid #1e293b;">
+      <i class="bi bi-lightning-charge-fill" style="font-size:1.1rem; color:#fff;"></i>
+    </span>
+    <span style="font-size:.62rem; margin-top:2px; color:#94a3b8;">Log</span>
   </a>
   <a href="{{ url_for('actividad_nueva') }}" class="{% if request.endpoint == 'actividad_nueva' %}active{% endif %}">
     <i class="bi bi-bicycle"></i>Ejercicio
   </a>
-  <a href="{{ url_for('recomendaciones') }}" class="{% if request.endpoint == 'recomendaciones' %}active{% endif %}">
-    <i class="bi bi-lightbulb-fill"></i>Consejos
-  </a>
-  <a href="{{ url_for('reportes') }}" class="{% if request.endpoint == 'reportes' %}active{% endif %}">
-    <i class="bi bi-bar-chart-line-fill"></i>Reportes
+  <a href="{{ url_for('agp') }}" class="{% if request.endpoint == 'agp' %}active{% endif %}">
+    <i class="bi bi-layers-fill"></i>AGP
   </a>
 </nav>
 

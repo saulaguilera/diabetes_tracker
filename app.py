@@ -1523,6 +1523,82 @@ def api_calculadora_correccion():
     })
 
 
+# ─── Quick Log ───────────────────────────────────────────────────────────────
+
+@app.route("/quicklog", methods=["GET", "POST"])
+def quicklog():
+    if request.method == "POST":
+        fecha = request.form.get("fecha")
+        hora  = request.form.get("hora")
+        ts    = parse_datetime(fecha, hora)
+        guardados = []
+
+        # Glucemia
+        if request.form.get("reg_glucemia"):
+            valor = request.form.get("glucemia_valor", type=float)
+            if valor and valor > 0:
+                db.session.add(GlucoseReading(
+                    timestamp=ts,
+                    value_mgdl=valor,
+                    source="manual",
+                    notes=request.form.get("glucemia_notas", ""),
+                ))
+                guardados.append(f"Glucemia {int(valor)} mg/dL")
+
+        # Comida
+        if request.form.get("reg_comida"):
+            nombre = request.form.get("comida_nombre", "").strip()
+            if nombre:
+                carbs = request.form.get("comida_carbs", 0, type=float)
+                comida = Meal(
+                    timestamp=ts,
+                    name=nombre,
+                    carbs_g=carbs,
+                    fat_g=request.form.get("comida_fat", 0, type=float),
+                    protein_g=request.form.get("comida_protein", 0, type=float),
+                    calories=request.form.get("comida_cal", 0, type=float),
+                    notes="",
+                    categoria=_auto_categorizar(nombre),
+                )
+                db.session.add(comida)
+                food_id = request.form.get("food_item_id", type=int)
+                if food_id:
+                    fi = FoodItem.query.get(food_id)
+                    if fi:
+                        fi.times_used += 1
+                guardados.append(f"Comida {nombre} ({int(carbs)}g CH)")
+
+        # Insulina bolus
+        if request.form.get("reg_insulina"):
+            units = request.form.get("insulina_units", type=float)
+            if units and units > 0:
+                db.session.add(InsulinDose(
+                    timestamp=ts,
+                    type="bolus",
+                    units=units,
+                    brand=request.form.get("insulina_brand", "").strip(),
+                    notes="",
+                ))
+                guardados.append(f"Insulina {units}U bolus")
+
+        if guardados:
+            db.session.commit()
+            flash("✓ Registrado: " + " · ".join(guardados), "success")
+        else:
+            flash("No se seleccionó ningún dato para registrar.", "warning")
+
+        return redirect(url_for("dashboard"))
+
+    ahora = datetime.now()
+    ultima_glucemia = GlucoseReading.query.order_by(GlucoseReading.timestamp.desc()).first()
+    return render_template(
+        "quicklog.html",
+        fecha=ahora.strftime("%Y-%m-%d"),
+        hora=ahora.strftime("%H:%M"),
+        ultima_glucemia=ultima_glucemia,
+    )
+
+
 # ─── Recomendaciones ──────────────────────────────────────────────────────────
 
 @app.route("/recomendaciones")
