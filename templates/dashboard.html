@@ -21,7 +21,8 @@
     <!-- Botón notificaciones -->
     <button class="btn btn-sm btn-outline-secondary position-relative ms-1"
             type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasAlertas"
-            title="Alertas de patrones">
+            title="Alertas de patrones"
+            onclick="const b=document.getElementById('notif-badge'); if(b){b.style.display='none';} localStorage.setItem('dt_notif_read_count', {{ alertas|length }});">
       <i class="bi bi-bell-fill"></i>
       {% if alertas %}
         <span id="notif-badge"
