@@ -428,14 +428,10 @@
 
   </div><!-- /nav-scroll -->
 
-  <!-- Footer: dark mode + logout -->
+  <!-- Footer: solo logout -->
   <div class="sidebar-footer">
-    <button id="btn-darkmode" title="Cambiar tema">
-      <i class="bi bi-moon-stars-fill" id="icon-darkmode"></i>
-      <span id="label-darkmode">Modo oscuro</span>
-    </button>
     <a href="{{ url_for('logout') }}"
-       class="d-flex align-items-center gap-2 mt-2 text-decoration-none"
+       class="d-flex align-items-center gap-2 text-decoration-none"
        style="color:#64748b; font-size:.82rem; padding:.35rem .5rem; border-radius:6px;"
        onmouseover="this.style.color='#f1f5f9'" onmouseout="this.style.color='#64748b'">
       <i class="bi bi-box-arrow-left" style="width:20px;"></i>
@@ -536,12 +532,12 @@
   sidebar.querySelectorAll('.nav-link').forEach(l => l.addEventListener('click', closeSidebar));
 
   // ── Dark mode toggle ──────────────────────────────────────────────────────
-  const btnDark       = document.getElementById('btn-darkmode');
-  const iconDark      = document.getElementById('icon-darkmode');
-  const labelDark     = document.getElementById('label-darkmode');
   const btnDarkMobile = document.getElementById('btn-darkmode-mobile');
   const iconDarkMob   = document.getElementById('icon-darkmode-mobile');
   const html          = document.documentElement;
+  // Placeholders vacíos (el botón ya no está en el sidebar)
+  const iconDark  = { className: '' };
+  const labelDark = { textContent: '' };
 
   function applyTheme(theme) {
     if (theme === 'dark') {
@@ -577,10 +573,6 @@
   // Sincronizar ícono al cargar
   applyTheme(localStorage.getItem('theme') || 'light');
 
-  btnDark.addEventListener('click', function() {
-    const current = localStorage.getItem('theme') || 'light';
-    applyTheme(current === 'dark' ? 'light' : 'dark');
-  });
   if (btnDarkMobile) {
     btnDarkMobile.addEventListener('click', function() {
       const current = localStorage.getItem('theme') || 'light';

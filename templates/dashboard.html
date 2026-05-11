@@ -24,7 +24,8 @@
             title="Alertas de patrones">
       <i class="bi bi-bell-fill"></i>
       {% if alertas %}
-        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill
+        <span id="notif-badge"
+              class="position-absolute top-0 start-100 translate-middle badge rounded-pill
               {{ 'bg-danger' if alertas | selectattr('nivel','equalto','danger') | list else 'bg-warning text-dark' }}"
               style="font-size:.6rem;">
           {{ alertas | length }}
@@ -234,5 +235,24 @@
 {% block scripts %}
 <script>
   renderChart('chart-timeline', {{ chart | tojson }});
+
+  // ── Notificaciones: marcar como leídas al abrir el panel ─────────────────
+  const NOTIF_KEY   = 'dt_notif_read_count';
+  const alertCount  = {{ alertas | length }};
+  const badge       = document.getElementById('notif-badge');
+
+  // Si ya las vio y el número no cambió, ocultar el badge al cargar
+  if (badge && parseInt(localStorage.getItem(NOTIF_KEY) || '-1') === alertCount) {
+    badge.style.display = 'none';
+  }
+
+  // Al abrir el panel: ocultar badge y guardar que las leyó
+  const offcanvas = document.getElementById('offcanvasAlertas');
+  if (offcanvas) {
+    offcanvas.addEventListener('show.bs.offcanvas', function () {
+      if (badge) badge.style.display = 'none';
+      localStorage.setItem(NOTIF_KEY, alertCount);
+    });
+  }
 </script>
 {% endblock %}
