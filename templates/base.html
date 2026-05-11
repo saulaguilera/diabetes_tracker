@@ -49,7 +49,34 @@
       --alert-light-bg: #1e293b;
       --alert-light-border: #334155;
       --plotly-bg: rgba(30,41,59,1);
+      /* Bootstrap 5.3 dark tokens */
+      --bs-body-color:       #e2e8f0;
+      --bs-body-bg:          #0f172a;
+      --bs-secondary-color:  #94a3b8;
+      --bs-secondary-bg:     #1e293b;
+      --bs-tertiary-bg:      #273549;
+      --bs-border-color:     #334155;
+      --bs-heading-color:    #f1f5f9;
+      color-scheme: dark;
     }
+    /* textos que Bootstrap deja hardcoded */
+    [data-theme="dark"] .text-muted   { color: #94a3b8 !important; }
+    [data-theme="dark"] .text-dark    { color: #e2e8f0 !important; }
+    [data-theme="dark"] small         { color: inherit; }
+    [data-theme="dark"] .bg-light     { background-color: #1e293b !important; color: #e2e8f0 !important; }
+    [data-theme="dark"] .bg-white     { background-color: #1e293b !important; }
+    [data-theme="dark"] .border       { border-color: #334155 !important; }
+    [data-theme="dark"] hr            { border-color: #334155; }
+    [data-theme="dark"] .card         { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+    /* inline styles con fondo claro en templates */
+    [data-theme="dark"] [style*="background:#f8fafc"],
+    [data-theme="dark"] [style*="background: #f8fafc"] { background: #273549 !important; }
+    [data-theme="dark"] [style*="background:#f1f5f9"],
+    [data-theme="dark"] [style*="background: #f1f5f9"] { background: #273549 !important; }
+    [data-theme="dark"] [style*="color:#475569"],
+    [data-theme="dark"] [style*="color: #475569"] { color: #94a3b8 !important; }
+    [data-theme="dark"] [style*="color:#1e293b"],
+    [data-theme="dark"] [style*="color: #1e293b"] { color: #e2e8f0 !important; }
 
     /* ── Base ── */
     body {
@@ -257,13 +284,52 @@
     .bottom-nav a i { font-size: 1.3rem; }
     .bottom-nav a.active, .bottom-nav a:hover { color: #f1f5f9; }
     .bottom-nav a.active i { color: #38bdf8; }
+
+    /* ── Responsive mobile general ── */
+    @media (max-width: 576px) {
+      /* Page headers: apilar verticalmente */
+      .page-header { flex-direction: column !important; align-items: flex-start !important; gap: .6rem; }
+      .page-header .d-flex { flex-wrap: wrap; gap: .4rem !important; }
+      .page-header h1 { font-size: 1.2rem; }
+
+      /* Stat cards: valores más chicos */
+      .stat-card .stat-value { font-size: 1.5rem; }
+
+      /* Tables: scroll horizontal */
+      .table-responsive-always { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .table { min-width: 500px; }
+
+      /* Chart boxes: sin padding lateral excesivo */
+      .chart-box { padding: .75rem .6rem; }
+
+      /* Offcanvas notificaciones full width en mobile */
+      #offcanvasAlertas { width: 100vw !important; }
+
+      /* Formularios */
+      .form-card { padding: 1.25rem; }
+
+      /* Botones de período: más pequeños */
+      .btn-sm { font-size: .75rem; padding: .25rem .5rem; }
+
+      /* Main padding */
+      .main-content { padding: .75rem; }
+    }
+
+    /* Tablas siempre con scroll en mobile */
+    @media (max-width: 768px) {
+      .chart-box .table-responsive,
+      .chart-box > table { overflow-x: auto; display: block; }
+    }
   </style>
 
   <!-- Aplicar tema antes de pintar para evitar flash -->
   <script>
     (function() {
       const t = localStorage.getItem('theme') || 'light';
-      if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+      if (t === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        document.documentElement.setAttribute('data-bs-theme', 'dark');
+      }
     })();
   </script>
 </head>
@@ -395,21 +461,40 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+  const _isDark = () => document.documentElement.getAttribute('data-theme') === 'dark';
+
+  const _themeLayout = () => _isDark() ? {
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor:  'rgba(30,41,59,1)',
+    font:          { color: '#e2e8f0', family: 'Inter, system-ui, sans-serif' },
+    xaxis:         { gridcolor: '#334155', linecolor: '#475569', tickfont: { color: '#94a3b8' } },
+    yaxis:         { gridcolor: '#334155', linecolor: '#475569', tickfont: { color: '#94a3b8' } },
+    legend:        { font: { color: '#e2e8f0' } },
+  } : {
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor:  'rgba(248,250,252,1)',
+    font:          { color: '#0f172a', family: 'Inter, system-ui, sans-serif' },
+    xaxis:         { gridcolor: '#e2e8f0', linecolor: '#cbd5e1', tickfont: { color: '#64748b' } },
+    yaxis:         { gridcolor: '#e2e8f0', linecolor: '#cbd5e1', tickfont: { color: '#64748b' } },
+    legend:        { font: { color: '#0f172a' } },
+  };
+
   function renderChart(divId, chartData) {
     const el = document.getElementById(divId);
     if (!el) return;
 
-    // Siempre limpia el spinner primero
     if (!chartData || !chartData.data || chartData.data.length === 0) {
       el.innerHTML = '<p class="text-center text-muted py-4" style="font-size:.88rem;">'
         + '<i class="bi bi-bar-chart text-muted d-block fs-2 mb-2"></i>'
         + 'Sin datos suficientes aún.<br>'
-        + '<small>Registra comidas y glucemia para ver esta gráfica.</small></p>';
+        + '<small>Registrá comidas y glucemia para ver esta gráfica.</small></p>';
       return;
     }
 
     try {
-      Plotly.newPlot(divId, chartData.data, chartData.layout, {
+      // Mezclar el layout del servidor con los colores del tema actual
+      const layout = Object.assign({}, chartData.layout, _themeLayout());
+      Plotly.newPlot(divId, chartData.data, layout, {
         responsive: true,
         displayModeBar: false,
       });
@@ -438,32 +523,29 @@
   function applyTheme(theme) {
     if (theme === 'dark') {
       html.setAttribute('data-theme', 'dark');
-      iconDark.className  = 'bi bi-sun-fill';
+      html.setAttribute('data-bs-theme', 'dark');   // Bootstrap 5.3 nativo
+      iconDark.className    = 'bi bi-sun-fill';
       labelDark.textContent = 'Modo claro';
-      // Actualizar fondo de gráficas Plotly ya renderizadas
-      document.querySelectorAll('.js-plotly-plot').forEach(el => {
-        Plotly.relayout(el, {
-          'paper_bgcolor': 'rgba(0,0,0,0)',
-          'plot_bgcolor':  'rgba(30,41,59,1)',
-          'font.color':    '#e2e8f0',
-          'xaxis.gridcolor': '#334155',
-          'yaxis.gridcolor': '#334155',
-        });
-      });
     } else {
       html.removeAttribute('data-theme');
-      iconDark.className  = 'bi bi-moon-stars-fill';
+      html.removeAttribute('data-bs-theme');
+      iconDark.className    = 'bi bi-moon-stars-fill';
       labelDark.textContent = 'Modo oscuro';
-      document.querySelectorAll('.js-plotly-plot').forEach(el => {
-        Plotly.relayout(el, {
-          'paper_bgcolor': 'rgba(0,0,0,0)',
-          'plot_bgcolor':  'rgba(248,250,252,1)',
-          'font.color':    '#0f172a',
-          'xaxis.gridcolor': '#e2e8f0',
-          'yaxis.gridcolor': '#e2e8f0',
-        });
-      });
     }
+    // Redibujar todas las gráficas Plotly ya renderizadas
+    const tl = _themeLayout();
+    document.querySelectorAll('.js-plotly-plot').forEach(el => {
+      Plotly.relayout(el, {
+        paper_bgcolor:     tl.paper_bgcolor,
+        plot_bgcolor:      tl.plot_bgcolor,
+        'font.color':      tl.font.color,
+        'xaxis.gridcolor': tl.xaxis.gridcolor,
+        'yaxis.gridcolor': tl.yaxis.gridcolor,
+        'xaxis.tickfont':  tl.xaxis.tickfont,
+        'yaxis.tickfont':  tl.yaxis.tickfont,
+        'legend.font':     tl.legend.font,
+      });
+    });
     localStorage.setItem('theme', theme);
   }
 
