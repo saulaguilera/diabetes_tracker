@@ -1,5 +1,12 @@
 import os
 import functools
+
+# Cargar .env si existe (desarrollo local)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from datetime import datetime, timedelta, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
