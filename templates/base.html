@@ -353,7 +353,15 @@
   <button class="btn btn-sm btn-dark" id="sidebar-toggle" style="border-color:#334155;">
     <i class="bi bi-list fs-5"></i>
   </button>
-  <span class="brand-text"><i class="bi bi-heart-pulse-fill text-danger me-1"></i>DiabetesTracker</span>
+  <span class="brand-text flex-grow-1">
+    <i class="bi bi-heart-pulse-fill text-danger me-1"></i>DiabetesTracker
+  </span>
+  <!-- Toggle dark mode visible en mobile -->
+  <button id="btn-darkmode-mobile"
+          style="background:transparent; border:1px solid #334155; color:#94a3b8;
+                 border-radius:8px; padding:.3rem .55rem; font-size:1rem; cursor:pointer;">
+    <i class="bi bi-moon-stars-fill" id="icon-darkmode-mobile"></i>
+  </button>
 </div>
 
 <!-- Sidebar overlay (mobile) -->
@@ -528,22 +536,26 @@
   sidebar.querySelectorAll('.nav-link').forEach(l => l.addEventListener('click', closeSidebar));
 
   // ── Dark mode toggle ──────────────────────────────────────────────────────
-  const btnDark   = document.getElementById('btn-darkmode');
-  const iconDark  = document.getElementById('icon-darkmode');
-  const labelDark = document.getElementById('label-darkmode');
-  const html      = document.documentElement;
+  const btnDark       = document.getElementById('btn-darkmode');
+  const iconDark      = document.getElementById('icon-darkmode');
+  const labelDark     = document.getElementById('label-darkmode');
+  const btnDarkMobile = document.getElementById('btn-darkmode-mobile');
+  const iconDarkMob   = document.getElementById('icon-darkmode-mobile');
+  const html          = document.documentElement;
 
   function applyTheme(theme) {
     if (theme === 'dark') {
       html.setAttribute('data-theme', 'dark');
-      html.setAttribute('data-bs-theme', 'dark');   // Bootstrap 5.3 nativo
-      iconDark.className    = 'bi bi-sun-fill';
-      labelDark.textContent = 'Modo claro';
+      html.setAttribute('data-bs-theme', 'dark');
+      iconDark.className      = 'bi bi-sun-fill';
+      labelDark.textContent   = 'Modo claro';
+      if (iconDarkMob) iconDarkMob.className = 'bi bi-sun-fill';
     } else {
       html.removeAttribute('data-theme');
       html.removeAttribute('data-bs-theme');
-      iconDark.className    = 'bi bi-moon-stars-fill';
-      labelDark.textContent = 'Modo oscuro';
+      iconDark.className      = 'bi bi-moon-stars-fill';
+      labelDark.textContent   = 'Modo oscuro';
+      if (iconDarkMob) iconDarkMob.className = 'bi bi-moon-stars-fill';
     }
     // Redibujar todas las gráficas Plotly ya renderizadas
     const tl = _themeLayout();
@@ -569,6 +581,12 @@
     const current = localStorage.getItem('theme') || 'light';
     applyTheme(current === 'dark' ? 'light' : 'dark');
   });
+  if (btnDarkMobile) {
+    btnDarkMobile.addEventListener('click', function() {
+      const current = localStorage.getItem('theme') || 'light';
+      applyTheme(current === 'dark' ? 'light' : 'dark');
+    });
+  }
 </script>
 {% block scripts %}{% endblock %}
 
