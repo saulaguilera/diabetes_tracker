@@ -5,21 +5,21 @@
 
 <style>
   /* ── Estilos específicos del reporte ── */
-  .report-header { border-bottom: 3px solid #1e293b; padding-bottom: 1rem; margin-bottom: 1.5rem; }
+  .report-header { border-bottom: 3px solid var(--border); padding-bottom: 1rem; margin-bottom: 1.5rem; }
   .metric-card {
-    background: white; border-radius: 10px; border: 1px solid #e2e8f0;
+    background: var(--surface); border-radius: 10px; border: 1px solid var(--border);
     padding: 1rem 1.25rem; height: 100%;
   }
   .metric-card .val { font-size: 1.9rem; font-weight: 700; line-height: 1.1; }
-  .metric-card .label { font-size: .75rem; color: #64748b; margin-top: .2rem; }
-  .metric-card .meta  { font-size: .7rem; color: #94a3b8; margin-top: .15rem; }
+  .metric-card .label { font-size: .75rem; color: var(--text-muted); margin-top: .2rem; }
+  .metric-card .meta  { font-size: .7rem; color: var(--text-muted); margin-top: .15rem; }
   .target-ok   { color: #16a34a; }
   .target-warn { color: #d97706; }
   .target-bad  { color: #dc2626; }
   .section-title {
     font-size: .75rem; font-weight: 700; text-transform: uppercase;
-    letter-spacing: .08em; color: #64748b;
-    border-bottom: 1px solid #e2e8f0; padding-bottom: .35rem; margin-bottom: .75rem;
+    letter-spacing: .08em; color: var(--text-muted);
+    border-bottom: 1px solid var(--border); padding-bottom: .35rem; margin-bottom: .75rem;
   }
 
   @media print {
