@@ -89,7 +89,7 @@
     /* ── Sidebar (siempre oscuro) ── */
     .sidebar {
       width: var(--sidebar-width);
-      min-height: 100vh;
+      height: 100vh;          /* altura fija, no mínima */
       background: #1e293b;
       color: #cbd5e1;
       position: fixed;
@@ -99,8 +99,18 @@
       transition: transform .2s;
       display: flex;
       flex-direction: column;
+      overflow: hidden;       /* evita scroll en el contenedor padre */
     }
-    .sidebar .nav-scroll { flex: 1; overflow-y: auto; }
+    .sidebar .nav-scroll {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;  /* scroll suave en iOS */
+      padding-bottom: .5rem;
+    }
+    /* Scrollbar discreta en el sidebar */
+    .sidebar .nav-scroll::-webkit-scrollbar { width: 4px; }
+    .sidebar .nav-scroll::-webkit-scrollbar-track { background: transparent; }
+    .sidebar .nav-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
     .sidebar .brand {
       font-size: 1.1rem; font-weight: 700; color: #f1f5f9;
       padding: 0.5rem 1.25rem 1.25rem;
