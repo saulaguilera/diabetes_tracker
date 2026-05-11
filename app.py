@@ -818,6 +818,162 @@ def api_alimento_usar(id):
 
 # ─── Importar Freestyle Libre ─────────────────────────────────────────────────
 
+@app.route("/backup/exportar")
+def backup_exportar():
+    """Exporta toda la base de datos como JSON para backup."""
+    from flask import Response
+    import json as _json
+
+    def serial(obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        raise TypeError(f"Type {type(obj)} not serializable")
+
+    data = {
+        "version": 1,
+        "exportado_en": datetime.now().isoformat(),
+        "glucemia": [
+            {"id": r.id, "timestamp": r.timestamp.isoformat(),
+             "value_mgdl": r.value_mgdl, "source": r.source, "notes": r.notes}
+            for r in GlucoseReading.query.all()
+        ],
+        "comidas": [
+            {"id": r.id, "timestamp": r.timestamp.isoformat(),
+             "name": r.name, "carbs_g": r.carbs_g, "fat_g": r.fat_g,
+             "protein_g": r.protein_g, "calories": r.calories,
+             "notes": r.notes, "categoria": r.categoria}
+            for r in Meal.query.all()
+        ],
+        "insulina": [
+            {"id": r.id, "timestamp": r.timestamp.isoformat(),
+             "type": r.type, "units": r.units, "brand": r.brand, "notes": r.notes}
+            for r in InsulinDose.query.all()
+        ],
+        "actividad": [
+            {"id": r.id, "timestamp": r.timestamp.isoformat(),
+             "activity_type": r.activity_type, "duration_min": r.duration_min,
+             "intensity": r.intensity, "notes": r.notes}
+            for r in Activity.query.all()
+        ],
+        "alimentos": [
+            {"id": r.id, "name": r.name, "serving_desc": r.serving_desc,
+             "serving_g": r.serving_g, "carbs_per_serving": r.carbs_per_serving,
+             "fat_per_serving": r.fat_per_serving, "protein_per_serving": r.protein_per_serving,
+             "calories_per_serving": r.calories_per_serving, "category": r.category,
+             "notes": r.notes, "times_used": r.times_used}
+            for r in FoodItem.query.all()
+        ],
+    }
+
+    payload = _json.dumps(data, ensure_ascii=False, indent=2, default=serial)
+    filename = f"diabetes_backup_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
+    return Response(
+        payload,
+        mimetype="application/json",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@app.route("/backup/importar", methods=["GET", "POST"])
+def backup_importar():
+    """Restaura datos desde un archivo JSON de backup."""
+    import json as _json
+
+    if request.method == "POST":
+        archivo = request.files.get("archivo")
+        if not archivo or not archivo.filename.endswith(".json"):
+            flash("Seleccioná un archivo .json de backup válido.", "danger")
+            return redirect(request.url)
+
+        try:
+            data = _json.load(archivo)
+            if data.get("version") != 1:
+                flash("Formato de backup no reconocido.", "danger")
+                return redirect(request.url)
+
+            importados = {"glucemia": 0, "comidas": 0, "insulina": 0, "actividad": 0, "alimentos": 0}
+
+            for r in data.get("glucemia", []):
+                if not GlucoseReading.query.get(r["id"]):
+                    db.session.add(GlucoseReading(
+                        id=r["id"],
+                        timestamp=datetime.fromisoformat(r["timestamp"]),
+                        value_mgdl=r["value_mgdl"], source=r.get("source","manual"),
+                        notes=r.get("notes")
+                    ))
+                    importados["glucemia"] += 1
+
+            for r in data.get("comidas", []):
+                if not Meal.query.get(r["id"]):
+                    db.session.add(Meal(
+                        id=r["id"],
+                        timestamp=datetime.fromisoformat(r["timestamp"]),
+                        name=r["name"], carbs_g=r.get("carbs_g",0),
+                        fat_g=r.get("fat_g",0), protein_g=r.get("protein_g",0),
+                        calories=r.get("calories",0), notes=r.get("notes"),
+                        categoria=r.get("categoria")
+                    ))
+                    importados["comidas"] += 1
+
+            for r in data.get("insulina", []):
+                if not InsulinDose.query.get(r["id"]):
+                    db.session.add(InsulinDose(
+                        id=r["id"],
+                        timestamp=datetime.fromisoformat(r["timestamp"]),
+                        type=r["type"], units=r["units"],
+                        brand=r.get("brand"), notes=r.get("notes")
+                    ))
+                    importados["insulina"] += 1
+
+            for r in data.get("actividad", []):
+                if not Activity.query.get(r["id"]):
+                    db.session.add(Activity(
+                        id=r["id"],
+                        timestamp=datetime.fromisoformat(r["timestamp"]),
+                        activity_type=r["activity_type"],
+                        duration_min=r.get("duration_min"),
+                        intensity=r.get("intensity"), notes=r.get("notes")
+                    ))
+                    importados["actividad"] += 1
+
+            for r in data.get("alimentos", []):
+                if not FoodItem.query.get(r["id"]):
+                    db.session.add(FoodItem(
+                        id=r["id"], name=r["name"],
+                        serving_desc=r.get("serving_desc"), serving_g=r.get("serving_g"),
+                        carbs_per_serving=r.get("carbs_per_serving",0),
+                        fat_per_serving=r.get("fat_per_serving",0),
+                        protein_per_serving=r.get("protein_per_serving",0),
+                        calories_per_serving=r.get("calories_per_serving",0),
+                        category=r.get("category"), notes=r.get("notes"),
+                        times_used=r.get("times_used",0)
+                    ))
+                    importados["alimentos"] += 1
+
+            db.session.commit()
+            total = sum(importados.values())
+            flash(f"✓ {total} registros importados: "
+                  f"{importados['glucemia']} glucemias, {importados['comidas']} comidas, "
+                  f"{importados['insulina']} insulinas, {importados['actividad']} actividades, "
+                  f"{importados['alimentos']} alimentos.", "success")
+            return redirect(url_for("dashboard"))
+
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Error al procesar el backup: {e}", "danger")
+            return redirect(request.url)
+
+    # GET — mostrar estadísticas actuales
+    stats = {
+        "glucemia": GlucoseReading.query.count(),
+        "comidas":  Meal.query.count(),
+        "insulina": InsulinDose.query.count(),
+        "actividad": Activity.query.count(),
+        "alimentos": FoodItem.query.count(),
+    }
+    return render_template("backup.html", stats=stats)
+
+
 @app.route("/importar", methods=["GET", "POST"])
 def importar():
     imports = CGMImport.query.order_by(CGMImport.imported_at.desc()).all()
