@@ -121,19 +121,22 @@
       font-size: .65rem; padding: .2em .5em; border-radius: 4px;
     }
     .sidebar .nav-link {
-      color: #94a3b8; padding: .55rem 1.25rem;
+      color: #94a3b8 !important; padding: .55rem 1.25rem;
       border-radius: 6px; margin: 1px 8px;
       font-size: .92rem; display: flex; align-items: center; gap: .6rem;
+      text-decoration: none !important;
     }
     .sidebar .nav-link:hover, .sidebar .nav-link.active {
-      background: #334155; color: #f1f5f9;
+      background: #334155 !important; color: #f1f5f9 !important;
     }
-    .sidebar .nav-link i { font-size: 1rem; width: 20px; }
+    .sidebar .nav-link i { font-size: 1rem; width: 20px; color: inherit !important; }
     .sidebar .nav-section {
       font-size: .7rem; font-weight: 600;
       text-transform: uppercase; letter-spacing: .08em;
-      color: #64748b; padding: .75rem 1.25rem .25rem;
+      color: #64748b !important; padding: .75rem 1.25rem .25rem;
     }
+    .sidebar .brand { color: #f1f5f9 !important; }
+    .sidebar .brand .badge-t1 { background: #ef4444 !important; color: white !important; }
 
     /* ── Botón dark mode al fondo del sidebar ── */
     .sidebar-footer {
@@ -345,8 +348,8 @@
 </head>
 <body>
 
-<!-- Mobile topbar -->
-<div class="mobile-topbar">
+<!-- Mobile topbar (siempre oscuro) -->
+<div class="mobile-topbar" data-bs-theme="dark">
   <button class="btn btn-sm btn-dark" id="sidebar-toggle" style="border-color:#334155;">
     <i class="bi bi-list fs-5"></i>
   </button>
@@ -356,8 +359,8 @@
 <!-- Sidebar overlay (mobile) -->
 <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-<!-- Sidebar -->
-<nav class="sidebar" id="sidebar">
+<!-- Sidebar (siempre oscuro, inmune al toggle de tema) -->
+<nav class="sidebar" id="sidebar" data-bs-theme="dark">
   <div class="nav-scroll">
   <div class="brand">
     <i class="bi bi-heart-pulse-fill text-danger"></i>
@@ -433,8 +436,8 @@
   </div>
 </nav>
 
-<!-- Bottom nav (mobile) -->
-<nav class="bottom-nav">
+<!-- Bottom nav (mobile, siempre oscuro) -->
+<nav class="bottom-nav" data-bs-theme="dark">
   <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}">
     <i class="bi bi-speedometer2"></i>Inicio
   </a>
