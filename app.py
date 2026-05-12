@@ -825,6 +825,39 @@ def api_alimento_usar(id):
 
 # ─── Importar Freestyle Libre ─────────────────────────────────────────────────
 
+@app.route("/backup/exportar-db")
+def backup_exportar_db():
+    """Descarga el archivo SQLite completo."""
+    import shutil
+    import tempfile
+    from flask import send_file
+    from sqlalchemy import engine as _sa_engine
+
+    # Obtener la ruta real del archivo desde el engine de SQLAlchemy
+    db_path = db.engine.url.database
+
+    # En algunos entornos la ruta es relativa — resolverla desde instance/
+    if not os.path.isabs(db_path):
+        db_path = os.path.join(app.instance_path, db_path)
+
+    if not os.path.exists(db_path):
+        flash("No se encontró el archivo de base de datos.", "danger")
+        return redirect(url_for("backup_importar"))
+
+    # Copiar a temporal para no bloquear el archivo en uso
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    shutil.copy2(db_path, tmp.name)
+    tmp.close()
+
+    filename = f"diabetes_{datetime.now().strftime('%Y%m%d_%H%M')}.db"
+    return send_file(
+        tmp.name,
+        mimetype="application/x-sqlite3",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
 @app.route("/backup/exportar")
 def backup_exportar():
     """Exporta toda la base de datos como JSON para backup."""

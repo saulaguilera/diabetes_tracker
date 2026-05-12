@@ -16,8 +16,7 @@
         <i class="bi bi-download text-success me-2"></i>Exportar
       </h5>
       <p class="text-muted mb-3" style="font-size:.87rem;">
-        Descarga todos tus datos en un archivo JSON. Usalo para hacer backup
-        o para migrar a otro servidor.
+        Descarga todos tus datos para hacer backup o migrar a otro servidor.
       </p>
 
       <!-- Estadísticas actuales -->
@@ -36,9 +35,27 @@
         {% endfor %}
       </div>
 
-      <a href="{{ url_for('backup_exportar') }}" class="btn btn-success w-100">
-        <i class="bi bi-download me-2"></i>Descargar backup (.json)
-      </a>
+      <div class="d-grid gap-2">
+        <!-- Descarga SQLite -->
+        <a href="{{ url_for('backup_exportar_db') }}" class="btn btn-primary">
+          <i class="bi bi-database-fill-down me-2"></i>Descargar base de datos (.db)
+          <span class="badge bg-warning text-dark ms-1" style="font-size:.68rem;">SQL</span>
+        </a>
+        <p class="text-muted mb-1" style="font-size:.76rem;">
+          <i class="bi bi-info-circle me-1"></i>
+          Archivo SQLite completo. Abrilo con <strong>DB Browser for SQLite</strong>
+          o usalo directamente con pandas/Python para análisis.
+        </p>
+
+        <!-- Descarga JSON -->
+        <a href="{{ url_for('backup_exportar') }}" class="btn btn-outline-success">
+          <i class="bi bi-filetype-json me-2"></i>Descargar backup (.json)
+        </a>
+        <p class="text-muted mb-0" style="font-size:.76rem;">
+          <i class="bi bi-info-circle me-1"></i>
+          Formato portable para restaurar en otro servidor.
+        </p>
+      </div>
     </div>
   </div>
 
@@ -71,10 +88,17 @@
 
 </div>
 
-<div class="alert alert-light border mt-3" style="font-size:.80rem;">
-  <i class="bi bi-info-circle text-primary me-1"></i>
-  <strong>Flujo recomendado:</strong>
-  Exportá desde tu Mac → abrí la app en Railway → Backup → Restaurar → subí el archivo.
-  Hacé esto cada vez que quieras sincronizar datos entre dispositivos.
+<div class="alert border mt-3" style="font-size:.80rem; background:var(--surface2); color:var(--text);">
+  <div class="mb-2">
+    <i class="bi bi-database-fill-down text-primary me-1"></i>
+    <strong>Archivo .db (SQLite)</strong> — para análisis y ML en Python/pandas,
+    o para explorar con <a href="https://sqlitebrowser.org" target="_blank">DB Browser for SQLite</a>.
+    Contiene todos los datos en formato SQL.
+  </div>
+  <div>
+    <i class="bi bi-filetype-json text-success me-1"></i>
+    <strong>Archivo .json</strong> — para migrar datos entre servidores.
+    Exportá desde Railway → importá en otro servidor (o al revés).
+  </div>
 </div>
 {% endblock %}
