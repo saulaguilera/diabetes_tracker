@@ -13,6 +13,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from models import db, GlucoseReading, Meal, InsulinDose, Activity, CGMImport, FoodItem, UserSettings
 
 from utils.libre_import import import_libre_csv
+from utils.libre_linkup import sync_all as libre_sync_all
 from utils.recommendations import generate_recommendations
 from utils.pdf_charts import chart_pdf_tir, chart_pdf_circadiano, chart_pdf_timeline
 from utils.pdf_report import generar_pdf
@@ -71,6 +72,12 @@ with app.app_context():
         if "categoria" not in cols:
             conn.execute(text("ALTER TABLE meals ADD COLUMN categoria VARCHAR(50)"))
             conn.commit()
+
+
+# ── Configuración LibreLinkUp ─────────────────────────────────────────────────
+_LIBRE_EMAIL    = os.environ.get("LIBRE_EMAIL", "")
+_LIBRE_PASSWORD = os.environ.get("LIBRE_PASSWORD", "")
+_SYNC_TOKEN     = os.environ.get("SYNC_TOKEN", "")   # token secreto para cron job
 
 
 # ── Helpers de configuración de usuario ──────────────────────────────────────
@@ -349,6 +356,156 @@ def _detectar_patrones(days=30):
     return alertas
 
 
+# ─── Sync LibreLinkUp ────────────────────────────────────────────────────────
+
+def _do_libre_sync(email: str, password: str) -> dict:
+    """
+    Descarga lecturas de LibreLinkUp e inserta las nuevas en la base de datos.
+    Retorna {"insertadas": int, "total": int, "error": str|None, "ultima": datetime|None}
+    """
+    resultado = libre_sync_all(email, password)
+    if resultado["error"]:
+        return {"insertadas": 0, "total": 0,
+                "error": resultado["error"], "ultima": None}
+
+    readings  = resultado["readings"]
+    insertadas = 0
+    ultima_ts  = None
+
+    for r in readings:
+        if not r["value_mgdl"] or r["value_mgdl"] < 20:
+            continue
+        # Verificar si ya existe (ventana ±2 min para evitar duplicados)
+        ts = r["timestamp"]
+        existe = GlucoseReading.query.filter(
+            GlucoseReading.timestamp >= ts - timedelta(minutes=2),
+            GlucoseReading.timestamp <= ts + timedelta(minutes=2),
+        ).first()
+        if not existe:
+            db.session.add(GlucoseReading(
+                timestamp=ts,
+                value_mgdl=r["value_mgdl"],
+                source="cgm_libre",
+                notes=r.get("trend", ""),
+            ))
+            insertadas += 1
+            if ultima_ts is None or ts > ultima_ts:
+                ultima_ts = ts
+
+    if insertadas:
+        db.session.commit()
+
+    # Guardar timestamp de última sync exitosa
+    _set_setting("libre_last_sync", datetime.now().isoformat())
+    _set_setting("libre_last_sync_ok", "1")
+
+    return {
+        "insertadas": insertadas,
+        "total":      len(readings),
+        "error":      None,
+        "ultima":     ultima_ts,
+    }
+
+
+@app.route("/api/sync/libre")
+def api_sync_libre():
+    """
+    Endpoint de sincronización con LibreLinkUp.
+    Puede ser llamado:
+      - Desde el dashboard (autenticado con sesión)
+      - Desde un cron job de Railway (con ?token=SYNC_TOKEN)
+    """
+    # Autenticación: sesión web O token de cron job
+    token_param = request.args.get("token", "")
+    if not session.get("logged_in"):
+        if not _SYNC_TOKEN or token_param != _SYNC_TOKEN:
+            return jsonify({"error": "No autorizado"}), 401
+
+    email    = _LIBRE_EMAIL
+    password = _LIBRE_PASSWORD
+
+    if not email or not password:
+        return jsonify({
+            "error": "Configurá LIBRE_EMAIL y LIBRE_PASSWORD en las variables de entorno de Railway."
+        }), 400
+
+    resultado = _do_libre_sync(email, password)
+    return jsonify(resultado)
+
+
+@app.route("/sync/libre")
+def sync_libre_manual():
+    """Vista de sincronización manual con feedback visual."""
+    email    = _LIBRE_EMAIL
+    password = _LIBRE_PASSWORD
+
+    if not email or not password:
+        flash("Configurá LIBRE_EMAIL y LIBRE_PASSWORD en Railway para usar la sync automática.", "warning")
+        return redirect(url_for("importar"))
+
+    resultado = _do_libre_sync(email, password)
+
+    if resultado["error"]:
+        flash(f"Error en sync: {resultado['error']}", "danger")
+    else:
+        msg = f"✓ Libre sync: {resultado['insertadas']} lecturas nuevas"
+        if resultado["total"] > 0 and resultado["insertadas"] == 0:
+            msg += " (todas ya estaban registradas)"
+        flash(msg, "success")
+
+    return redirect(url_for("dashboard"))
+
+
+# ── Scheduler automático (cada 5 min si hay credenciales configuradas) ────────
+def _iniciar_scheduler():
+    """Inicia APScheduler para sync automática si hay credenciales disponibles."""
+    if not _LIBRE_EMAIL or not _LIBRE_PASSWORD:
+        return  # Sin credenciales, no hay nada que hacer
+
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from apscheduler.events import EVENT_JOB_ERROR
+        import threading, fcntl, tempfile
+
+        # Lock de archivo para evitar que múltiples workers de gunicorn
+        # ejecuten el scheduler al mismo tiempo
+        lock_file = os.path.join(tempfile.gettempdir(), "dt_scheduler.lock")
+
+        def _scheduler_worker():
+            try:
+                lock_fd = open(lock_file, "w")
+                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except (IOError, OSError):
+                return  # Otro worker ya tiene el lock
+
+            def _sync_job():
+                with app.app_context():
+                    try:
+                        _do_libre_sync(_LIBRE_EMAIL, _LIBRE_PASSWORD)
+                    except Exception:
+                        pass
+
+            scheduler = BackgroundScheduler(timezone="America/Argentina/Buenos_Aires")
+            scheduler.add_job(_sync_job, "interval", minutes=5, id="libre_sync")
+            scheduler.start()
+            # Sync inicial al arrancar
+            _sync_job()
+
+        t = threading.Thread(target=_scheduler_worker, daemon=True)
+        t.start()
+    except ImportError:
+        pass  # APScheduler no instalado, skip silencioso
+    except Exception:
+        pass
+
+
+# Arrancar scheduler cuando la app esté lista (no en modo test)
+import sys
+if "pytest" not in sys.modules and not app.config.get("TESTING"):
+    with app.app_context():
+        _iniciar_scheduler()
+
+
 # ─── Autenticación ────────────────────────────────────────────────────────────
 
 @app.route("/login", methods=["GET", "POST"])
@@ -390,7 +547,28 @@ def dashboard():
     stats   = stats_resumen()
     chart   = chart_glucose_timeline(hours=24)
     alertas = _detectar_patrones(days=30)
-    return render_template("dashboard.html", stats=stats, chart=chart, alertas=alertas)
+
+    # Estado de sync Libre
+    libre_configured = bool(_LIBRE_EMAIL and _LIBRE_PASSWORD)
+    ultima_sync_raw  = _get_setting("libre_last_sync")
+    ultima_sync      = None
+    if ultima_sync_raw:
+        try:
+            ts = datetime.fromisoformat(ultima_sync_raw)
+            delta = datetime.now() - ts
+            mins  = int(delta.total_seconds() / 60)
+            if mins < 1:
+                ultima_sync = "ahora"
+            elif mins < 60:
+                ultima_sync = f"hace {mins}min"
+            else:
+                horas = mins // 60
+                ultima_sync = f"hace {horas}h"
+        except Exception:
+            pass
+
+    return render_template("dashboard.html", stats=stats, chart=chart, alertas=alertas,
+                           libre_configured=libre_configured, ultima_sync=ultima_sync)
 
 
 # ─── Glucemia ─────────────────────────────────────────────────────────────────

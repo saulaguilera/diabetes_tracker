@@ -5,12 +5,31 @@
 <div class="page-header d-flex justify-content-between align-items-center">
   <div>
     <h1><i class="bi bi-speedometer2 me-2 text-primary"></i>Dashboard</h1>
-    <small class="text-muted">Resumen de las últimas 24 horas</small>
+    <small class="text-muted">
+      Resumen de las últimas 24 horas
+      {% if libre_configured %}
+        · <span id="sync-status">
+            {% if ultima_sync %}
+              <i class="bi bi-circle-fill text-success" style="font-size:.5rem; vertical-align:middle;"></i>
+              Libre sync {{ ultima_sync }}
+            {% else %}
+              <i class="bi bi-circle text-muted" style="font-size:.5rem; vertical-align:middle;"></i>
+              Sin sync aún
+            {% endif %}
+          </span>
+      {% endif %}
+    </small>
   </div>
   <div class="d-flex gap-2 align-items-center">
     <a href="{{ url_for('quicklog') }}" class="btn btn-sm btn-warning fw-semibold">
       <i class="bi bi-lightning-charge-fill"></i> Quick Log
     </a>
+    {% if libre_configured %}
+    <button class="btn btn-sm btn-outline-info" id="btn-sync"
+            onclick="sincronizarLibre()" title="Sincronizar con Libre">
+      <i class="bi bi-arrow-repeat"></i>
+    </button>
+    {% endif %}
     <a href="{{ url_for('glucemia_nueva') }}" class="btn btn-sm btn-outline-primary">
       <i class="bi bi-plus-lg"></i> Glucemia
     </a>
@@ -239,6 +258,46 @@
 {% block scripts %}
 <script>
   renderChart('chart-timeline', {{ chart | tojson }});
+
+  // ── Sync Libre ────────────────────────────────────────────────────────────
+  {% if libre_configured %}
+  async function sincronizarLibre() {
+    const btn = document.getElementById('btn-sync');
+    const status = document.getElementById('sync-status');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    try {
+      const r = await fetch('/api/sync/libre');
+      const d = await r.json();
+      if (d.error) {
+        status.innerHTML = '<i class="bi bi-exclamation-circle text-danger" style="font-size:.5rem;vertical-align:middle;"></i> ' + d.error;
+      } else {
+        const msg = d.insertadas > 0
+          ? `<i class="bi bi-circle-fill text-success" style="font-size:.5rem;vertical-align:middle;"></i> +${d.insertadas} lecturas`
+          : `<i class="bi bi-circle-fill text-success" style="font-size:.5rem;vertical-align:middle;"></i> Al día`;
+        status.innerHTML = msg;
+        if (d.insertadas > 0) setTimeout(() => location.reload(), 1200);
+      }
+    } catch(e) {
+      status.innerHTML = '<i class="bi bi-exclamation-circle text-warning"></i> Error de red';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
+    }
+  }
+
+  // Auto-sync silencioso al cargar el dashboard
+  window.addEventListener('DOMContentLoaded', () => {
+    const lastSync = localStorage.getItem('dt_libre_sync');
+    const now = Date.now();
+    if (!lastSync || now - parseInt(lastSync) > 5 * 60 * 1000) {
+      localStorage.setItem('dt_libre_sync', now);
+      fetch('/api/sync/libre').then(r => r.json()).then(d => {
+        if (d.insertadas > 0) setTimeout(() => location.reload(), 800);
+      }).catch(() => {});
+    }
+  });
+  {% endif %}
 
   // ── Notificaciones: marcar como leídas al abrir el panel ─────────────────
   const NOTIF_KEY   = 'dt_notif_read_count';
