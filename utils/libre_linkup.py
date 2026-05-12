@@ -16,14 +16,21 @@ from datetime import datetime, timezone, timedelta
 # URL base — Abbott detecta la región automáticamente en el login
 _BASE_URL = "https://api.libreview.io"
 
-_HEADERS = {
-    "product":       "llu.android",
-    "version":       "4.16.0",
-    "Content-Type":  "application/json",
-    "Accept":        "application/json",
-    "cache-control": "no-cache",
-    "connection":    "Keep-Alive",
-    "User-Agent":    "LibreLinkUp/4.16.0 (Android)",
+# Headers para POST (login)
+_HEADERS_POST = {
+    "product":      "llu.android",
+    "version":      "4.16.0",
+    "Content-Type": "application/json",
+    "Accept":       "application/json",
+    "User-Agent":   "LibreLinkUp/4.16.0 (Android)",
+}
+
+# Headers para GET (connections, graph) — sin Content-Type ni connection
+_HEADERS_GET = {
+    "product":    "llu.android",
+    "version":    "4.16.0",
+    "Accept":     "application/json",
+    "User-Agent": "LibreLinkUp/4.16.0 (Android)",
 }
 
 
@@ -43,13 +50,12 @@ def login(email: str, password: str) -> tuple[str, str]:
     for _ in range(2):
         resp = requests.post(
             f"{base_url}/llu/auth/login",
-            json=payload, headers=_HEADERS, timeout=15
+            json=payload, headers=_HEADERS_POST, timeout=15
         )
         resp.raise_for_status()
         data = resp.json()
 
         # Abbott devuelve redirect=true cuando hay que usar un servidor regional
-        # (puede venir con status=0 o status=2 según la región)
         if data.get("data", {}).get("redirect"):
             region   = data["data"]["region"]
             base_url = f"https://api-{region}.libreview.io"
@@ -88,8 +94,7 @@ def login(email: str, password: str) -> tuple[str, str]:
 
 def get_connections(token: str, base_url: str) -> list:
     """Devuelve la lista de conexiones (pacientes vinculados en LibreLinkUp)."""
-    headers = {**_HEADERS, "Authorization": f"Bearer {token}"}
-    headers.pop("Content-Type", None)   # GET no lleva Content-Type
+    headers = {**_HEADERS_GET, "Authorization": f"Bearer {token}"}
     resp    = requests.get(f"{base_url}/llu/connections", headers=headers, timeout=15)
     resp.raise_for_status()
     data = resp.json()
@@ -103,8 +108,7 @@ def get_readings(token: str, base_url: str, patient_id: str) -> list[dict]:
     Devuelve lista de lecturas de glucemia del paciente.
     Cada lectura: {"timestamp": datetime, "value_mgdl": float, "trend": str}
     """
-    headers = {**_HEADERS, "Authorization": f"Bearer {token}"}
-    headers.pop("Content-Type", None)   # GET no lleva Content-Type
+    headers = {**_HEADERS_GET, "Authorization": f"Bearer {token}"}
     url     = f"{base_url}/llu/connections/{patient_id}/graph"
     resp    = requests.get(url, headers=headers, timeout=15)
     resp.raise_for_status()

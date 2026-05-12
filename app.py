@@ -422,7 +422,6 @@ def api_sync_libre_debug():
     headers = {
         "product": "llu.android", "version": "4.16.0",
         "Content-Type": "application/json", "Accept": "application/json",
-        "cache-control": "no-cache", "connection": "Keep-Alive",
         "User-Agent": "LibreLinkUp/4.16.0 (Android)",
     }
     try:
@@ -451,10 +450,11 @@ def api_sync_libre_debug():
             return jsonify({"paso": "login", "error": "sin token",
                             "respuesta": d1, "base_url": base_url})
 
-        # Paso 4: connections
-        auth_headers = {**headers, "Authorization": f"Bearer {token}"}
+        # Paso 4: connections — GET sin Content-Type
+        get_headers = {k: v for k, v in headers.items() if k != "Content-Type"}
+        get_headers["Authorization"] = f"Bearer {token}"
         r2 = _req.get(f"{base_url}/llu/connections",
-                      headers=auth_headers, timeout=15)
+                      headers=get_headers, timeout=15)
         return jsonify({
             "base_url": base_url,
             "token_ok": True,
