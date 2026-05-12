@@ -222,16 +222,16 @@ def sync_all(email: str, password: str, get_setting_fn=None, set_setting_fn=None
             token, base_url = get_cached_token(get_setting_fn, set_setting_fn)
 
         account_id = ""
-        if not token:
+        if get_setting_fn:
+            account_id = get_setting_fn("libre_account_id") or ""
+
+        # Hacer login si: no hay token, o no hay account_id (caché incompleto)
+        if not token or not account_id:
             token, base_url, account_id = login(email, password)
             if set_setting_fn:
                 expires_ms = int((datetime.now() + timedelta(days=170)).timestamp() * 1000)
                 save_token_cache(token, base_url, expires_ms, set_setting_fn)
                 set_setting_fn("libre_account_id", account_id)
-        else:
-            # Recuperar account_id del caché
-            if get_setting_fn:
-                account_id = get_setting_fn("libre_account_id") or ""
 
         connections = get_connections(token, base_url, account_id)
 
