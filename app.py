@@ -411,58 +411,42 @@ def _do_libre_sync(email: str, password: str) -> dict:
 
 @app.route("/api/sync/libre/debug")
 def api_sync_libre_debug():
-    """Muestra la respuesta raw de Abbott para diagnosticar problemas."""
+    """
+    Diagnóstico usando el token cacheado — NO hace login nuevo para evitar rate limiting.
+    """
     if not session.get("logged_in"):
         return jsonify({"error": "No autorizado"}), 401
+
     import requests as _req
-    email    = _LIBRE_EMAIL
-    password = _LIBRE_PASSWORD
-    if not email or not password:
-        return jsonify({"error": "Sin credenciales configuradas"})
-    headers = {
-        "product": "llu.android", "version": "4.16.0",
-        "Content-Type": "application/json", "Accept": "application/json",
-        "User-Agent": "LibreLinkUp/4.16.0 (Android)",
-    }
-    try:
-        # Paso 1: login
-        r1 = _req.post("https://api.libreview.io/llu/auth/login",
-                       json={"email": email, "password": password},
-                       headers=headers, timeout=15)
-        d1 = r1.json()
-        base_url = "https://api.libreview.io"
 
-        # Paso 2: redirect regional si aplica
-        if d1.get("data", {}).get("redirect"):
-            region   = d1["data"]["region"]
-            base_url = f"https://api-{region}.libreview.io"
-            r1 = _req.post(f"{base_url}/llu/auth/login",
-                           json={"email": email, "password": password},
-                           headers=headers, timeout=15)
-            d1 = r1.json()
+    token      = _get_setting("libre_token")
+    base_url   = _get_setting("libre_base_url")
+    account_id = _get_setting("libre_account_id") or ""
+    expiry     = _get_setting("libre_token_expiry")
 
-        # Paso 3: obtener token
-        inner  = d1.get("data", {})
-        ticket = inner.get("authTicket") or inner.get("authticket") or {}
-        token  = ticket.get("token") or ticket.get("Token")
-
-        if not token:
-            return jsonify({"paso": "login", "error": "sin token",
-                            "respuesta": d1, "base_url": base_url})
-
-        # Paso 4: connections con Account-Id
-        user       = inner.get("user") or {}
-        account_id = user.get("id") or user.get("accountId") or ""
-        get_headers = {k: v for k, v in headers.items() if k != "Content-Type"}
-        get_headers["Authorization"] = f"Bearer {token}"
-        get_headers["Account-Id"]    = account_id
-        r2 = _req.get(f"{base_url}/llu/connections",
-                      headers=get_headers, timeout=15)
+    if not token or not base_url:
         return jsonify({
-            "base_url": base_url,
-            "token_ok": True,
-            "connections_status": r2.status_code,
-            "connections_resp":   r2.json() if r2.status_code == 200 else r2.text[:300],
+            "estado": "sin_token",
+            "mensaje": "No hay token cacheado. Apretá ↺ en el dashboard para hacer el primer login (esperá 15 min si tuviste errores 430).",
+        })
+
+    try:
+        get_headers = {
+            "product":        "llu.android",
+            "version":        "4.16.0",
+            "Accept":         "application/json",
+            "User-Agent":     "LibreLinkUp/4.16.0 (Android)",
+            "Authorization":  f"Bearer {token}",
+            "Account-Id":     account_id,
+        }
+        r = _req.get(f"{base_url}/llu/connections",
+                     headers=get_headers, timeout=15)
+        return jsonify({
+            "base_url":          base_url,
+            "account_id":        account_id[:8] + "..." if account_id else "(vacío)",
+            "token_expiry":      expiry,
+            "connections_status": r.status_code,
+            "connections_resp":  r.json() if r.status_code == 200 else r.text[:400],
         })
     except Exception as e:
         return jsonify({"error": str(e)})
