@@ -409,6 +409,17 @@ def _do_libre_sync(email: str, password: str) -> dict:
     }
 
 
+@app.route("/api/sync/libre/reset")
+def api_sync_libre_reset():
+    """Borra el caché de token para forzar un login fresco."""
+    if not session.get("logged_in"):
+        return jsonify({"error": "No autorizado"}), 401
+    for key in ("libre_token", "libre_base_url", "libre_token_expiry",
+                "libre_account_id", "libre_last_sync"):
+        _set_setting(key, "")
+    return jsonify({"ok": True, "mensaje": "Caché borrado. Apretá ↺ para hacer login fresco."})
+
+
 @app.route("/api/sync/libre/debug")
 def api_sync_libre_debug():
     """
