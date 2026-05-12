@@ -46,8 +46,9 @@ def login(email: str, password: str) -> tuple[str, str]:
         resp.raise_for_status()
         data = resp.json()
 
-        # Abbott devuelve status=2 cuando hay que usar un servidor regional
-        if data.get("status") == 2 and data.get("data", {}).get("redirect"):
+        # Abbott devuelve redirect=true cuando hay que usar un servidor regional
+        # (puede venir con status=0 o status=2 según la región)
+        if data.get("data", {}).get("redirect"):
             region   = data["data"]["region"]
             base_url = f"https://api-{region}.libreview.io"
             continue
