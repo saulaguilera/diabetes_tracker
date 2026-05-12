@@ -418,10 +418,10 @@ def api_sync_libre_debug():
     if not email or not password:
         return jsonify({"error": "Sin credenciales configuradas"})
     headers = {
-        "product": "llu.android", "version": "4.7",
+        "product": "llu.android", "version": "4.16.0",
         "Content-Type": "application/json", "Accept": "application/json",
         "cache-control": "no-cache", "connection": "Keep-Alive",
-        "User-Agent": "LibreLinkUp/4.7.0 (Android)",
+        "User-Agent": "LibreLinkUp/4.16.0 (Android)",
     }
     try:
         # Paso 1: login

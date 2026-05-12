@@ -18,12 +18,12 @@ _BASE_URL = "https://api.libreview.io"
 
 _HEADERS = {
     "product":       "llu.android",
-    "version":       "4.7",
+    "version":       "4.16.0",
     "Content-Type":  "application/json",
     "Accept":        "application/json",
     "cache-control": "no-cache",
     "connection":    "Keep-Alive",
-    "User-Agent":    "LibreLinkUp/4.7.0 (Android)",
+    "User-Agent":    "LibreLinkUp/4.16.0 (Android)",
 }
 
 
