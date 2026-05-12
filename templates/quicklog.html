@@ -131,7 +131,7 @@
           <label class="form-label mb-1" style="font-size:.82rem;">Carbohidratos (g)</label>
           <input type="number" name="comida_carbs" id="comida_carbs"
                  class="form-control fw-bold" placeholder="0" min="0" max="500" step="0.5"
-                 oninput="updateComidaPreview()">
+                 oninput="updateComidaPreview(); sugerirBolo()">
         </div>
         <div class="col-6">
           <label class="form-label mb-1" style="font-size:.82rem;">Proteínas (g)</label>
@@ -149,6 +149,24 @@
                  placeholder="0" min="0" max="3000" step="1">
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Sugerencia de bolo (aparece si hay glucemia + carbos) -->
+  <div id="bolo-sugerencia" class="mb-3 p-3 rounded border"
+       style="display:none; background:rgba(99,102,241,.08); border-color:rgba(99,102,241,.3) !important;">
+    <div class="d-flex align-items-center gap-3">
+      <i class="bi bi-lightning-charge-fill text-warning fs-5 flex-shrink-0"></i>
+      <div class="flex-grow-1">
+        <div class="fw-semibold" style="font-size:.85rem;">Bolo sugerido</div>
+        <div id="bolo-detalle" class="text-muted" style="font-size:.75rem;"></div>
+      </div>
+      <div id="bolo-valor" class="fw-bold" style="font-size:1.6rem;"></div>
+    </div>
+    <div class="mt-2" style="font-size:.73rem; color:var(--text-muted);">
+      <i class="bi bi-info-circle me-1"></i>
+      Basado en tu ISF y ratio I:CH configurados.
+      <a href="{{ url_for('calculadora') }}" class="ms-1">Configurar →</a>
     </div>
   </div>
 
@@ -297,6 +315,7 @@ function updateGlucemiaBadge(val) {
 }
 document.getElementById('glucemia_valor').addEventListener('input', function() {
   updateGlucemiaBadge(this.value);
+  sugerirBolo();
 });
 
 // ── Preview comida ─────────────────────────────────────────────────────────────
@@ -318,6 +337,45 @@ function updateInsulinaPreview() {
   const prev = document.getElementById('insulina-preview');
   prev.textContent = u ? u + ' U bolus' : 'No registrada aún';
   updateResumen();
+}
+
+// ── Sugerencia de bolo (glucemia + carbos → bolo sugerido) ───────────────────
+let boloTimer;
+async function sugerirBolo() {
+  const glucemia = document.getElementById('glucemia_valor').value;
+  const carbs    = document.getElementById('comida_carbs').value;
+  const box      = document.getElementById('bolo-sugerencia');
+  if (!box) return;
+
+  const tieneGlucemia = document.getElementById('toggle-glucemia').checked && glucemia;
+  const tieneCarbs    = document.getElementById('toggle-comida').checked && carbs > 0;
+
+  if (!tieneGlucemia && !tieneCarbs) { box.style.display = 'none'; return; }
+
+  clearTimeout(boloTimer);
+  boloTimer = setTimeout(async () => {
+    let url = `/api/calculadora/correccion?glucemia=${glucemia || 100}&carbs=${carbs || 0}`;
+    try {
+      const res = await fetch(url);
+      const d   = await res.json();
+      if (d.error || d.total_sugerido === undefined) { box.style.display = 'none'; return; }
+
+      const color = d.total_sugerido >= 6 ? '#ef4444' : d.total_sugerido >= 3 ? '#f59e0b' : '#22c55e';
+      box.style.display = '';
+      document.getElementById('bolo-valor').textContent   = d.total_sugerido + ' U';
+      document.getElementById('bolo-valor').style.color  = color;
+      document.getElementById('bolo-detalle').innerHTML  =
+        (d.bolo_comida_exacto > 0 ? `<span>🍽 Comida: ${d.bolo_comida_exacto.toFixed(1)}U</span>` : '') +
+        (d.correccion_exacta   > 0 ? `<span class="ms-2">🔧 Corrección: ${d.correccion_exacta.toFixed(1)}U</span>` : '');
+
+      // Pre-rellenar el campo de insulina si está activado
+      if (document.getElementById('toggle-insulina').checked &&
+          !document.getElementById('insulina_units').value) {
+        document.getElementById('insulina_units').value = d.total_sugerido;
+        updateInsulinaPreview();
+      }
+    } catch(e) { box.style.display = 'none'; }
+  }, 400);
 }
 
 // ── Resumen dinámico ──────────────────────────────────────────────────────────

@@ -10,7 +10,7 @@ except ImportError:
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from datetime import datetime, timedelta, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
-from models import db, GlucoseReading, Meal, InsulinDose, Activity, CGMImport, FoodItem
+from models import db, GlucoseReading, Meal, InsulinDose, Activity, CGMImport, FoodItem, UserSettings
 
 from utils.libre_import import import_libre_csv
 from utils.recommendations import generate_recommendations
@@ -64,13 +64,33 @@ app.before_request(_protect_all)
 
 with app.app_context():
     db.create_all()
-    # Migración: agregar columna categoria a meals si no existe
     from sqlalchemy import text, inspect
     with db.engine.connect() as conn:
+        # Migración: columna categoria en meals
         cols = [c["name"] for c in inspect(db.engine).get_columns("meals")]
         if "categoria" not in cols:
             conn.execute(text("ALTER TABLE meals ADD COLUMN categoria VARCHAR(50)"))
             conn.commit()
+
+
+# ── Helpers de configuración de usuario ──────────────────────────────────────
+
+def _get_setting(key, default=None):
+    """Lee un valor de configuración personal."""
+    s = UserSettings.query.filter_by(key=key).first()
+    return s.value if s else default
+
+
+def _set_setting(key, value):
+    """Guarda o actualiza un valor de configuración personal."""
+    from datetime import datetime as _dt
+    s = UserSettings.query.filter_by(key=key).first()
+    if s:
+        s.value = str(value)
+        s.updated_at = _dt.utcnow()
+    else:
+        db.session.add(UserSettings(key=key, value=str(value)))
+    db.session.commit()
 
 
 # ── Reglas de auto-categorización ────────────────────────────────────────────
@@ -1509,13 +1529,102 @@ def _calcular_isf_personal(days=60):
     return None, len(muestras)
 
 
+def _calcular_icr_personal(days=90):
+    """
+    Estima el ratio Insulina:Carbohidratos (ICR) personal.
+    Busca pares comida+bolus donde la glucemia pre-comida estaba en rango
+    para aislar el componente de cobertura de carbohidratos.
+    Retorna (icr_promedio, n_muestras).
+    """
+    desde = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    isf_personal, _ = _calcular_isf_personal(days=days)
+
+    comidas = Meal.query.filter(
+        Meal.timestamp >= desde,
+        Meal.carbs_g > 0,
+    ).all()
+
+    muestras = []
+    for c in comidas:
+        if not c.carbs_g or c.carbs_g < 5:
+            continue
+
+        # Glucemia justo antes de la comida (ventana -30min a +5min)
+        pre = (GlucoseReading.query
+               .filter(
+                   GlucoseReading.timestamp >= c.timestamp - timedelta(minutes=30),
+                   GlucoseReading.timestamp <= c.timestamp + timedelta(minutes=5),
+               )
+               .order_by(GlucoseReading.timestamp.desc()).first())
+        if not pre:
+            continue
+
+        # Bolus en ventana -15min a +30min de la comida
+        bolus = (InsulinDose.query
+                 .filter(
+                     InsulinDose.type == "bolus",
+                     InsulinDose.timestamp >= c.timestamp - timedelta(minutes=15),
+                     InsulinDose.timestamp <= c.timestamp + timedelta(minutes=30),
+                 )
+                 .order_by(InsulinDose.timestamp).first())
+        if not bolus or bolus.units <= 0:
+            continue
+
+        # Descontar el componente de corrección del bolus total
+        objetivo = float(_get_setting("objetivo", 100))
+        isf = isf_personal or 40  # fallback razonable
+        correccion = max(0, (pre.value_mgdl - objetivo) / isf)
+        bolo_comida = bolus.units - correccion
+
+        if bolo_comida <= 0.2:
+            continue
+
+        icr = c.carbs_g / bolo_comida
+        if 3 <= icr <= 30:   # rango fisiológico razonable (3–30g CH/U)
+            muestras.append(round(icr, 1))
+
+    if len(muestras) >= 3:
+        return round(sum(muestras) / len(muestras), 1), len(muestras)
+    return None, len(muestras)
+
+
+@app.route("/api/settings/save", methods=["POST"])
+def api_settings_save():
+    """Guarda configuración personal (ICR, ISF manual, objetivo)."""
+    data = request.get_json() or {}
+    guardados = []
+    for key in ("icr", "isf_manual", "objetivo"):
+        val = data.get(key)
+        if val is not None and val != "":
+            try:
+                fval = float(val)
+                if fval > 0:
+                    _set_setting(key, fval)
+                    guardados.append(key)
+            except (ValueError, TypeError):
+                pass
+    return jsonify({"ok": True, "guardados": guardados})
+
+
 @app.route("/calculadora")
 def calculadora():
-    isf_personal, n_muestras = _calcular_isf_personal()
+    isf_personal, n_isf   = _calcular_isf_personal()
+    icr_personal, n_icr   = _calcular_icr_personal()
     ultima = GlucoseReading.query.order_by(GlucoseReading.timestamp.desc()).first()
+
+    # Configuración guardada por el usuario
+    icr_guardado      = _get_setting("icr")
+    isf_manual_guard  = _get_setting("isf_manual")
+    objetivo_guardado = _get_setting("objetivo", "100")
+
     return render_template("calculadora.html",
         isf_personal=isf_personal,
-        n_muestras=n_muestras,
+        n_isf=n_isf,
+        icr_personal=icr_personal,
+        n_icr=n_icr,
+        icr_guardado=icr_guardado,
+        isf_manual_guardado=isf_manual_guard,
+        objetivo_guardado=objetivo_guardado,
         ultima=ultima,
     )
 
@@ -1523,36 +1632,64 @@ def calculadora():
 @app.route("/api/calculadora/correccion")
 def api_calculadora_correccion():
     glucemia   = request.args.get("glucemia",  type=float)
-    objetivo   = request.args.get("objetivo",  100, type=float)
+    objetivo   = request.args.get("objetivo",  type=float)
     isf_manual = request.args.get("isf",       type=float)
+    carbs      = request.args.get("carbs",     type=float)
+    icr_manual = request.args.get("icr",       type=float)
 
-    isf_personal, n_muestras = _calcular_isf_personal()
-    isf = isf_manual or isf_personal
+    # Usar configuración guardada como fallback
+    if objetivo is None:
+        objetivo = float(_get_setting("objetivo", 100))
+
+    isf_personal, n_isf = _calcular_isf_personal()
+    icr_personal, n_icr = _calcular_icr_personal()
+
+    isf = isf_manual or (float(_get_setting("isf_manual")) if _get_setting("isf_manual") else None) or isf_personal
+    icr = icr_manual or (float(_get_setting("icr")) if _get_setting("icr") else None) or icr_personal
 
     if not glucemia or glucemia <= 0:
         return jsonify({"error": "Glucemia inválida"})
     if not isf:
-        return jsonify({"error": "Sin ISF — ingresalo manualmente o registrá más correcciones"})
+        return jsonify({"error": "Sin ISF — ingresalo manualmente en Configuración"})
 
-    if glucemia <= objetivo:
-        return jsonify({
-            "correccion": 0,
-            "info": "Tu glucemia ya está en el objetivo o por debajo.",
-            "isf": isf, "n_muestras": n_muestras,
-        })
+    # ── Componente de corrección ──────────────────────────────────────────────
+    if glucemia > objetivo:
+        correccion_exacta = (glucemia - objetivo) / isf
+    else:
+        correccion_exacta = 0.0   # glucemia baja: no corregir
 
-    correccion = round((glucemia - objetivo) / isf, 2)
-    correccion_redondeada = round(correccion * 2) / 2   # redondear a 0.5U
+    # ── Componente de comida ──────────────────────────────────────────────────
+    bolo_comida_exacto = 0.0
+    if carbs and carbs > 0:
+        if not icr:
+            return jsonify({"error": "Sin I:CH — ingresalo en Configuración"})
+        bolo_comida_exacto = carbs / icr
+
+    # ── Total ─────────────────────────────────────────────────────────────────
+    total_exacto    = correccion_exacta + bolo_comida_exacto
+    total_redondeado = round(total_exacto * 2) / 2  # redondear a 0.5U
+
+    resultado_esperado = round(glucemia - correccion_exacta * isf, 0)
 
     return jsonify({
-        "correccion":   correccion,
-        "sugerida":     correccion_redondeada,
-        "glucemia":     glucemia,
-        "objetivo":     objetivo,
-        "isf":          isf,
-        "n_muestras":   n_muestras,
-        "fuente_isf":   "personal" if not isf_manual else "manual",
-        "resultado_esperado": round(glucemia - correccion_redondeada * isf, 0),
+        # Totales
+        "total_exacto":     round(total_exacto, 2),
+        "total_sugerido":   total_redondeado,
+        # Componentes
+        "correccion_exacta":     round(correccion_exacta, 2),
+        "correccion_redondeada": round(round(correccion_exacta * 2) / 2, 1),
+        "bolo_comida_exacto":    round(bolo_comida_exacto, 2),
+        # Parámetros usados
+        "glucemia":    glucemia,
+        "objetivo":    objetivo,
+        "isf":         isf,
+        "icr":         icr,
+        "carbs":       carbs or 0,
+        "n_isf":       n_isf,
+        "n_icr":       n_icr,
+        "fuente_isf":  "manual" if isf_manual else ("guardado" if _get_setting("isf_manual") else "calculado"),
+        "fuente_icr":  "manual" if icr_manual else ("guardado" if _get_setting("icr") else "calculado"),
+        "resultado_esperado": resultado_esperado,
     })
 
 

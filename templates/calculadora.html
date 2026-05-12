@@ -1,159 +1,222 @@
 {% extends "base.html" %}
-{% block title %}Calculadora de corrección — DiabetesTracker{% endblock %}
+{% block title %}Calculadora de bolo — DiabetesTracker{% endblock %}
 
 {% block content %}
 <div class="page-header d-flex justify-content-between align-items-center">
   <div>
-    <h1><i class="bi bi-calculator-fill me-2 text-info"></i>Calculadora de corrección</h1>
-    <small class="text-muted">Basada en tu historial real de glucemia e insulina</small>
+    <h1><i class="bi bi-calculator-fill me-2 text-info"></i>Calculadora de bolo</h1>
+    <small class="text-muted">Corrección + cobertura de carbohidratos</small>
   </div>
 </div>
 
 <div class="row g-3">
 
-  <!-- ── Panel principal ── -->
+  <!-- ── Configuración personal ── -->
+  <div class="col-12">
+    <div class="chart-box">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-semibold mb-0">
+          <i class="bi bi-sliders me-2 text-secondary"></i>Tu configuración personal
+        </h6>
+        <span id="settings-badge" class="badge bg-success" style="display:none;">
+          <i class="bi bi-check-lg me-1"></i>Guardado
+        </span>
+      </div>
+      <div class="row g-3">
+
+        <!-- ISF -->
+        <div class="col-md-4">
+          <label class="form-label mb-1" style="font-size:.82rem;">
+            <strong>ISF</strong> — Factor de sensibilidad
+            <span class="text-muted">(mg/dL por unidad)</span>
+          </label>
+          {% if isf_personal %}
+          <div class="text-success mb-1" style="font-size:.78rem;">
+            <i class="bi bi-cpu me-1"></i>Calculado automáticamente:
+            <strong>{{ isf_personal }}</strong>
+            ({{ n_isf }} correcciones)
+          </div>
+          {% else %}
+          <div class="text-warning mb-1" style="font-size:.78rem;">
+            <i class="bi bi-exclamation-triangle me-1"></i>Sin datos suficientes — ingresalo manualmente
+          </div>
+          {% endif %}
+          <div class="input-group">
+            <input type="number" id="cfg-isf" class="form-control"
+                   min="5" max="200" step="0.5"
+                   placeholder="{{ isf_personal or 'ej. 40' }}"
+                   value="{{ isf_manual_guardado or '' }}">
+            <span class="input-group-text text-muted" style="font-size:.8rem;">mg/dL·U⁻¹</span>
+          </div>
+          <div class="form-text">Dejá vacío para usar el calculado automáticamente.</div>
+        </div>
+
+        <!-- I:CH -->
+        <div class="col-md-4">
+          <label class="form-label mb-1" style="font-size:.82rem;">
+            <strong>Ratio I:CH</strong> — Insulina por carbohidratos
+            <span class="text-muted">(g CH por unidad)</span>
+          </label>
+          {% if icr_personal %}
+          <div class="text-success mb-1" style="font-size:.78rem;">
+            <i class="bi bi-cpu me-1"></i>Estimado de tus datos:
+            <strong>1U cada {{ icr_personal }}g CH</strong>
+            ({{ n_icr }} comidas)
+          </div>
+          {% else %}
+          <div class="text-muted mb-1" style="font-size:.78rem;">
+            <i class="bi bi-info-circle me-1"></i>Ingresá el que te dio tu médico
+          </div>
+          {% endif %}
+          <div class="input-group">
+            <span class="input-group-text text-muted" style="font-size:.8rem;">1U c/</span>
+            <input type="number" id="cfg-icr" class="form-control"
+                   min="1" max="50" step="0.5"
+                   placeholder="{{ icr_personal or 'ej. 10' }}"
+                   value="{{ icr_guardado or '' }}">
+            <span class="input-group-text text-muted" style="font-size:.8rem;">g CH</span>
+          </div>
+          <div class="form-text">1U de insulina cubre X gramos de carbohidratos.</div>
+        </div>
+
+        <!-- Objetivo -->
+        <div class="col-md-4">
+          <label class="form-label mb-1" style="font-size:.82rem;">
+            <strong>Glucemia objetivo</strong>
+          </label>
+          <div class="d-flex gap-1 mb-2 flex-wrap">
+            {% for obj in [90, 100, 110, 120] %}
+            <button type="button" class="btn btn-sm objetivo-chip
+                    {{ 'btn-info text-white' if objetivo_guardado == obj|string else 'btn-outline-secondary' }}"
+                    onclick="setObjetivo({{ obj }})">{{ obj }}</button>
+            {% endfor %}
+          </div>
+          <div class="input-group">
+            <input type="number" id="cfg-objetivo" class="form-control"
+                   min="70" max="180"
+                   value="{{ objetivo_guardado or 100 }}">
+            <span class="input-group-text text-muted" style="font-size:.8rem;">mg/dL</span>
+          </div>
+        </div>
+
+      </div>
+      <div class="mt-3">
+        <button class="btn btn-outline-primary btn-sm" onclick="guardarConfig()">
+          <i class="bi bi-floppy me-1"></i>Guardar configuración
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Cálculo ── -->
   <div class="col-lg-6">
     <div class="chart-box">
+      <h6 class="fw-semibold mb-3">
+        <i class="bi bi-calculator me-2 text-info"></i>Calcular bolo
+      </h6>
 
-      <!-- ISF personal -->
-      <div class="mb-4">
-        <div class="d-flex align-items-center justify-content-between mb-1">
-          <span class="fw-semibold">Tu Factor de Sensibilidad a la Insulina (ISF)</span>
-          {% if isf_personal %}
-            <span class="badge bg-success">{{ n_muestras }} correcciones analizadas</span>
-          {% else %}
-            <span class="badge bg-secondary">Sin datos suficientes</span>
-          {% endif %}
-        </div>
-
-        {% if isf_personal %}
-        <div class="alert alert-success py-2 mb-2" style="font-size:.9rem;">
-          <i class="bi bi-graph-down-arrow me-1"></i>
-          Tu ISF personal es <strong>{{ isf_personal }} mg/dL por unidad</strong>.
-          Cada unidad de insulina rápida te baja aproximadamente
-          <strong>{{ isf_personal | int }} mg/dL</strong>.
-        </div>
-        {% else %}
-        <div class="alert alert-warning py-2 mb-2" style="font-size:.85rem;">
-          <i class="bi bi-exclamation-triangle me-1"></i>
-          Aún no hay suficientes correcciones registradas para calcular tu ISF personal.
-          Podés ingresarlo manualmente abajo, o seguir usando la app y se calculará automáticamente.
-        </div>
-        {% endif %}
-      </div>
-
-      <!-- Formulario -->
+      <!-- Glucemia -->
       <div class="mb-3">
         <label class="form-label fw-semibold">Glucemia actual (mg/dL)</label>
         <div class="input-group">
           <input type="number" id="inp-glucemia" class="form-control form-control-lg"
-                 min="40" max="600" placeholder="ej. 220"
+                 min="40" max="600" placeholder="ej. 180"
                  value="{{ ultima.value_mgdl | int if ultima else '' }}">
           <span class="input-group-text">mg/dL</span>
         </div>
         {% if ultima %}
         <div class="form-text">
-          Última lectura registrada: <strong>{{ ultima.value_mgdl | int }} mg/dL</strong>
+          Última lectura: <strong>{{ ultima.value_mgdl | int }} mg/dL</strong>
           ({{ ultima.timestamp.strftime('%d/%m %H:%M') }})
         </div>
         {% endif %}
       </div>
 
-      <div class="mb-3">
-        <label class="form-label fw-semibold">Glucemia objetivo (mg/dL)</label>
-        <div class="d-flex gap-2 mb-2">
-          {% for obj in [90, 100, 110, 120] %}
-          <button type="button" class="btn btn-sm btn-outline-secondary objetivo-chip"
-                  onclick="setObjetivo({{ obj }})">{{ obj }}</button>
-          {% endfor %}
-        </div>
-        <div class="input-group" style="max-width:200px;">
-          <input type="number" id="inp-objetivo" class="form-control"
-                 min="70" max="180" value="100">
-          <span class="input-group-text">mg/dL</span>
-        </div>
-      </div>
-
+      <!-- Carbohidratos (opcional) -->
       <div class="mb-4">
         <label class="form-label fw-semibold">
-          ISF (mg/dL por unidad)
-          <span class="text-muted fw-normal" style="font-size:.85rem;">
-            — dejá en blanco para usar el calculado automáticamente
-          </span>
+          Carbohidratos a comer
+          <span class="badge bg-secondary ms-1" style="font-size:.68rem;">opcional</span>
         </label>
-        <div class="input-group" style="max-width:200px;">
-          <input type="number" id="inp-isf" class="form-control"
-                 min="5" max="200" step="0.5"
-                 placeholder="{{ isf_personal or 'manual' }}">
-          <span class="input-group-text">mg/dL·U⁻¹</span>
+        <div class="input-group">
+          <input type="number" id="inp-carbs" class="form-control form-control-lg"
+                 min="0" max="500" step="1" placeholder="0">
+          <span class="input-group-text">g CH</span>
         </div>
+        <div class="form-text">Dejá en 0 si solo querés calcular una corrección.</div>
       </div>
 
-      <button class="btn btn-info btn-lg w-100 text-white fw-semibold" id="btn-calcular">
-        <i class="bi bi-calculator me-2"></i>Calcular corrección
+      <button class="btn btn-info btn-lg w-100 text-white fw-semibold" id="btn-calcular"
+              onclick="calcular()">
+        <i class="bi bi-calculator me-2"></i>Calcular bolo total
       </button>
     </div>
   </div>
 
   <!-- ── Resultado ── -->
   <div class="col-lg-6">
-    <div class="chart-box d-flex flex-column justify-content-center" id="resultado-box"
-         style="min-height: 260px;">
+    <div class="chart-box d-flex flex-column justify-content-center"
+         id="resultado-box" style="min-height:280px;">
+
       <div id="resultado-vacio" class="text-center text-muted py-5">
         <i class="bi bi-arrow-left-circle fs-1 d-block mb-2 opacity-25"></i>
-        Ingresá tu glucemia actual y presioná Calcular
+        Ingresá tu glucemia y presioná Calcular
       </div>
-      <div id="resultado-contenido" style="display:none;">
-        <!-- Relleno por JS -->
-      </div>
+
+      <div id="resultado-contenido" style="display:none;"></div>
     </div>
 
-    <!-- Advertencia clínica -->
-    <div class="alert alert-light border mt-3" style="font-size:.8rem;">
+    <div class="alert border mt-3"
+         style="font-size:.8rem; background:var(--surface2); color:var(--text);">
       <i class="bi bi-shield-exclamation text-warning me-1"></i>
-      <strong>Solo orientativo.</strong>
-      Esta calculadora usa tu historial para estimar la corrección, pero no considera
-      insulina activa, ejercicio reciente, ingesta pendiente ni otros factores.
-      Siempre consultá con tu médico antes de cambiar dosis.
+      <strong>Solo orientativo.</strong> No considera insulina activa (IOB),
+      ejercicio reciente ni variabilidad individual. Consultá con tu médico
+      antes de cambiar dosis.
     </div>
   </div>
 
 </div>
 
-<!-- ── Explicación del ISF ── -->
+<!-- ── Explicación ── -->
 <div class="chart-box mt-3">
-  <h6 class="fw-semibold mb-3">¿Cómo se calcula tu ISF personal?</h6>
+  <h6 class="fw-semibold mb-3">¿Cómo se calcula el bolo total?</h6>
   <div class="row g-3" style="font-size:.88rem;">
     <div class="col-md-4">
       <div class="d-flex gap-2">
-        <div class="flex-shrink-0">
-          <span class="badge bg-primary rounded-circle" style="width:28px;height:28px;line-height:28px;">1</span>
-        </div>
+        <span class="badge bg-warning text-dark rounded-circle flex-shrink-0"
+              style="width:28px;height:28px;line-height:28px;font-size:.85rem;">1</span>
         <div>
-          <strong>Busca correcciones puras</strong><br>
-          <span class="text-muted">Dosis de insulina rápida donde no hubo comida en los 30 minutos anteriores o posteriores.</span>
+          <strong>Bolo de comida</strong><br>
+          <span class="text-muted">Carbohidratos ÷ Ratio I:CH = unidades para cubrir la comida.</span>
+          <div class="mt-1 p-1 rounded" style="background:var(--surface2); font-size:.8rem; font-family:monospace;">
+            60g CH ÷ 10 g/U = <strong>6.0 U</strong>
+          </div>
         </div>
       </div>
     </div>
     <div class="col-md-4">
       <div class="d-flex gap-2">
-        <div class="flex-shrink-0">
-          <span class="badge bg-primary rounded-circle" style="width:28px;height:28px;line-height:28px;">2</span>
-        </div>
+        <span class="badge bg-danger rounded-circle flex-shrink-0"
+              style="width:28px;height:28px;line-height:28px;font-size:.85rem;">2</span>
         <div>
-          <strong>Mide la caída real</strong><br>
-          <span class="text-muted">Compara la glucemia justo antes de la dosis con el valor mínimo alcanzado en las 3 horas siguientes.</span>
+          <strong>Bolo de corrección</strong><br>
+          <span class="text-muted">(Glucemia actual − Objetivo) ÷ ISF = unidades para corregir.</span>
+          <div class="mt-1 p-1 rounded" style="background:var(--surface2); font-size:.8rem; font-family:monospace;">
+            (180 − 100) ÷ 40 = <strong>2.0 U</strong>
+          </div>
         </div>
       </div>
     </div>
     <div class="col-md-4">
       <div class="d-flex gap-2">
-        <div class="flex-shrink-0">
-          <span class="badge bg-primary rounded-circle" style="width:28px;height:28px;line-height:28px;">3</span>
-        </div>
+        <span class="badge bg-primary rounded-circle flex-shrink-0"
+              style="width:28px;height:28px;line-height:28px;font-size:.85rem;">3</span>
         <div>
-          <strong>Calcula el promedio</strong><br>
-          <span class="text-muted">ISF = (glucemia antes − mínimo alcanzado) ÷ unidades usadas. Se promedian todas las correcciones válidas.</span>
+          <strong>Bolo total</strong><br>
+          <span class="text-muted">Suma de ambos componentes, redondeado a 0.5U.</span>
+          <div class="mt-1 p-1 rounded" style="background:var(--surface2); font-size:.8rem; font-family:monospace;">
+            6.0 + 2.0 = <strong>8.0 U</strong>
+          </div>
         </div>
       </div>
     </div>
@@ -164,31 +227,53 @@
 
 {% block scripts %}
 <script>
+  // ── Configuración ─────────────────────────────────────────────────────────
   function setObjetivo(val) {
-    document.getElementById('inp-objetivo').value = val;
+    document.getElementById('cfg-objetivo').value = val;
     document.querySelectorAll('.objetivo-chip').forEach(b => {
-      b.classList.toggle('btn-info', b.textContent.trim() == val);
-      b.classList.toggle('text-white', b.textContent.trim() == val);
-      b.classList.toggle('btn-outline-secondary', b.textContent.trim() != val);
+      const active = b.textContent.trim() == val;
+      b.className = 'btn btn-sm objetivo-chip ' + (active ? 'btn-info text-white' : 'btn-outline-secondary');
     });
   }
 
-  document.getElementById('btn-calcular').addEventListener('click', async function() {
+  async function guardarConfig() {
+    const payload = {
+      isf_manual: document.getElementById('cfg-isf').value || null,
+      icr:        document.getElementById('cfg-icr').value  || null,
+      objetivo:   document.getElementById('cfg-objetivo').value || 100,
+    };
+    await fetch('/api/settings/save', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const badge = document.getElementById('settings-badge');
+    badge.style.display = '';
+    setTimeout(() => badge.style.display = 'none', 2500);
+  }
+
+  // ── Calcular bolo ─────────────────────────────────────────────────────────
+  async function calcular() {
     const glucemia = document.getElementById('inp-glucemia').value;
-    const objetivo = document.getElementById('inp-objetivo').value || 100;
-    const isf      = document.getElementById('inp-isf').value;
+    const carbs    = document.getElementById('inp-carbs').value || 0;
+    const isf      = document.getElementById('cfg-isf').value;
+    const icr      = document.getElementById('cfg-icr').value;
+    const objetivo = document.getElementById('cfg-objetivo').value || 100;
 
     if (!glucemia) {
-      alert('Ingresá tu glucemia actual.');
+      document.getElementById('inp-glucemia').focus();
+      document.getElementById('inp-glucemia').classList.add('is-invalid');
+      setTimeout(() => document.getElementById('inp-glucemia').classList.remove('is-invalid'), 2000);
       return;
     }
 
-    const btn = this;
+    const btn = document.getElementById('btn-calcular');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Calculando...';
 
-    let url = `/api/calculadora/correccion?glucemia=${glucemia}&objetivo=${objetivo}`;
+    let url = `/api/calculadora/correccion?glucemia=${glucemia}&objetivo=${objetivo}&carbs=${carbs}`;
     if (isf) url += `&isf=${isf}`;
+    if (icr) url += `&icr=${icr}`;
 
     try {
       const res = await fetch(url);
@@ -198,10 +283,11 @@
       mostrarError('Error de conexión. Intentá de nuevo.');
     } finally {
       btn.disabled = false;
-      btn.innerHTML = '<i class="bi bi-calculator me-2"></i>Calcular corrección';
+      btn.innerHTML = '<i class="bi bi-calculator me-2"></i>Calcular bolo total';
     }
-  });
+  }
 
+  // ── Mostrar resultado ──────────────────────────────────────────────────────
   function mostrarResultado(d) {
     document.getElementById('resultado-vacio').style.display = 'none';
     const box = document.getElementById('resultado-contenido');
@@ -209,49 +295,84 @@
 
     if (d.error) { mostrarError(d.error); return; }
 
-    if (d.correccion === 0) {
+    const colorTotal = d.total_sugerido >= 6 ? 'text-danger'
+                     : d.total_sugerido >= 3 ? 'text-warning' : 'text-success';
+
+    // ── Desglose ──
+    let desglose = '';
+    const hayComida    = d.carbs > 0 && d.bolo_comida_exacto > 0;
+    const hayCorrecion = d.correccion_exacta > 0;
+
+    if (hayComida) {
+      desglose += `
+        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+          <div>
+            <i class="bi bi-egg-fried text-success me-2"></i>
+            <span style="font-size:.88rem;">Bolo comida</span>
+            <div class="text-muted" style="font-size:.75rem; font-family:monospace;">
+              ${d.carbs}g CH ÷ ${d.icr} g/U
+            </div>
+          </div>
+          <strong class="text-success">${d.bolo_comida_exacto.toFixed(2)} U</strong>
+        </div>`;
+    }
+
+    if (hayCorrecion) {
+      desglose += `
+        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+          <div>
+            <i class="bi bi-arrow-down-circle-fill text-danger me-2"></i>
+            <span style="font-size:.88rem;">Corrección</span>
+            <div class="text-muted" style="font-size:.75rem; font-family:monospace;">
+              (${d.glucemia} − ${d.objetivo}) ÷ ${d.isf} ISF
+            </div>
+          </div>
+          <strong class="text-danger">${d.correccion_exacta.toFixed(2)} U</strong>
+        </div>`;
+    } else if (!hayComida) {
+      // Sin corrección ni comida
       box.innerHTML = `
         <div class="text-center py-3">
           <i class="bi bi-check-circle-fill text-success fs-1 d-block mb-2"></i>
           <div class="fw-semibold fs-5">Sin corrección necesaria</div>
-          <div class="text-muted mt-1">${d.info}</div>
+          <div class="text-muted mt-1 mb-3">
+            Tu glucemia (${d.glucemia} mg/dL) ya está en el objetivo
+            o por debajo (${d.objetivo} mg/dL).
+          </div>
         </div>`;
       return;
     }
 
-    const isfLabel = d.fuente_isf === 'personal'
-      ? `ISF personal (${d.n_muestras} muestras)`
-      : 'ISF ingresado manualmente';
-
-    const unidadesColor = d.sugerida >= 4 ? 'text-danger' : (d.sugerida >= 2 ? 'text-warning' : 'text-success');
+    const isfLabel = d.fuente_isf === 'calculado'
+      ? `ISF calculado (${d.n_isf} muestras)` : 'ISF configurado manualmente';
+    const icrLabel = d.icr && d.fuente_icr === 'calculado'
+      ? `I:CH estimado (${d.n_icr} comidas)` : 'I:CH configurado manualmente';
 
     box.innerHTML = `
-      <div class="text-center mb-4">
-        <div class="text-muted mb-1" style="font-size:.85rem;">Corrección sugerida</div>
-        <div class="display-4 fw-bold ${unidadesColor}">${d.sugerida} U</div>
-        <div class="text-muted" style="font-size:.85rem;">
-          (cálculo exacto: ${d.correccion.toFixed(2)} U — redondeado a 0.5U)
+      <!-- Total -->
+      <div class="text-center mb-3">
+        <div class="text-muted mb-1" style="font-size:.85rem;">Bolo total sugerido</div>
+        <div class="display-4 fw-bold ${colorTotal}">${d.total_sugerido} U</div>
+        <div class="text-muted" style="font-size:.8rem;">
+          (exacto: ${d.total_exacto.toFixed(2)} U — redondeado a 0.5U)
         </div>
       </div>
-      <hr>
-      <div class="row g-2 text-center" style="font-size:.85rem;">
-        <div class="col-4">
-          <div class="fw-semibold text-danger">${d.glucemia}</div>
-          <div class="text-muted">Glucemia actual</div>
-        </div>
-        <div class="col-4">
-          <div class="fw-semibold text-primary">${d.objetivo}</div>
-          <div class="text-muted">Objetivo</div>
-        </div>
-        <div class="col-4">
-          <div class="fw-semibold text-success">${d.resultado_esperado}</div>
-          <div class="text-muted">Esperado post-corrección</div>
+
+      <!-- Desglose -->
+      <div class="mb-3">${desglose}</div>
+
+      <!-- Resultado esperado -->
+      <div class="text-center p-2 rounded mb-3" style="background:var(--surface2);">
+        <div class="text-muted" style="font-size:.78rem;">Glucemia esperada post-corrección</div>
+        <div class="fw-bold" style="font-size:1.2rem;">
+          ${d.resultado_esperado} mg/dL
         </div>
       </div>
-      <div class="mt-3 text-center">
-        <span class="badge bg-light text-dark border" style="font-size:.78rem;">
-          <i class="bi bi-info-circle me-1"></i>${isfLabel}: 1U baja ~${d.isf} mg/dL
-        </span>
+
+      <!-- Fuentes -->
+      <div class="d-flex flex-wrap gap-1 justify-content-center">
+        <span class="badge bg-secondary" style="font-size:.7rem;">${isfLabel}</span>
+        ${d.icr ? `<span class="badge bg-secondary" style="font-size:.7rem;">${icrLabel}</span>` : ''}
       </div>`;
   }
 
@@ -266,11 +387,9 @@
       </div>`;
   }
 
-  // Calcular automáticamente si hay última lectura cargada
+  // Auto-calcular si hay última lectura alta
   {% if ultima and ultima.value_mgdl > 100 %}
-  window.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('btn-calcular').click();
-  });
+  window.addEventListener('DOMContentLoaded', () => calcular());
   {% endif %}
 </script>
 {% endblock %}
