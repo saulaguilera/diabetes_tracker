@@ -450,9 +450,12 @@ def api_sync_libre_debug():
             return jsonify({"paso": "login", "error": "sin token",
                             "respuesta": d1, "base_url": base_url})
 
-        # Paso 4: connections — GET sin Content-Type
+        # Paso 4: connections con Account-Id
+        user       = inner.get("user") or {}
+        account_id = user.get("id") or user.get("accountId") or ""
         get_headers = {k: v for k, v in headers.items() if k != "Content-Type"}
         get_headers["Authorization"] = f"Bearer {token}"
+        get_headers["Account-Id"]    = account_id
         r2 = _req.get(f"{base_url}/llu/connections",
                       headers=get_headers, timeout=15)
         return jsonify({

@@ -38,10 +38,10 @@ class LibreLinkUpError(Exception):
     pass
 
 
-def login(email: str, password: str) -> tuple[str, str]:
+def login(email: str, password: str) -> tuple[str, str, str]:
     """
     Autentica con LibreLinkUp.
-    Retorna (token, base_url) — la URL puede cambiar por redirección regional.
+    Retorna (token, base_url, account_id).
     """
     base_url = _BASE_URL
     payload  = {"email": email, "password": password}
@@ -76,26 +76,35 @@ def login(email: str, password: str) -> tuple[str, str]:
 
         token = ticket.get("token") or ticket.get("Token")
         if not token:
-            # Abbott a veces pide aceptar términos de servicio primero
             if inner.get("redirect"):
                 raise LibreLinkUpError(
                     "Abbott requiere que aceptes los Términos de Servicio. "
                     "Abrí la app LibreLink en tu celular, iniciá sesión y aceptá los términos."
                 )
             raise LibreLinkUpError(
-                f"No se pudo obtener el token de autenticación. "
-                f"Respuesta de Abbott: {list(inner.keys())}"
+                f"No se pudo obtener el token. Respuesta: {list(inner.keys())}"
             )
 
-        return token, base_url
+        # Extraer account_id del usuario — requerido como header en requests posteriores
+        user       = inner.get("user") or {}
+        account_id = user.get("id") or user.get("accountId") or ""
+
+        return token, base_url, account_id
 
     raise LibreLinkUpError("No se pudo resolver el servidor regional de Abbott.")
 
 
-def get_connections(token: str, base_url: str) -> list:
+def _get_headers(token: str, account_id: str) -> dict:
+    """Headers GET con Authorization y Account-Id."""
+    return {**_HEADERS_GET,
+            "Authorization": f"Bearer {token}",
+            "Account-Id":    account_id}
+
+
+def get_connections(token: str, base_url: str, account_id: str = "") -> list:
     """Devuelve la lista de conexiones (pacientes vinculados en LibreLinkUp)."""
-    headers = {**_HEADERS_GET, "Authorization": f"Bearer {token}"}
-    resp    = requests.get(f"{base_url}/llu/connections", headers=headers, timeout=15)
+    resp = requests.get(f"{base_url}/llu/connections",
+                        headers=_get_headers(token, account_id), timeout=15)
     resp.raise_for_status()
     data = resp.json()
     if data.get("status") != 0:
@@ -103,14 +112,13 @@ def get_connections(token: str, base_url: str) -> list:
     return data.get("data") or []
 
 
-def get_readings(token: str, base_url: str, patient_id: str) -> list[dict]:
+def get_readings(token: str, base_url: str, patient_id: str, account_id: str = "") -> list[dict]:
     """
     Devuelve lista de lecturas de glucemia del paciente.
     Cada lectura: {"timestamp": datetime, "value_mgdl": float, "trend": str}
     """
-    headers = {**_HEADERS_GET, "Authorization": f"Bearer {token}"}
-    url     = f"{base_url}/llu/connections/{patient_id}/graph"
-    resp    = requests.get(url, headers=headers, timeout=15)
+    url  = f"{base_url}/llu/connections/{patient_id}/graph"
+    resp = requests.get(url, headers=_get_headers(token, account_id), timeout=15)
     resp.raise_for_status()
     data = resp.json()
     if data.get("status") != 0:
@@ -213,15 +221,19 @@ def sync_all(email: str, password: str, get_setting_fn=None, set_setting_fn=None
         if get_setting_fn and set_setting_fn:
             token, base_url = get_cached_token(get_setting_fn, set_setting_fn)
 
+        account_id = ""
         if not token:
-            token, base_url = login(email, password)
-            # Cachear el nuevo token
+            token, base_url, account_id = login(email, password)
             if set_setting_fn:
-                # El token de LibreLinkUp dura ~180 días
                 expires_ms = int((datetime.now() + timedelta(days=170)).timestamp() * 1000)
                 save_token_cache(token, base_url, expires_ms, set_setting_fn)
+                set_setting_fn("libre_account_id", account_id)
+        else:
+            # Recuperar account_id del caché
+            if get_setting_fn:
+                account_id = get_setting_fn("libre_account_id") or ""
 
-        connections = get_connections(token, base_url)
+        connections = get_connections(token, base_url, account_id)
 
         if not connections:
             # Si el token cacheado devolvió lista vacía, forzar re-login
@@ -233,7 +245,7 @@ def sync_all(email: str, password: str, get_setting_fn=None, set_setting_fn=None
         patient = connections[0]
         patient_id = patient.get("patientId") or patient.get("id")
 
-        readings = get_readings(token, base_url, patient_id)
+        readings = get_readings(token, base_url, patient_id, account_id)
         return {"readings": readings, "patient_id": patient_id, "error": None}
 
     except LibreLinkUpError as e:
