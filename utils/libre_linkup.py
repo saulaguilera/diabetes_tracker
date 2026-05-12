@@ -58,7 +58,26 @@ def login(email: str, password: str) -> tuple[str, str]:
                 "Verificá tu email y contraseña de LibreView."
             )
 
-        token = data["data"]["authTicket"]["token"]
+        # authTicket puede venir con distintas capitalizaciones según la región
+        inner = data.get("data", {})
+        ticket = (inner.get("authTicket")
+                  or inner.get("authticket")
+                  or inner.get("AuthTicket")
+                  or {})
+
+        token = ticket.get("token") or ticket.get("Token")
+        if not token:
+            # Abbott a veces pide aceptar términos de servicio primero
+            if inner.get("redirect"):
+                raise LibreLinkUpError(
+                    "Abbott requiere que aceptes los Términos de Servicio. "
+                    "Abrí la app LibreLink en tu celular, iniciá sesión y aceptá los términos."
+                )
+            raise LibreLinkUpError(
+                f"No se pudo obtener el token de autenticación. "
+                f"Respuesta de Abbott: {list(inner.keys())}"
+            )
+
         return token, base_url
 
     raise LibreLinkUpError("No se pudo resolver el servidor regional de Abbott.")
