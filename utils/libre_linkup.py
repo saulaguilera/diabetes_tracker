@@ -11,7 +11,7 @@ Referencia: https://github.com/timoschlueter/nightscout-librelink-up
 """
 
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # URL base — Abbott detecta la región automáticamente en el login
 _BASE_URL = "https://api.libreview.io"
@@ -163,16 +163,66 @@ def _parse_reading(raw: dict) -> dict:
     return {"timestamp": ts, "value_mgdl": value, "trend": trend}
 
 
-def sync_all(email: str, password: str) -> dict:
+def get_cached_token(get_setting_fn, set_setting_fn):
+    """
+    Devuelve (token, base_url) desde caché si aún es válido.
+    Retorna (None, None) si el caché expiró o no existe.
+    """
+    token    = get_setting_fn("libre_token")
+    base_url = get_setting_fn("libre_base_url")
+    expiry   = get_setting_fn("libre_token_expiry")
+
+    if not token or not base_url or not expiry:
+        return None, None
+
+    try:
+        expiry_dt = datetime.fromisoformat(expiry)
+        # Renovar 1 día antes de que expire
+        if datetime.now() < expiry_dt - timedelta(days=1):
+            return token, base_url
+    except Exception:
+        pass
+
+    return None, None
+
+
+def save_token_cache(token, base_url, expires_ms, set_setting_fn):
+    """Guarda el token en caché con su fecha de expiración."""
+    try:
+        # expires es timestamp en milisegundos desde epoch
+        expiry_dt = datetime.fromtimestamp(expires_ms / 1000)
+        set_setting_fn("libre_token",        token)
+        set_setting_fn("libre_base_url",     base_url)
+        set_setting_fn("libre_token_expiry", expiry_dt.isoformat())
+    except Exception:
+        pass
+
+
+def sync_all(email: str, password: str, get_setting_fn=None, set_setting_fn=None) -> dict:
     """
     Función principal: autentica y descarga todas las lecturas disponibles.
     Retorna {"readings": [...], "patient_id": str, "error": None|str}
     """
     try:
-        token, base_url = login(email, password)
-        connections     = get_connections(token, base_url)
+        # Intentar usar token cacheado primero (evita rate limiting de Abbott)
+        token, base_url = None, None
+        if get_setting_fn and set_setting_fn:
+            token, base_url = get_cached_token(get_setting_fn, set_setting_fn)
+
+        if not token:
+            token, base_url = login(email, password)
+            # Cachear el nuevo token
+            if set_setting_fn:
+                # El token de LibreLinkUp dura ~180 días
+                expires_ms = int((datetime.now() + timedelta(days=170)).timestamp() * 1000)
+                save_token_cache(token, base_url, expires_ms, set_setting_fn)
+
+        connections = get_connections(token, base_url)
 
         if not connections:
+            # Si el token cacheado devolvió lista vacía, forzar re-login
+            if get_setting_fn and set_setting_fn:
+                set_setting_fn("libre_token", "")
             return {"readings": [], "error": "No hay sensores vinculados en LibreLinkUp."}
 
         # Usar el primer paciente (en uso personal, sos vos mismo)
@@ -183,8 +233,18 @@ def sync_all(email: str, password: str) -> dict:
         return {"readings": readings, "patient_id": patient_id, "error": None}
 
     except LibreLinkUpError as e:
+        # Si falló con token cacheado, limpiar caché para forzar re-login la próxima vez
+        if set_setting_fn:
+            set_setting_fn("libre_token", "")
         return {"readings": [], "error": str(e)}
     except requests.RequestException as e:
+        err = str(e)
+        # 401/403 con token cacheado → limpiar y reintentar sin caché
+        if ("401" in err or "403" in err or "430" in err) and get_setting_fn:
+            cached = get_setting_fn("libre_token")
+            if cached and set_setting_fn:
+                set_setting_fn("libre_token", "")
+                return {"readings": [], "error": "Token expirado, limpiado. Intentá de nuevo en 1 minuto."}
         return {"readings": [], "error": f"Error de red: {e}"}
     except Exception as e:
         return {"readings": [], "error": f"Error inesperado: {e}"}

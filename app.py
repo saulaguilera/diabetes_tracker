@@ -363,7 +363,9 @@ def _do_libre_sync(email: str, password: str) -> dict:
     Descarga lecturas de LibreLinkUp e inserta las nuevas en la base de datos.
     Retorna {"insertadas": int, "total": int, "error": str|None, "ultima": datetime|None}
     """
-    resultado = libre_sync_all(email, password)
+    resultado = libre_sync_all(email, password,
+                               get_setting_fn=_get_setting,
+                               set_setting_fn=_set_setting)
     if resultado["error"]:
         return {"insertadas": 0, "total": 0,
                 "error": resultado["error"], "ultima": None}
