@@ -419,14 +419,46 @@ def api_sync_libre_debug():
         return jsonify({"error": "Sin credenciales configuradas"})
     headers = {
         "product": "llu.android", "version": "4.7",
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (compatible; DiabetesTracker)",
+        "Content-Type": "application/json", "Accept": "application/json",
+        "cache-control": "no-cache", "connection": "Keep-Alive",
+        "User-Agent": "LibreLinkUp/4.7.0 (Android)",
     }
     try:
-        r = _req.post("https://api.libreview.io/llu/auth/login",
-                      json={"email": email, "password": password},
-                      headers=headers, timeout=15)
-        return jsonify({"status_http": r.status_code, "respuesta": r.json()})
+        # Paso 1: login
+        r1 = _req.post("https://api.libreview.io/llu/auth/login",
+                       json={"email": email, "password": password},
+                       headers=headers, timeout=15)
+        d1 = r1.json()
+        base_url = "https://api.libreview.io"
+
+        # Paso 2: redirect regional si aplica
+        if d1.get("data", {}).get("redirect"):
+            region   = d1["data"]["region"]
+            base_url = f"https://api-{region}.libreview.io"
+            r1 = _req.post(f"{base_url}/llu/auth/login",
+                           json={"email": email, "password": password},
+                           headers=headers, timeout=15)
+            d1 = r1.json()
+
+        # Paso 3: obtener token
+        inner  = d1.get("data", {})
+        ticket = inner.get("authTicket") or inner.get("authticket") or {}
+        token  = ticket.get("token") or ticket.get("Token")
+
+        if not token:
+            return jsonify({"paso": "login", "error": "sin token",
+                            "respuesta": d1, "base_url": base_url})
+
+        # Paso 4: connections
+        auth_headers = {**headers, "Authorization": f"Bearer {token}"}
+        r2 = _req.get(f"{base_url}/llu/connections",
+                      headers=auth_headers, timeout=15)
+        return jsonify({
+            "base_url": base_url,
+            "token_ok": True,
+            "connections_status": r2.status_code,
+            "connections_resp":   r2.json() if r2.status_code == 200 else r2.text[:300],
+        })
     except Exception as e:
         return jsonify({"error": str(e)})
 

@@ -17,11 +17,13 @@ from datetime import datetime, timezone
 _BASE_URL = "https://api.libreview.io"
 
 _HEADERS = {
-    "product":         "llu.android",
-    "version":         "4.7",
-    "Accept-Encoding": "gzip",
-    "Content-Type":    "application/json",
-    "User-Agent":      "Mozilla/5.0 (compatible; DiabetesTracker)",
+    "product":       "llu.android",
+    "version":       "4.7",
+    "Content-Type":  "application/json",
+    "Accept":        "application/json",
+    "cache-control": "no-cache",
+    "connection":    "Keep-Alive",
+    "User-Agent":    "LibreLinkUp/4.7.0 (Android)",
 }
 
 
