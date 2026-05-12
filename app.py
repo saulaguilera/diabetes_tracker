@@ -407,6 +407,30 @@ def _do_libre_sync(email: str, password: str) -> dict:
     }
 
 
+@app.route("/api/sync/libre/debug")
+def api_sync_libre_debug():
+    """Muestra la respuesta raw de Abbott para diagnosticar problemas."""
+    if not session.get("logged_in"):
+        return jsonify({"error": "No autorizado"}), 401
+    import requests as _req
+    email    = _LIBRE_EMAIL
+    password = _LIBRE_PASSWORD
+    if not email or not password:
+        return jsonify({"error": "Sin credenciales configuradas"})
+    headers = {
+        "product": "llu.android", "version": "4.7",
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (compatible; DiabetesTracker)",
+    }
+    try:
+        r = _req.post("https://api.libreview.io/llu/auth/login",
+                      json={"email": email, "password": password},
+                      headers=headers, timeout=15)
+        return jsonify({"status_http": r.status_code, "respuesta": r.json()})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+
 @app.route("/api/sync/libre")
 def api_sync_libre():
     """
