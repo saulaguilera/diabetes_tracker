@@ -89,6 +89,7 @@ def login(email: str, password: str) -> tuple[str, str]:
 def get_connections(token: str, base_url: str) -> list:
     """Devuelve la lista de conexiones (pacientes vinculados en LibreLinkUp)."""
     headers = {**_HEADERS, "Authorization": f"Bearer {token}"}
+    headers.pop("Content-Type", None)   # GET no lleva Content-Type
     resp    = requests.get(f"{base_url}/llu/connections", headers=headers, timeout=15)
     resp.raise_for_status()
     data = resp.json()
@@ -103,6 +104,7 @@ def get_readings(token: str, base_url: str, patient_id: str) -> list[dict]:
     Cada lectura: {"timestamp": datetime, "value_mgdl": float, "trend": str}
     """
     headers = {**_HEADERS, "Authorization": f"Bearer {token}"}
+    headers.pop("Content-Type", None)   # GET no lleva Content-Type
     url     = f"{base_url}/llu/connections/{patient_id}/graph"
     resp    = requests.get(url, headers=headers, timeout=15)
     resp.raise_for_status()
