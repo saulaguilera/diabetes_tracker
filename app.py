@@ -451,37 +451,44 @@ def api_sync_libre_debug():
         except Exception:
             jwt_payload = {}
 
-        from utils.libre_linkup import _decode_jwt_account_id
-        jwt_account_id = _decode_jwt_account_id(token)
-
-        # Usar el account_id del JWT si el cacheado está vacío o difiere
-        effective_account_id = jwt_account_id or account_id
-
-        get_headers = {
-            "product":        "llu.android",
-            "version":        "4.16.0",
-            "Accept":         "application/json",
-            "User-Agent":     "LibreLinkUp/4.16.0 (Android)",
-            "Authorization":  f"Bearer {token}",
-            "Account-Id":     effective_account_id,
+        # Probar distintos campos del JWT como Account-Id
+        candidates = {
+            "id":  jwt_payload.get("id", ""),
+            "sid": jwt_payload.get("sid", ""),
+            "jti": jwt_payload.get("jti", ""),
+            "id_nodash": jwt_payload.get("id", "").replace("-", ""),
         }
-        r = _req.get(f"{base_url}/llu/connections",
-                     headers=get_headers, timeout=15)
 
-        # Si el JWT account_id funcionó pero el cacheado era diferente, actualizar
-        if r.status_code == 200 and jwt_account_id and jwt_account_id != account_id:
-            _set_setting("libre_account_id", jwt_account_id)
+        results = {}
+        working_key = None
+        for cand_name, cand_val in candidates.items():
+            if not cand_val:
+                results[cand_name] = "vacío"
+                continue
+            h = {
+                "product":       "llu.android",
+                "version":       "4.16.0",
+                "Accept":        "application/json",
+                "User-Agent":    "LibreLinkUp/4.16.0 (Android)",
+                "Authorization": f"Bearer {token}",
+                "Account-Id":    cand_val,
+            }
+            try:
+                rr = _req.get(f"{base_url}/llu/connections", headers=h, timeout=15)
+                results[cand_name] = rr.status_code
+                if rr.status_code == 200 and not working_key:
+                    working_key = cand_name
+                    # Guardar el que funcionó
+                    _set_setting("libre_account_id", cand_val)
+            except Exception as ex:
+                results[cand_name] = str(ex)
 
         return jsonify({
-            "base_url":            base_url,
-            "account_id_cached":   account_id[:8] + "..." if account_id else "(vacío)",
-            "account_id_jwt":      jwt_account_id[:8] + "..." if jwt_account_id else "(vacío)",
-            "account_id_used":     effective_account_id[:8] + "..." if effective_account_id else "(vacío)",
-            "token_expiry":        expiry,
-            "connections_status":  r.status_code,
-            "connections_resp":    r.json() if r.status_code == 200 else r.text[:400],
-            "jwt_payload_keys":    list(jwt_payload.keys()),
-            "jwt_payload":         {k: str(v)[:40] for k, v in jwt_payload.items()},
+            "base_url":         base_url,
+            "token_expiry":     expiry,
+            "jwt_payload":      {k: str(v)[:40] for k, v in jwt_payload.items()},
+            "probe_results":    results,
+            "working_key":      working_key or "ninguno",
         })
     except Exception as e:
         return jsonify({"error": str(e)})
