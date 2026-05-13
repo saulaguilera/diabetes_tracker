@@ -42,8 +42,31 @@ class Meal(db.Model):
     categoria = db.Column(db.String(50))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    components = db.relationship(
+        "MealComponent", backref="meal", lazy=True,
+        cascade="all, delete-orphan", order_by="MealComponent.id"
+    )
+
     def __repr__(self):
         return f"<Comida {self.name} {self.carbs_g}g CH>"
+
+
+class MealComponent(db.Model):
+    """Ingrediente individual dentro de una comida."""
+    __tablename__ = "meal_components"
+
+    id           = db.Column(db.Integer, primary_key=True)
+    meal_id      = db.Column(db.Integer, db.ForeignKey("meals.id", ondelete="CASCADE"), nullable=False)
+    name         = db.Column(db.String(200), nullable=False)
+    food_item_id = db.Column(db.Integer, db.ForeignKey("food_items.id"), nullable=True)
+    carbs_g      = db.Column(db.Float, default=0)
+    protein_g    = db.Column(db.Float, default=0)
+    fat_g        = db.Column(db.Float, default=0)
+    calories     = db.Column(db.Float, default=0)
+    grams        = db.Column(db.Float)   # porción en gramos (opcional)
+
+    def __repr__(self):
+        return f"<Componente {self.name} {self.carbs_g}g CH>"
 
 
 class InsulinDose(db.Model):

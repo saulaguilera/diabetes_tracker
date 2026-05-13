@@ -43,6 +43,20 @@
 
       <div class="list-row-body">
         <div class="list-row-name">{{ c.name }}</div>
+
+        {% if c.components %}
+        <div class="comp-pills">
+          {% for comp in c.components %}
+          <span class="comp-pill">
+            {{ comp.name }}
+            {% if comp.carbs_g %}
+              <span class="comp-pill-ch">{{ comp.carbs_g | int }}g</span>
+            {% endif %}
+          </span>
+          {% endfor %}
+        </div>
+        {% endif %}
+
         <div class="list-row-meta">
           <!-- Categoría -->
           <span class="categoria-badge" data-id="{{ c.id }}" style="cursor:pointer;">
@@ -153,6 +167,22 @@
 .macro-kcal { background: var(--surface2); color: var(--text-muted); }
 .list-macros { display: flex; gap: .3rem; align-items: center; flex-shrink: 0; }
 .list-badge-empty { background: var(--surface2); color: var(--text-muted); border: 1px dashed var(--border); }
+
+/* Ingredient pills */
+.comp-pills {
+  display: flex; flex-wrap: wrap; gap: .25rem; margin: .25rem 0;
+}
+.comp-pill {
+  display: inline-flex; align-items: center; gap: .25rem;
+  font-size: .7rem; padding: .1em .5em; border-radius: 20px;
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text-muted); white-space: nowrap;
+}
+.comp-pill-ch {
+  background: rgba(245,158,11,.15); color: #d97706;
+  font-weight: 700; border-radius: 10px; padding: 0 .3em;
+  font-size: .65rem;
+}
 </style>
 <script>
 const CATEGORIAS = {{ categorias | tojson }};

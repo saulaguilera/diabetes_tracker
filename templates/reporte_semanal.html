@@ -325,7 +325,20 @@
             {% for f in tabla_comidas %}
             <tr>
               <td class="text-muted" style="white-space:nowrap; font-size:.76rem;">{{ f.fecha }}</td>
-              <td style="font-size:.82rem;">{{ f.nombre[:24] }}</td>
+              <td style="font-size:.82rem;">
+                {{ f.nombre[:24] }}
+                {% if f.componentes %}
+                <div style="display:flex; flex-wrap:wrap; gap:.2rem; margin-top:.2rem;">
+                  {% for comp in f.componentes %}
+                  <span style="font-size:.65rem; padding:.1em .4em; border-radius:10px;
+                    background:var(--surface2); border:1px solid var(--border); color:var(--text-muted);
+                    white-space:nowrap;">
+                    {{ comp.nombre }}{% if comp.carbs %} <strong style="color:#d97706;">{{ comp.carbs }}g</strong>{% endif %}
+                  </span>
+                  {% endfor %}
+                </div>
+                {% endif %}
+              </td>
               <td class="text-center fw-semibold" style="color:#d97706; font-size:.82rem;">{{ f.carbs }}g</td>
               <td class="text-center" style="font-size:.82rem;">
                 {% if f.insulina %}

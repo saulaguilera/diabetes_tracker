@@ -19,70 +19,58 @@
 
 <div class="form-modern">
   <form method="post" id="meal-form">
-    <input type="hidden" id="food-id-used" name="food_id" value="">
 
-    {% if not editar %}
-    <!-- Buscador rápido -->
+    <!-- Nombre del plato -->
     <div class="fm-section mb-3">
-      <div class="fm-section-label">Buscar en mis alimentos</div>
-      <div class="position-relative">
-        <input type="text" id="food-search" class="form-control"
-               placeholder="Escribe para buscar... ej. avena, pollo, arroz">
-        <div id="food-results" class="ql-dropdown" style="display:none;"></div>
-      </div>
-    </div>
-    {% endif %}
-
-    <!-- Nombre -->
-    <div class="fm-section mb-3">
-      <div class="fm-section-label">Comida</div>
+      <div class="fm-section-label">Nombre del plato</div>
       <input type="text" id="meal-name" name="nombre" class="form-control"
              value="{{ item.name if editar else '' }}"
-             placeholder="Nombre de la comida..." required>
+             placeholder="Almuerzo, Desayuno, Cena..." required>
     </div>
 
-    <!-- Carbohidratos (destacado) -->
+    <!-- ── Ingredientes (multi-componente) ─────────────────────────────── -->
     <div class="fm-section mb-3">
-      <div class="fm-section-label">Carbohidratos <span style="color:#d97706;">(principal)</span></div>
-      <div class="fm-value-row">
-        <div class="fm-big-input">
-          <input type="number" id="meal-carbs" name="carbs_g"
-                 class="fm-num" step="0.5" min="0" max="500"
-                 value="{{ item.carbs_g if editar else '' }}"
-                 placeholder="0" required>
-          <span class="fm-num-unit">g CH</span>
-        </div>
+      <div class="fm-section-label d-flex justify-content-between align-items-center">
+        <span>Ingredientes</span>
+        <span class="comp-total-badge" id="total-badge">0g CH</span>
       </div>
+
+      <div id="comp-list">
+        <!-- Filas inyectadas por JS -->
+      </div>
+
+      <button type="button" class="comp-add-btn" onclick="addComponent()">
+        <i class="bi bi-plus-circle"></i> Agregar ingrediente
+      </button>
+
+      <!-- Totales auto-calculados (ocultos, se llenan por JS) -->
+      <input type="hidden" name="carbs_g"   id="total-carbs">
+      <input type="hidden" name="protein_g" id="total-protein">
+      <input type="hidden" name="fat_g"     id="total-fat">
+      <input type="hidden" name="calories"  id="total-calories">
     </div>
 
-    <!-- Macros secundarios -->
-    <div class="fm-section mb-3">
-      <div class="fm-section-label">Macros adicionales <span class="text-muted">(opcionales)</span></div>
-      <div class="row g-2">
-        <div class="col-4">
-          <label class="fm-label">Proteínas</label>
-          <div class="input-group input-group-sm">
-            <input type="number" id="meal-protein" name="protein_g" class="form-control"
-                   step="0.5" min="0" value="{{ item.protein_g if editar else '' }}" placeholder="0">
-            <span class="input-group-text">g</span>
-          </div>
+    <!-- Resumen de macros (se actualiza en tiempo real) -->
+    <div class="comp-summary mb-3" id="macro-summary" style="display:none;">
+      <div class="comp-macro-row">
+        <div class="comp-macro-item">
+          <span class="comp-macro-val" id="sum-carbs">0</span>
+          <span class="comp-macro-lbl">g CH</span>
         </div>
-        <div class="col-4">
-          <label class="fm-label">Grasas</label>
-          <div class="input-group input-group-sm">
-            <input type="number" id="meal-fat" name="fat_g" class="form-control"
-                   step="0.5" min="0" value="{{ item.fat_g if editar else '' }}" placeholder="0">
-            <span class="input-group-text">g</span>
-          </div>
+        <div class="comp-macro-sep"></div>
+        <div class="comp-macro-item">
+          <span class="comp-macro-val" id="sum-protein">0</span>
+          <span class="comp-macro-lbl">g Prot.</span>
         </div>
-        <div class="col-4">
-          <label class="fm-label">Calorías</label>
-          <div class="input-group input-group-sm">
-            <input type="number" id="meal-calories" name="calories" class="form-control"
-                   step="1" min="0"
-                   value="{{ item.calories | int if editar and item.calories else '' }}" placeholder="0">
-            <span class="input-group-text">kcal</span>
-          </div>
+        <div class="comp-macro-sep"></div>
+        <div class="comp-macro-item">
+          <span class="comp-macro-val" id="sum-fat">0</span>
+          <span class="comp-macro-lbl">g Grasas</span>
+        </div>
+        <div class="comp-macro-sep"></div>
+        <div class="comp-macro-item">
+          <span class="comp-macro-val" id="sum-kcal">0</span>
+          <span class="comp-macro-lbl">kcal</span>
         </div>
       </div>
     </div>
@@ -123,62 +111,305 @@
     </div>
   </form>
 </div>
+
+<!-- Template del dropdown (oculto) -->
+<div id="search-dropdown-tpl" class="comp-search-dropdown" style="display:none;"></div>
+
 {% endblock %}
 
 {% block scripts %}
 {{ list_styles() }}
 {{ form_styles() }}
-{% if not editar %}
+
+{# Datos de componentes existentes para edición #}
+{% if editar and item.components %}
 <script>
-function setNow() {
-  const n = new Date();
-  document.querySelector('[name=fecha]').value = n.toLocaleDateString('sv');
-  document.querySelector('[name=hora]').value  = n.toTimeString().slice(0,5);
-}
-const searchInput = document.getElementById('food-search');
-const resultsBox  = document.getElementById('food-results');
-let debounceTimer;
-searchInput.addEventListener('input', () => {
-  clearTimeout(debounceTimer);
-  const q = searchInput.value.trim();
-  if (q.length < 1) { resultsBox.style.display = 'none'; return; }
-  debounceTimer = setTimeout(() => fetchFoods(q), 200);
-});
-async function fetchFoods(q) {
-  const res   = await fetch(`/api/alimentos/buscar?q=${encodeURIComponent(q)}`);
-  const items = await res.json();
-  if (!items.length) { resultsBox.style.display = 'none'; return; }
-  resultsBox.innerHTML = items.map(item => `
-    <div class="ql-dropdown-item" onclick="fillForm(${JSON.stringify(item).replace(/"/g,'&quot;')})">
-      <div><strong>${item.name}</strong>
-        ${item.serving_desc ? `<small class="ms-1">${item.serving_desc}</small>` : ''}
-      </div>
-      <span class="list-badge" style="background:rgba(245,158,11,.15);color:#d97706;">${item.carbs}g CH</span>
-    </div>`).join('');
-  resultsBox.style.display = 'block';
-}
-function fillForm(item) {
-  document.getElementById('meal-name').value     = item.name;
-  document.getElementById('meal-carbs').value    = item.carbs;
-  document.getElementById('meal-protein').value  = item.protein || '';
-  document.getElementById('meal-fat').value      = item.fat || '';
-  document.getElementById('meal-calories').value = item.calories || '';
-  document.getElementById('food-id-used').value  = item.id;
-  searchInput.value = ''; resultsBox.style.display = 'none';
-  fetch(`/api/alimentos/${item.id}/usar`, { method: 'POST' });
-}
-document.addEventListener('click', e => {
-  if (!searchInput.contains(e.target) && !resultsBox.contains(e.target))
-    resultsBox.style.display = 'none';
-});
+  const INITIAL_COMPONENTS = {{ item.components | map(attribute='__dict__') | list | tojson if false else
+    '[' + item.components | map(attribute='id') | list | join(',') + ']'
+  }};
+  /* Usamos un enfoque más seguro: lista de dicts via Jinja */
+  const EDIT_COMPONENTS = [
+    {% for c in item.components %}
+    {
+      name:     {{ c.name     | tojson }},
+      carbs:    {{ c.carbs_g  | default(0) }},
+      protein:  {{ c.protein_g| default(0) }},
+      fat:      {{ c.fat_g    | default(0) }},
+      calories: {{ c.calories | default(0) }},
+      grams:    {{ c.grams    | tojson if c.grams else 'null' }},
+      food_id:  {{ c.food_item_id | tojson if c.food_item_id else 'null' }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ];
+  const IS_EDIT = true;
 </script>
 {% else %}
 <script>
+  const EDIT_COMPONENTS = [];
+  const IS_EDIT = {{ 'true' if editar else 'false' }};
+</script>
+{% endif %}
+
+<script>
+/* ── Helpers ─────────────────────────────────────────────────────────── */
 function setNow() {
   const n = new Date();
   document.querySelector('[name=fecha]').value = n.toLocaleDateString('sv');
   document.querySelector('[name=hora]').value  = n.toTimeString().slice(0,5);
 }
+
+let compIndex = 0;
+let activeDropdown = null;
+
+/* ── Recalcular totales ───────────────────────────────────────────────── */
+function recalcTotals() {
+  let ch = 0, pr = 0, fa = 0, kc = 0;
+  document.querySelectorAll('.comp-row').forEach(row => {
+    ch += parseFloat(row.querySelector('.ci-carbs').value)    || 0;
+    pr += parseFloat(row.querySelector('.ci-protein').value)  || 0;
+    fa += parseFloat(row.querySelector('.ci-fat').value)      || 0;
+    kc += parseFloat(row.querySelector('.ci-calories').value) || 0;
+  });
+  document.getElementById('total-carbs').value   = ch.toFixed(1);
+  document.getElementById('total-protein').value = pr.toFixed(1);
+  document.getElementById('total-fat').value     = fa.toFixed(1);
+  document.getElementById('total-calories').value= kc.toFixed(1);
+
+  document.getElementById('sum-carbs').textContent   = Math.round(ch);
+  document.getElementById('sum-protein').textContent = Math.round(pr);
+  document.getElementById('sum-fat').textContent     = Math.round(fa);
+  document.getElementById('sum-kcal').textContent    = Math.round(kc);
+  document.getElementById('total-badge').textContent = Math.round(ch) + 'g CH';
+
+  // Mostrar/ocultar resumen
+  const rows = document.querySelectorAll('.comp-row').length;
+  document.getElementById('macro-summary').style.display = rows > 0 ? '' : 'none';
+}
+
+/* ── Agregar fila de ingrediente ─────────────────────────────────────── */
+function addComponent(data = {}) {
+  const idx  = compIndex++;
+  const list = document.getElementById('comp-list');
+
+  const row = document.createElement('div');
+  row.className = 'comp-row';
+  row.dataset.idx = idx;
+  row.innerHTML = `
+    <div class="comp-row-header">
+      <div class="comp-name-wrap position-relative" style="flex:1;">
+        <input type="text"   name="comp_name[]"     class="form-control ci-name"
+               placeholder="Ingrediente... ej. Garbanzos"
+               value="${escHtml(data.name || '')}" autocomplete="off">
+        <input type="hidden" name="comp_food_id[]"  class="ci-food-id" value="${data.food_id || ''}">
+        <div class="comp-search-dropdown" id="drop-${idx}" style="display:none;"></div>
+      </div>
+      <button type="button" class="comp-remove-btn" onclick="removeComponent(this)"
+              title="Eliminar ingrediente">
+        <i class="bi bi-x"></i>
+      </button>
+    </div>
+
+    <div class="comp-macros">
+      <div class="comp-macro-field">
+        <label class="comp-macro-lbl-sm">CH (g) <span class="text-danger">*</span></label>
+        <input type="number" name="comp_carbs[]"   class="form-control ci-carbs"
+               step="0.5" min="0" placeholder="0" value="${data.carbs ?? ''}">
+      </div>
+      <div class="comp-macro-field">
+        <label class="comp-macro-lbl-sm">Prot. (g)</label>
+        <input type="number" name="comp_protein[]" class="form-control ci-protein"
+               step="0.5" min="0" placeholder="0" value="${data.protein ?? ''}">
+      </div>
+      <div class="comp-macro-field">
+        <label class="comp-macro-lbl-sm">Grasas (g)</label>
+        <input type="number" name="comp_fat[]"     class="form-control ci-fat"
+               step="0.5" min="0" placeholder="0" value="${data.fat ?? ''}">
+      </div>
+      <div class="comp-macro-field">
+        <label class="comp-macro-lbl-sm">kcal</label>
+        <input type="number" name="comp_calories[]" class="form-control ci-calories"
+               step="1" min="0" placeholder="0" value="${data.calories ?? ''}">
+      </div>
+      <input type="hidden" name="comp_grams[]" class="ci-grams" value="${data.grams || ''}">
+    </div>
+  `;
+  list.appendChild(row);
+
+  // Listeners de recálculo
+  row.querySelectorAll('input[type=number]').forEach(inp =>
+    inp.addEventListener('input', recalcTotals));
+
+  // Listener de búsqueda en nombre
+  const nameInput = row.querySelector('.ci-name');
+  let debounce;
+  nameInput.addEventListener('input', () => {
+    clearTimeout(debounce);
+    const q = nameInput.value.trim();
+    const drop = document.getElementById('drop-' + idx);
+    if (q.length < 1) { drop.style.display = 'none'; return; }
+    debounce = setTimeout(() => fetchIngredientes(q, drop, row), 220);
+  });
+
+  recalcTotals();
+  // Auto-focus en el campo nombre si no viene con datos
+  if (!data.name) nameInput.focus();
+}
+
+/* ── Eliminar fila ───────────────────────────────────────────────────── */
+function removeComponent(btn) {
+  btn.closest('.comp-row').remove();
+  recalcTotals();
+  if (document.querySelectorAll('.comp-row').length === 0) {
+    document.getElementById('macro-summary').style.display = 'none';
+  }
+}
+
+/* ── Búsqueda de alimentos en la BD ─────────────────────────────────── */
+async function fetchIngredientes(q, drop, row) {
+  try {
+    const res   = await fetch(`/api/alimentos/buscar?q=${encodeURIComponent(q)}`);
+    const items = await res.json();
+    if (!items.length) { drop.style.display = 'none'; return; }
+
+    drop.innerHTML = items.map(it => `
+      <div class="comp-drop-item" onclick='fillIngrediente(this, ${escJson(it)})'>
+        <span class="comp-drop-name">${it.name}</span>
+        ${it.serving_desc ? `<span class="comp-drop-serving">${it.serving_desc}</span>` : ''}
+        <span class="comp-drop-ch">${it.carbs}g CH</span>
+      </div>`).join('');
+    drop.style.display = 'block';
+    activeDropdown = drop;
+  } catch (e) { /* sin red */ }
+}
+
+function fillIngrediente(el, item) {
+  const row = el.closest('.comp-row');
+  row.querySelector('.ci-name').value     = item.name;
+  row.querySelector('.ci-food-id').value  = item.id;
+  row.querySelector('.ci-carbs').value    = item.carbs    || '';
+  row.querySelector('.ci-protein').value  = item.protein  || '';
+  row.querySelector('.ci-fat').value      = item.fat      || '';
+  row.querySelector('.ci-calories').value = item.calories || '';
+  el.closest('.comp-search-dropdown').style.display = 'none';
+  recalcTotals();
+  // Registrar uso
+  fetch(`/api/alimentos/${item.id}/usar`, { method: 'POST' });
+}
+
+/* ── Cerrar dropdowns al hacer click fuera ───────────────────────────── */
+document.addEventListener('click', e => {
+  document.querySelectorAll('.comp-search-dropdown').forEach(d => {
+    if (!d.contains(e.target) && !e.target.classList.contains('ci-name'))
+      d.style.display = 'none';
+  });
+});
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escJson(obj) {
+  return JSON.stringify(obj).replace(/"/g, '&quot;');
+}
+
+/* ── Init ────────────────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  if (EDIT_COMPONENTS.length > 0) {
+    EDIT_COMPONENTS.forEach(c => addComponent({
+      name:     c.name,
+      carbs:    c.carbs,
+      protein:  c.protein,
+      fat:      c.fat,
+      calories: c.calories,
+      grams:    c.grams,
+      food_id:  c.food_id,
+    }));
+  } else if (!IS_EDIT) {
+    // Nueva comida: empezar con 1 fila vacía
+    addComponent();
+  }
+  // Si es edición sin componentes (registro antiguo): no agregar fila vacía,
+  // usuario puede agregar si quiere.
+});
 </script>
-{% endif %}
+
+<style>
+/* ── Componentes de comida ───────────────────────────────────────────── */
+.comp-row {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px; padding: .75rem; margin-bottom: .5rem;
+}
+.comp-row-header {
+  display: flex; align-items: center; gap: .5rem; margin-bottom: .5rem;
+}
+.comp-remove-btn {
+  background: none; border: none; cursor: pointer;
+  width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted); transition: all .15s; font-size: .95rem;
+}
+.comp-remove-btn:hover { background: rgba(239,68,68,.12); color: #ef4444; }
+
+.comp-macros {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem;
+}
+.comp-macro-field { display: flex; flex-direction: column; gap: .2rem; }
+.comp-macro-lbl-sm { font-size: .67rem; font-weight: 600; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: .04em; }
+.comp-macros .form-control {
+  font-size: .85rem; padding: .3rem .5rem; border-radius: 8px; text-align: center;
+}
+
+.comp-add-btn {
+  display: flex; align-items: center; gap: .4rem; justify-content: center;
+  width: 100%; padding: .55rem; border-radius: 10px; margin-top: .5rem;
+  background: none; border: 2px dashed var(--border); color: var(--text-muted);
+  font-size: .84rem; font-weight: 600; cursor: pointer; transition: all .15s;
+}
+.comp-add-btn:hover { border-color: #22c55e; color: #22c55e; background: rgba(34,197,94,.05); }
+.comp-add-btn i { font-size: 1rem; }
+
+.comp-total-badge {
+  background: rgba(34,197,94,.12); color: #16a34a;
+  font-size: .72rem; font-weight: 700; padding: .18em .6em; border-radius: 20px;
+}
+
+/* Dropdown de búsqueda */
+.comp-search-dropdown {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  z-index: 200; max-height: 220px; overflow-y: auto;
+}
+.comp-drop-item {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  padding: .55rem .75rem; cursor: pointer; font-size: .84rem;
+  border-bottom: 1px solid var(--border);
+  transition: background .12s;
+}
+.comp-drop-item:last-child { border-bottom: none; }
+.comp-drop-item:hover { background: var(--surface2); }
+.comp-drop-name { font-weight: 600; flex: 1; }
+.comp-drop-serving { color: var(--text-muted); font-size: .76rem; }
+.comp-drop-ch {
+  background: rgba(245,158,11,.12); color: #d97706;
+  font-size: .72rem; font-weight: 700; padding: .1em .45em; border-radius: 8px;
+}
+
+/* Resumen de macros */
+.comp-summary {
+  background: rgba(34,197,94,.06); border: 1px solid rgba(34,197,94,.2);
+  border-radius: 12px; padding: .75rem 1rem;
+}
+.comp-macro-row {
+  display: flex; align-items: center; justify-content: space-around;
+}
+.comp-macro-item { text-align: center; }
+.comp-macro-val { font-size: 1.25rem; font-weight: 800; color: #16a34a; }
+.comp-macro-lbl { font-size: .68rem; color: var(--text-muted); display: block; }
+.comp-macro-sep { width: 1px; height: 30px; background: rgba(34,197,94,.25); }
+
+@media (max-width: 500px) {
+  .comp-macros { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
 {% endblock %}

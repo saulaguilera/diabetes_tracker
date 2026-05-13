@@ -10,7 +10,7 @@ except ImportError:
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from datetime import datetime, timedelta, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
-from models import db, GlucoseReading, Meal, InsulinDose, Activity, CGMImport, FoodItem, UserSettings
+from models import db, GlucoseReading, Meal, MealComponent, InsulinDose, Activity, CGMImport, FoodItem, UserSettings
 
 from utils.libre_import import import_libre_csv
 from utils.libre_linkup import sync_all as libre_sync_all
@@ -66,11 +66,29 @@ app.before_request(_protect_all)
 with app.app_context():
     db.create_all()
     from sqlalchemy import text, inspect
+    inspector = inspect(db.engine)
     with db.engine.connect() as conn:
         # Migración: columna categoria en meals
-        cols = [c["name"] for c in inspect(db.engine).get_columns("meals")]
+        cols = [c["name"] for c in inspector.get_columns("meals")]
         if "categoria" not in cols:
             conn.execute(text("ALTER TABLE meals ADD COLUMN categoria VARCHAR(50)"))
+            conn.commit()
+        # Migración: tabla meal_components (multi-ingrediente)
+        existing_tables = inspector.get_table_names()
+        if "meal_components" not in existing_tables:
+            conn.execute(text("""
+                CREATE TABLE meal_components (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    meal_id      INTEGER NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
+                    name         VARCHAR(200) NOT NULL,
+                    food_item_id INTEGER REFERENCES food_items(id),
+                    carbs_g      REAL DEFAULT 0,
+                    protein_g    REAL DEFAULT 0,
+                    fat_g        REAL DEFAULT 0,
+                    calories     REAL DEFAULT 0,
+                    grams        REAL
+                )
+            """))
             conn.commit()
 
 
@@ -825,34 +843,79 @@ def comidas():
                            colores=CATEGORIA_COLORES)
 
 
+def _save_meal_components(comida, form):
+    """Parsea y guarda los componentes de una comida desde el form."""
+    comp_names    = form.getlist("comp_name[]")
+    comp_carbs    = form.getlist("comp_carbs[]")
+    comp_proteins = form.getlist("comp_protein[]")
+    comp_fats     = form.getlist("comp_fat[]")
+    comp_cals     = form.getlist("comp_calories[]")
+    comp_grams    = form.getlist("comp_grams[]")
+    comp_food_ids = form.getlist("comp_food_id[]")
+
+    # Limpiar componentes vacíos
+    componentes = []
+    for i, name in enumerate(comp_names):
+        name = name.strip()
+        if not name:
+            continue
+        def _f(lst, idx, default=0.0):
+            try: return float(lst[idx]) if lst[idx].strip() else default
+            except (IndexError, ValueError): return default
+        componentes.append(MealComponent(
+            name         = name,
+            food_item_id = comp_food_ids[i].strip() or None if i < len(comp_food_ids) else None,
+            carbs_g      = _f(comp_carbs, i),
+            protein_g    = _f(comp_proteins, i),
+            fat_g        = _f(comp_fats, i),
+            calories     = _f(comp_cals, i),
+            grams        = _f(comp_grams, i) or None,
+        ))
+
+    # Actualizar totales en la comida padre
+    if componentes:
+        comida.carbs_g   = round(sum(c.carbs_g   for c in componentes), 1)
+        comida.protein_g = round(sum(c.protein_g for c in componentes), 1)
+        comida.fat_g     = round(sum(c.fat_g     for c in componentes), 1)
+        comida.calories  = round(sum(c.calories  for c in componentes), 1)
+    return componentes
+
+
 @app.route("/comidas/nueva", methods=["GET", "POST"])
 def comida_nueva():
     if request.method == "POST":
-        fecha = request.form.get("fecha")
-        hora = request.form.get("hora")
+        fecha  = request.form.get("fecha")
+        hora   = request.form.get("hora")
         nombre = request.form.get("nombre", "").strip()
-        carbs = request.form.get("carbs_g", 0, type=float)
-        fat = request.form.get("fat_g", 0, type=float)
-        protein = request.form.get("protein_g", 0, type=float)
-        calorias = request.form.get("calories", 0, type=float)
-        notas = request.form.get("notas", "")
+        notas  = request.form.get("notas", "")
 
         if not nombre:
             flash("El nombre de la comida es obligatorio.", "danger")
             return redirect(url_for("comida_nueva"))
 
+        # Totales manuales (fallback si no hay componentes)
+        carbs    = request.form.get("carbs_g",   0, type=float)
+        fat      = request.form.get("fat_g",     0, type=float)
+        protein  = request.form.get("protein_g", 0, type=float)
+        calorias = request.form.get("calories",  0, type=float)
+
         comida = Meal(
             timestamp=parse_datetime(fecha, hora),
             name=nombre,
-            carbs_g=carbs,
-            fat_g=fat,
-            protein_g=protein,
-            calories=calorias,
+            carbs_g=carbs, fat_g=fat, protein_g=protein, calories=calorias,
             notes=notas,
         )
         db.session.add(comida)
+        db.session.flush()   # obtener comida.id
+
+        componentes = _save_meal_components(comida, request.form)
+        for c in componentes:
+            c.meal_id = comida.id
+            db.session.add(c)
+
         db.session.commit()
-        flash(f'Comida "{nombre}" registrada: {carbs}g de carbohidratos.', "success")
+        flash(f'Comida "{nombre}" registrada — {int(comida.carbs_g)}g CH'
+              + (f' en {len(componentes)} ingredientes.' if componentes else '.'), "success")
         return redirect(url_for("comidas"))
 
     ahora = datetime.now()
@@ -1170,7 +1233,13 @@ def backup_exportar():
             {"id": r.id, "timestamp": r.timestamp.isoformat(),
              "name": r.name, "carbs_g": r.carbs_g, "fat_g": r.fat_g,
              "protein_g": r.protein_g, "calories": r.calories,
-             "notes": r.notes, "categoria": r.categoria}
+             "notes": r.notes, "categoria": r.categoria,
+             "components": [
+                 {"name": c.name, "food_item_id": c.food_item_id,
+                  "carbs_g": c.carbs_g, "protein_g": c.protein_g,
+                  "fat_g": c.fat_g, "calories": c.calories, "grams": c.grams}
+                 for c in r.components
+             ]}
             for r in Meal.query.all()
         ],
         "insulina": [
@@ -1404,24 +1473,44 @@ def _tabla_impacto_comidas(days):
                 "timing": timing,
             })
 
+        # Componentes de esta comida (para mostrar en la tabla de detalle)
+        comp_list = [
+            {"nombre": comp.name, "carbs": int(comp.carbs_g or 0)}
+            for comp in c.components
+        ]
+
         filas.append({
-            "fecha":    c.timestamp.strftime("%d/%m %H:%M"),
-            "nombre":   c.name,
-            "carbs":    int(c.carbs_g or 0),
-            "pre":      int(pre.value_mgdl),
-            "pico":     int(pico),
-            "delta":    int(delta),
-            "estado":   estado,
-            "insulina": insulina,
+            "fecha":       c.timestamp.strftime("%d/%m %H:%M"),
+            "nombre":      c.name,
+            "carbs":       int(c.carbs_g or 0),
+            "componentes": comp_list,   # ingredientes desglosados
+            "pre":         int(pre.value_mgdl),
+            "pico":        int(pico),
+            "delta":       int(delta),
+            "estado":      estado,
+            "insulina":    insulina,
         })
 
-    # Orden cronológico descendente (más reciente primero)
-
-    # Resumen por alimento (promedio de delta y pico)
+    # ── Resumen por ingrediente (no por nombre de plato) ─────────────────────
     from collections import defaultdict
     agrupado = defaultdict(list)
     for f in filas:
-        agrupado[f["nombre"]].append(f)
+        if f["componentes"]:
+            # Agrupa por ingrediente individual: cada uno hereda el impacto
+            # glucémico del plato completo (delta / pico compartido)
+            for comp in f["componentes"]:
+                agrupado[comp["nombre"]].append({
+                    "carbs": comp["carbs"],
+                    "pico":  f["pico"],
+                    "delta": f["delta"],
+                })
+        else:
+            # Comida sin componentes (registro antiguo): grupo por nombre del plato
+            agrupado[f["nombre"]].append({
+                "carbs": f["carbs"],
+                "pico":  f["pico"],
+                "delta": f["delta"],
+            })
 
     resumen = []
     for nombre, eventos in sorted(agrupado.items(), key=lambda x: -sum(e["delta"] for e in x[1]) / len(x[1])):
@@ -1431,7 +1520,7 @@ def _tabla_impacto_comidas(days):
         avg_carbs = round(sum(e["carbs"] for e in eventos) / n)
         resumen.append({
             "nombre":    nombre,
-            "veces":     n,
+            "n":         n,
             "avg_carbs": avg_carbs,
             "avg_pico":  avg_pico,
             "avg_delta": avg_delta,
@@ -2072,16 +2161,29 @@ def glucemia_editar(id):
 def comida_editar(id):
     comida = Meal.query.get_or_404(id)
     if request.method == "POST":
-        comida.timestamp  = parse_datetime(request.form["fecha"], request.form["hora"])
-        comida.name       = request.form.get("nombre", comida.name).strip()
-        comida.carbs_g    = request.form.get("carbs_g", 0, type=float)
-        comida.fat_g      = request.form.get("fat_g", 0, type=float)
-        comida.protein_g  = request.form.get("protein_g", 0, type=float)
-        comida.calories   = request.form.get("calories", 0, type=float)
-        comida.notes      = request.form.get("notas", "")
+        comida.timestamp = parse_datetime(request.form["fecha"], request.form["hora"])
+        comida.name      = request.form.get("nombre", comida.name).strip()
+        comida.notes     = request.form.get("notas", "")
+
+        # Borrar componentes anteriores y recrear
+        MealComponent.query.filter_by(meal_id=comida.id).delete()
+
+        componentes = _save_meal_components(comida, request.form)
+        if not componentes:
+            # Sin componentes: tomar totales manuales
+            comida.carbs_g   = request.form.get("carbs_g",   0, type=float)
+            comida.fat_g     = request.form.get("fat_g",     0, type=float)
+            comida.protein_g = request.form.get("protein_g", 0, type=float)
+            comida.calories  = request.form.get("calories",  0, type=float)
+        else:
+            for c in componentes:
+                c.meal_id = comida.id
+                db.session.add(c)
+
         db.session.commit()
         flash(f'Comida "{comida.name}" actualizada.', "success")
         return redirect(url_for("comidas"))
+
     return render_template("comida_form.html",
                            editar=True, item=comida,
                            fecha=comida.timestamp.strftime("%Y-%m-%d"),
