@@ -442,6 +442,15 @@ def api_sync_libre_debug():
         })
 
     try:
+        import base64 as _b64, json as _j
+        # Decodificar payload completo del JWT para diagnóstico
+        try:
+            parts = token.split('.')
+            pad   = parts[1] + '=' * (4 - len(parts[1]) % 4)
+            jwt_payload = _j.loads(_b64.b64decode(pad))
+        except Exception:
+            jwt_payload = {}
+
         from utils.libre_linkup import _decode_jwt_account_id
         jwt_account_id = _decode_jwt_account_id(token)
 
@@ -471,6 +480,8 @@ def api_sync_libre_debug():
             "token_expiry":        expiry,
             "connections_status":  r.status_code,
             "connections_resp":    r.json() if r.status_code == 200 else r.text[:400],
+            "jwt_payload_keys":    list(jwt_payload.keys()),
+            "jwt_payload":         {k: str(v)[:40] for k, v in jwt_payload.items()},
         })
     except Exception as e:
         return jsonify({"error": str(e)})
