@@ -543,7 +543,7 @@
     }
     @media (max-width: 768px) {
       .bottom-nav { display: flex; }
-      .main-content { padding-bottom: 5rem; }
+      .main-content { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px)); }
     }
     .bottom-nav a {
       flex: 1; color: #94a3b8;
