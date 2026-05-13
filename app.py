@@ -739,65 +739,121 @@ def glucemia_eliminar(id):
 
 # ─── Comidas ──────────────────────────────────────────────────────────────────
 
+def _glucosa_impacto(meal):
+    """Calcula pre/pico/delta glucémico de una comida. Devuelve None si no hay datos."""
+    pre = (GlucoseReading.query
+           .filter(GlucoseReading.timestamp >= meal.timestamp - timedelta(minutes=30),
+                   GlucoseReading.timestamp <= meal.timestamp)
+           .order_by(GlucoseReading.timestamp.desc()).first())
+    posts = (GlucoseReading.query
+             .filter(GlucoseReading.timestamp > meal.timestamp,
+                     GlucoseReading.timestamp <= meal.timestamp + timedelta(hours=2))
+             .all())
+    if not pre or not posts:
+        return None
+    pico = max(r.value_mgdl for r in posts)
+    return {"pre": int(pre.value_mgdl), "pico": int(pico), "delta": round(pico - pre.value_mgdl, 0)}
+
+
 @app.route("/comidas/grupos")
 def comidas_grupos():
-    dias = request.args.get("dias", 30, type=int)
+    from collections import defaultdict
+    dias  = request.args.get("dias", 30, type=int)
+    tab   = request.args.get("tab", "categorias")   # categorias | ingredientes
     desde = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=dias)
     comidas = Meal.query.filter(Meal.timestamp >= desde).order_by(Meal.timestamp.desc()).all()
 
-    # Agrupar por categoría
-    from collections import defaultdict
-    grupos: dict = defaultdict(list)
+    # ── Pre-calcular impacto glucémico de cada comida ─────────────────────
+    impacto_por_meal = {}
+    for c in comidas:
+        imp = _glucosa_impacto(c)
+        if imp:
+            impacto_por_meal[c.id] = imp
+
+    # ══ TAB 1: Por categoría (comportamiento original) ════════════════════
+    grupos_cat: dict = defaultdict(list)
     sin_cat = []
     for c in comidas:
-        cat = c.categoria or ""
-        if cat:
-            grupos[cat].append(c)
+        if c.categoria:
+            grupos_cat[c.categoria].append(c)
         else:
             sin_cat.append(c)
 
-    # Para cada grupo calcular stats + impacto glucémico
     resumen_grupos = []
-    for cat in sorted(grupos.keys()):
-        items = grupos[cat]
+    for cat in sorted(grupos_cat.keys()):
+        items = grupos_cat[cat]
         carbs_vals = [c.carbs_g or 0 for c in items]
-        avg_carbs = round(sum(carbs_vals) / len(carbs_vals), 1) if carbs_vals else 0
-
-        # Impacto glucémico promedio
-        deltas = []
-        for c in items:
-            pre = (GlucoseReading.query
-                   .filter(GlucoseReading.timestamp >= c.timestamp - timedelta(minutes=30),
-                           GlucoseReading.timestamp <= c.timestamp)
-                   .order_by(GlucoseReading.timestamp.desc()).first())
-            posts = (GlucoseReading.query
-                     .filter(GlucoseReading.timestamp > c.timestamp,
-                             GlucoseReading.timestamp <= c.timestamp + timedelta(hours=2))
-                     .all())
-            if pre and posts:
-                pico = max(r.value_mgdl for r in posts)
-                deltas.append(pico - pre.value_mgdl)
-
+        avg_carbs  = round(sum(carbs_vals) / len(carbs_vals), 1) if carbs_vals else 0
+        deltas = [impacto_por_meal[c.id]["delta"] for c in items if c.id in impacto_por_meal]
         resumen_grupos.append({
-            "categoria":    cat,
-            "color":        CATEGORIA_COLORES.get(cat, "secondary"),
-            "n":            len(items),
-            "avg_carbs":    avg_carbs,
-            "avg_delta":    round(sum(deltas) / len(deltas), 0) if deltas else None,
-            "n_con_glucosa":len(deltas),
-            "ultimas":      items[:8],   # muestra las últimas 8
+            "categoria":     cat,
+            "color":         CATEGORIA_COLORES.get(cat, "secondary"),
+            "n":             len(items),
+            "avg_carbs":     avg_carbs,
+            "avg_delta":     round(sum(deltas) / len(deltas), 0) if deltas else None,
+            "n_con_glucosa": len(deltas),
+            "ultimas":       items[:8],
         })
 
-    # Contar sin categoría
+    # ══ TAB 2: Por ingrediente (nuevo - usa MealComponent) ════════════════
+    # Agrupa cada componente por nombre y acumula el impacto glucémico
+    # del plato completo en el que apareció.
+    ingrediente_data: dict = defaultdict(lambda: {
+        "ocurrencias": [], "carbs_list": [], "platos": []
+    })
+
+    for c in comidas:
+        imp = impacto_por_meal.get(c.id)
+        if c.components:
+            for comp in c.components:
+                nombre = comp.name.strip()
+                if not nombre:
+                    continue
+                ingrediente_data[nombre]["carbs_list"].append(comp.carbs_g or 0)
+                if imp:
+                    ingrediente_data[nombre]["ocurrencias"].append(imp["delta"])
+                ingrediente_data[nombre]["platos"].append({
+                    "plato":    c.name,
+                    "fecha":    c.timestamp.strftime("%d/%m"),
+                    "carbs":    int(comp.carbs_g or 0),
+                    "delta":    imp["delta"] if imp else None,
+                })
+
+    # Construir lista ordenada por CH promedio (mayor impacto al frente)
+    resumen_ingredientes = []
+    for nombre, data in ingrediente_data.items():
+        n = len(data["carbs_list"])
+        avg_carbs = round(sum(data["carbs_list"]) / n, 1) if n else 0
+        ocur = data["ocurrencias"]
+        avg_delta = round(sum(ocur) / len(ocur), 0) if ocur else None
+        resumen_ingredientes.append({
+            "nombre":        nombre,
+            "n":             n,
+            "avg_carbs":     avg_carbs,
+            "avg_delta":     avg_delta,
+            "n_con_glucosa": len(ocur),
+            "platos":        data["platos"][:6],
+        })
+
+    # Ordenar: primero por CH promedio (los que más carbos aportan)
+    resumen_ingredientes.sort(key=lambda x: (-x["avg_carbs"], -x["n"]))
+
+    # Ingredientes sin datos de glucosa = menos útiles, los movemos al final
+    resumen_ingredientes.sort(key=lambda x: (x["avg_delta"] is None, -x["avg_carbs"]))
+
     n_sin_cat = len(sin_cat)
     n_total   = len(comidas)
+    n_con_componentes = sum(1 for c in comidas if c.components)
 
     return render_template("comidas_grupos.html",
         grupos=resumen_grupos,
+        ingredientes=resumen_ingredientes,
+        active_tab=tab,
         categorias=sorted(CATEGORIAS_REGLAS.keys()),
         colores=CATEGORIA_COLORES,
         n_sin_cat=n_sin_cat,
         n_total=n_total,
+        n_con_componentes=n_con_componentes,
         dias=dias,
     )
 

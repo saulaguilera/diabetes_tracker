@@ -2,118 +2,135 @@
 {% block title %}Grupos de comidas — DiabetesTracker{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex justify-content-between align-items-center">
+
+<div class="list-page-header mb-4">
   <div>
-    <h1><i class="bi bi-tags-fill me-2 text-primary"></i>Grupos de comidas</h1>
-    <small class="text-muted">Análisis de impacto glucémico por categoría</small>
+    <h1 class="list-page-title">
+      <span class="list-icon-wrap" style="background:rgba(245,158,11,.12);">
+        <i class="bi bi-tags-fill" style="color:#d97706;"></i>
+      </span>
+      Análisis de comidas
+    </h1>
+    <p class="list-page-sub">Impacto glucémico por categoría e ingrediente</p>
   </div>
-  <div class="d-flex gap-2 align-items-center">
-    <span class="text-muted" style="font-size:.85rem;">Período:</span>
-    {% for d in [14, 30, 60, 90] %}
-      <a href="{{ url_for('comidas_grupos', dias=d) }}"
-         class="btn btn-sm {{ 'btn-primary' if dias == d else 'btn-outline-secondary' }}">{{ d }}d</a>
-    {% endfor %}
-    <a href="{{ url_for('comidas') }}" class="btn btn-sm btn-outline-secondary ms-2">
-      <i class="bi bi-list-ul me-1"></i>Ver lista
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    <div class="range-selector">
+      {% for d in [14, 30, 60, 90] %}
+        <a href="{{ url_for('comidas_grupos', dias=d, tab=active_tab) }}"
+           class="range-pill {{ 'range-pill-active' if dias == d else '' }}">{{ d }}d</a>
+      {% endfor %}
+    </div>
+    <a href="{{ url_for('comidas') }}" class="btn-list-secondary">
+      <i class="bi bi-list-ul me-1"></i>Lista
     </a>
   </div>
 </div>
 
-<!-- Resumen -->
-<div class="row g-2 mb-3">
+<!-- Stats chips -->
+<div class="row g-2 mb-4">
   <div class="col-6 col-md-3">
-    <div class="stat-card">
-      <div class="stat-value text-primary">{{ grupos | length }}</div>
-      <div class="stat-label">Categorías con datos</div>
+    <div class="grp-stat-card">
+      <div class="gsc-val text-primary">{{ grupos | length }}</div>
+      <div class="gsc-lbl">Categorías</div>
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="stat-card">
-      <div class="stat-value">{{ n_total }}</div>
-      <div class="stat-label">Comidas en el período</div>
+    <div class="grp-stat-card">
+      <div class="gsc-val">{{ n_total }}</div>
+      <div class="gsc-lbl">Comidas</div>
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="stat-card">
-      <div class="stat-value {{ 'text-warning' if n_sin_cat > 0 else 'text-success' }}">
+    <div class="grp-stat-card">
+      <div class="gsc-val text-success">{{ ingredientes | length }}</div>
+      <div class="gsc-lbl">Ingredientes únicos</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="grp-stat-card">
+      <div class="gsc-val {{ 'text-warning' if n_sin_cat > 0 else 'text-success' }}">
         {{ n_sin_cat }}
       </div>
-      <div class="stat-label">Sin categoría aún</div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="stat-card">
-      <div class="stat-value text-success">
-        {{ n_total - n_sin_cat }}
-      </div>
-      <div class="stat-label">Categorizadas</div>
+      <div class="gsc-lbl">Sin categoría</div>
     </div>
   </div>
 </div>
 
 {% if n_sin_cat > 0 %}
-<div class="alert alert-warning d-flex align-items-center gap-2 py-2 mb-3" style="font-size:.88rem;">
-  <i class="bi bi-tags fs-5"></i>
-  <span>
-    Tenés <strong>{{ n_sin_cat }}</strong> comidas sin categoría.
-    <a href="{{ url_for('comidas') }}" class="alert-link">Ir a la lista</a>
-    para asignarlas manualmente o usar "Auto-categorizar".
-  </span>
+<div class="grp-alert mb-3">
+  <i class="bi bi-tags text-warning flex-shrink-0"></i>
+  Tenés <strong>{{ n_sin_cat }}</strong> comidas sin categoría.
+  <a href="{{ url_for('comidas') }}" style="color:#d97706;">Ir a la lista</a>
+  para asignarlas.
 </div>
 {% endif %}
 
+<!-- Tabs -->
+<div class="backup-tabs mb-3">
+  <a href="{{ url_for('comidas_grupos', dias=dias, tab='categorias') }}"
+     class="backup-tab {{ 'backup-tab-active' if active_tab == 'categorias' }}">
+    <i class="bi bi-tags"></i> Por categoría
+  </a>
+  <a href="{{ url_for('comidas_grupos', dias=dias, tab='ingredientes') }}"
+     class="backup-tab {{ 'backup-tab-active' if active_tab == 'ingredientes' }}">
+    <i class="bi bi-list-check"></i>
+    Por ingrediente
+    {% if ingredientes %}<span class="grp-tab-count">{{ ingredientes | length }}</span>{% endif %}
+  </a>
+</div>
+
+{# ══ TAB: Categorías ══════════════════════════════════════════════════════ #}
+{% if active_tab == 'categorias' %}
+
 {% if not grupos %}
-<div class="chart-box text-center py-5 text-muted">
-  <i class="bi bi-tags fs-2 d-block mb-2 opacity-25"></i>
-  Sin comidas categorizadas en este período.
-  <br>
-  <a href="{{ url_for('comidas') }}" class="btn btn-sm btn-primary mt-3">
+<div class="list-empty">
+  <i class="bi bi-tags list-empty-icon"></i>
+  <p class="list-empty-text">Sin comidas categorizadas en este período.</p>
+  <a href="{{ url_for('comidas') }}" class="btn-list-add btn-add-warning mt-2">
     Ir a Comidas y categorizar
   </a>
 </div>
 {% else %}
 
-<!-- Tabla resumen por grupo -->
+<!-- Tabla resumen -->
 <div class="chart-box mb-3">
-  <h6 class="fw-semibold mb-3">
-    <i class="bi bi-table me-1 text-primary"></i>Resumen por categoría
-  </h6>
+  <div class="grp-section-title mb-3">Resumen por categoría</div>
   <div class="table-responsive">
-    <table class="table table-hover mb-0" style="font-size:.9rem;">
+    <table class="grp-table">
       <thead>
         <tr>
           <th>Categoría</th>
           <th class="text-center">Comidas</th>
           <th class="text-center">CH promedio</th>
           <th class="text-center">Δ glucemia promedio</th>
-          <th class="text-center">Con datos de glucosa</th>
+          <th class="text-center">Con glucosa</th>
         </tr>
       </thead>
       <tbody>
         {% for g in grupos | sort(attribute='avg_carbs', reverse=True) %}
         <tr>
           <td>
-            <span class="badge bg-{{ g.color }} rounded-pill me-1">{{ g.categoria }}</span>
+            <span class="grp-cat-badge grp-cat-{{ g.color }}">{{ g.categoria }}</span>
           </td>
           <td class="text-center fw-semibold">{{ g.n }}</td>
           <td class="text-center">
-            <span class="fw-bold text-warning">{{ g.avg_carbs }}g</span>
-            <small class="text-muted">CH</small>
+            <span class="fw-bold" style="color:#d97706;">{{ g.avg_carbs }}g</span>
+            <span class="text-muted" style="font-size:.75rem;"> CH</span>
           </td>
           <td class="text-center">
             {% if g.avg_delta is not none %}
-              <span class="fw-bold
-                {% if g.avg_delta > 80 %}text-danger
-                {% elif g.avg_delta > 40 %}text-warning
-                {% elif g.avg_delta < 0 %}text-primary
-                {% else %}text-success{% endif %}">
+              <span class="grp-delta
+                {% if g.avg_delta > 80 %}grp-delta-bad
+                {% elif g.avg_delta > 40 %}grp-delta-warn
+                {% elif g.avg_delta < 0 %}grp-delta-low
+                {% else %}grp-delta-ok{% endif %}">
                 {{ '+' if g.avg_delta > 0 else '' }}{{ g.avg_delta | int }} mg/dL
               </span>
             {% else %}
               <span class="text-muted">—</span>
             {% endif %}
           </td>
-          <td class="text-center text-muted">
+          <td class="text-center text-muted" style="font-size:.82rem;">
             {{ g.n_con_glucosa }} / {{ g.n }}
           </td>
         </tr>
@@ -123,29 +140,25 @@
   </div>
 </div>
 
-<!-- Cards detalle por grupo -->
+<!-- Cards por grupo -->
 <div class="row g-3">
   {% for g in grupos %}
   <div class="col-lg-6">
     <div class="chart-box h-100">
-
-      <!-- Header del grupo -->
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <div>
-          <span class="badge bg-{{ g.color }} rounded-pill me-2" style="font-size:.85rem;">
-            {{ g.categoria }}
-          </span>
-          <small class="text-muted">{{ g.n }} comida{{ 's' if g.n != 1 }}</small>
+      <div class="grp-card-header">
+        <div class="d-flex align-items-center gap-2">
+          <span class="grp-cat-badge grp-cat-{{ g.color }}">{{ g.categoria }}</span>
+          <span class="text-muted" style="font-size:.8rem;">{{ g.n }} comida{{ 's' if g.n != 1 }}</span>
         </div>
         <div class="text-end">
-          <span class="fw-bold text-warning">{{ g.avg_carbs }}g CH</span>
-          <small class="text-muted d-block">prom./comida</small>
+          <span class="fw-bold" style="color:#d97706;">{{ g.avg_carbs }}g CH</span>
+          <span class="text-muted d-block" style="font-size:.7rem;">prom./comida</span>
         </div>
       </div>
 
       {% if g.avg_delta is not none %}
-      <div class="mb-2 p-2 rounded" style="background:#f8fafc; font-size:.85rem;">
-        <i class="bi bi-graph-up me-1 text-muted"></i>
+      <div class="grp-impact-box mb-2">
+        <i class="bi bi-graph-up me-1" style="color:var(--text-muted);"></i>
         Alza glucémica promedio:
         <strong class="
           {% if g.avg_delta > 80 %}text-danger
@@ -153,27 +166,22 @@
           {% else %}text-success{% endif %}">
           {{ '+' if g.avg_delta > 0 else '' }}{{ g.avg_delta | int }} mg/dL
         </strong>
-        <small class="text-muted">(en {{ g.n_con_glucosa }} comidas con glucosa registrada)</small>
+        <span class="text-muted" style="font-size:.74rem;">
+          ({{ g.n_con_glucosa }} con glucosa)
+        </span>
       </div>
       {% endif %}
 
-      <!-- Últimas comidas del grupo -->
-      <div style="font-size:.82rem;">
+      <div class="grp-meal-list">
         {% for c in g.ultimas %}
-        <div class="d-flex justify-content-between py-1 border-bottom">
-          <div>
-            <span class="text-muted me-2" style="font-size:.75rem;">
-              {{ c.timestamp.strftime('%d/%m') }}
-            </span>
-            {{ c.name[:35] }}
-          </div>
-          <span class="fw-semibold text-warning flex-shrink-0 ms-2">
-            {{ c.carbs_g | int }}g
-          </span>
+        <div class="grp-meal-row">
+          <span class="grp-meal-date">{{ c.timestamp.strftime('%d/%m') }}</span>
+          <span class="grp-meal-name">{{ c.name[:38] }}</span>
+          <span class="grp-meal-ch">{{ c.carbs_g | int }}g</span>
         </div>
         {% endfor %}
         {% if g.n > g.ultimas | length %}
-        <div class="text-muted text-center pt-1" style="font-size:.78rem;">
+        <div class="text-muted text-center pt-1" style="font-size:.75rem;">
           + {{ g.n - (g.ultimas | length) }} más en el período
         </div>
         {% endif %}
@@ -183,12 +191,271 @@
   </div>
   {% endfor %}
 </div>
+
+{% endif %}
+{% endif %}{# /tab categorias #}
+
+
+{# ══ TAB: Ingredientes ════════════════════════════════════════════════════ #}
+{% if active_tab == 'ingredientes' %}
+
+{% if not ingredientes %}
+<div class="list-empty">
+  <i class="bi bi-list-check list-empty-icon"></i>
+  <p class="list-empty-text">
+    No hay ingredientes registrados aún.<br>
+    Al registrar comidas usá el campo de ingredientes para desglosar cada alimento.
+  </p>
+  <a href="{{ url_for('comida_nueva') }}" class="btn-list-add btn-add-success mt-2">
+    <i class="bi bi-plus-lg"></i> Nueva comida con ingredientes
+  </a>
+</div>
+{% else %}
+
+<!-- Nota explicativa -->
+<div class="grp-info-note mb-3">
+  <i class="bi bi-info-circle text-primary flex-shrink-0"></i>
+  <div style="font-size:.82rem;">
+    <strong>Δ glucemia</strong> = alza observada en el plato completo donde apareció ese ingrediente.
+    Un ingrediente con muchos CH y alto Δ es el probable responsable del pico.
+    Un ingrediente con 0g CH y alto Δ apareció en platos con otros alimentos que lo causaron.
+  </div>
+</div>
+
+<!-- Tabla resumen por ingrediente -->
+<div class="chart-box mb-3">
+  <div class="grp-section-title mb-3">Todos los ingredientes registrados</div>
+  <div class="table-responsive">
+    <table class="grp-table">
+      <thead>
+        <tr>
+          <th>Ingrediente</th>
+          <th class="text-center">Veces usado</th>
+          <th class="text-center">CH promedio</th>
+          <th class="text-center">Δ glucemia promedio</th>
+          <th class="text-center">Con glucosa</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ing in ingredientes %}
+        <tr>
+          <td class="fw-semibold" style="font-size:.86rem;">{{ ing.nombre }}</td>
+          <td class="text-center text-muted">{{ ing.n }}</td>
+          <td class="text-center">
+            {% if ing.avg_carbs > 0 %}
+              <span class="fw-bold" style="color:#d97706;">{{ ing.avg_carbs }}g</span>
+              <span class="text-muted" style="font-size:.74rem;"> CH</span>
+            {% else %}
+              <span class="text-muted">0g</span>
+            {% endif %}
+          </td>
+          <td class="text-center">
+            {% if ing.avg_delta is not none %}
+              <span class="grp-delta
+                {% if ing.avg_delta > 80 %}grp-delta-bad
+                {% elif ing.avg_delta > 40 %}grp-delta-warn
+                {% elif ing.avg_delta < 0 %}grp-delta-low
+                {% else %}grp-delta-ok{% endif %}">
+                {{ '+' if ing.avg_delta > 0 else '' }}{{ ing.avg_delta | int }} mg/dL
+              </span>
+            {% else %}
+              <span class="text-muted" style="font-size:.8rem;">sin datos</span>
+            {% endif %}
+          </td>
+          <td class="text-center text-muted" style="font-size:.82rem;">
+            {{ ing.n_con_glucosa }} / {{ ing.n }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Cards de ingredientes con mayor impacto -->
+{% set ing_con_datos = ingredientes | selectattr('avg_delta', 'ne', None) | list %}
+{% if ing_con_datos %}
+<div class="grp-section-title mb-3">Detalle de ingredientes con datos glucémicos</div>
+<div class="row g-3">
+  {% for ing in ing_con_datos | sort(attribute='avg_carbs', reverse=True) %}
+  <div class="col-lg-6">
+    <div class="chart-box h-100">
+
+      <div class="grp-card-header">
+        <div>
+          <div class="grp-ing-name">{{ ing.nombre }}</div>
+          <div class="text-muted" style="font-size:.76rem;">
+            Usado {{ ing.n }} vez{{ 'es' if ing.n != 1 }}
+          </div>
+        </div>
+        <div class="text-end">
+          {% if ing.avg_carbs > 0 %}
+            <div class="grp-ing-ch">{{ ing.avg_carbs }}g</div>
+            <div class="text-muted" style="font-size:.68rem;">CH promedio</div>
+          {% else %}
+            <div style="font-size:.8rem; color:var(--text-muted);">Sin CH</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="grp-impact-box mb-2">
+        <i class="bi bi-graph-up me-1" style="color:var(--text-muted);"></i>
+        Δ glucemia promedio:
+        <strong class="
+          {% if ing.avg_delta > 80 %}text-danger
+          {% elif ing.avg_delta > 40 %}text-warning
+          {% elif ing.avg_delta < 0 %}text-primary
+          {% else %}text-success{% endif %}">
+          {{ '+' if ing.avg_delta > 0 else '' }}{{ ing.avg_delta | int }} mg/dL
+        </strong>
+        <span class="text-muted" style="font-size:.74rem;">
+          (en {{ ing.n_con_glucosa }} de {{ ing.n }} registros)
+        </span>
+      </div>
+
+      <!-- Platos donde apareció -->
+      <div class="grp-meal-list">
+        {% for p in ing.platos %}
+        <div class="grp-meal-row">
+          <span class="grp-meal-date">{{ p.fecha }}</span>
+          <span class="grp-meal-name">{{ p.plato[:30] }}</span>
+          <span class="grp-meal-ch">{{ p.carbs }}g</span>
+          {% if p.delta is not none %}
+            <span class="grp-delta-tiny
+              {% if p.delta > 80 %}grp-delta-bad
+              {% elif p.delta > 40 %}grp-delta-warn
+              {% elif p.delta < 0 %}grp-delta-low
+              {% else %}grp-delta-ok{% endif %}">
+              {{ '+' if p.delta > 0 else '' }}{{ p.delta | int }}
+            </span>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+
+    </div>
+  </div>
+  {% endfor %}
+</div>
 {% endif %}
 
-<!-- Nota -->
-<div class="alert alert-light border mt-3" style="font-size:.82rem;">
-  <i class="bi bi-info-circle text-primary me-1"></i>
-  <strong>Δ glucemia</strong> = diferencia entre el pico de glucosa en 2h post-comida y la lectura previa.
-  Solo se calcula cuando existe una lectura de glucemia en los 30 minutos anteriores a la comida.
+{% endif %}
+{% endif %}{# /tab ingredientes #}
+
+
+<!-- Nota metodológica -->
+<div class="grp-info-note mt-3">
+  <i class="bi bi-info-circle text-primary flex-shrink-0"></i>
+  <div style="font-size:.78rem; color:var(--text-muted);">
+    <strong>Δ glucemia</strong> = pico en 2h post-comida menos lectura previa (30 min antes).
+    Solo se calcula cuando existe una lectura de glucemia cercana.
+    Los ingredientes sin datos de glucosa aún no tienen suficientes registros para el análisis.
+  </div>
 </div>
+
+{% endblock %}
+
+{% block scripts %}
+{{ list_styles() }}
+<style>
+/* ── Grupos de comidas ────────────────────────────────────────────────── */
+.grp-stat-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: .9rem .75rem; text-align: center;
+}
+.gsc-val { font-size: 1.55rem; font-weight: 800; line-height: 1.1; }
+.gsc-lbl { font-size: .7rem; font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: .04em; margin-top: .2rem; }
+
+.grp-alert {
+  display: flex; align-items: center; gap: .65rem;
+  background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.2);
+  border-radius: 12px; padding: .7rem 1rem; font-size: .85rem;
+}
+
+/* Tab count badge */
+.grp-tab-count {
+  background: rgba(99,102,241,.15); color: #6366f1;
+  font-size: .65rem; font-weight: 700; padding: .1em .45em;
+  border-radius: 20px; margin-left: .2rem;
+}
+
+/* Section titles */
+.grp-section-title {
+  font-size: .72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--text-muted);
+}
+
+/* Tables */
+.grp-table {
+  width: 100%; border-collapse: collapse;
+}
+.grp-table thead tr { border-bottom: 1px solid var(--border); }
+.grp-table th {
+  padding: .4rem .75rem; font-size: .7rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted);
+}
+.grp-table td {
+  padding: .55rem .75rem; border-bottom: 1px solid var(--border); vertical-align: middle;
+}
+.grp-table tr:last-child td { border-bottom: none; }
+.grp-table tr:hover td { background: var(--surface2); }
+
+/* Category badge */
+.grp-cat-badge {
+  display: inline-block; padding: .2em .65em; border-radius: 20px;
+  font-size: .78rem; font-weight: 700;
+}
+.grp-cat-success   { background: rgba(34,197,94,.15);  color: #16a34a; }
+.grp-cat-warning   { background: rgba(245,158,11,.15); color: #d97706; }
+.grp-cat-primary   { background: rgba(59,130,246,.15); color: #2563eb; }
+.grp-cat-danger    { background: rgba(239,68,68,.15);  color: #dc2626; }
+.grp-cat-info      { background: rgba(14,165,233,.15); color: #0284c7; }
+.grp-cat-secondary { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
+
+/* Delta chips */
+.grp-delta {
+  display: inline-block; padding: .2em .55em; border-radius: 8px;
+  font-size: .82rem; font-weight: 700;
+}
+.grp-delta-bad  { background: rgba(239,68,68,.12);  color: #dc2626; }
+.grp-delta-warn { background: rgba(245,158,11,.12); color: #d97706; }
+.grp-delta-low  { background: rgba(59,130,246,.12); color: #2563eb; }
+.grp-delta-ok   { background: rgba(34,197,94,.12);  color: #16a34a; }
+.grp-delta-tiny {
+  font-size: .7rem; font-weight: 700; padding: .1em .35em;
+  border-radius: 6px; flex-shrink: 0;
+}
+
+/* Card layout */
+.grp-card-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: .65rem;
+}
+.grp-impact-box {
+  background: var(--surface2); border-radius: 10px;
+  padding: .5rem .75rem; font-size: .83rem;
+}
+.grp-ing-name { font-size: .95rem; font-weight: 700; }
+.grp-ing-ch   { font-size: 1.4rem; font-weight: 800; color: #d97706; line-height: 1; }
+
+/* Meal list inside card */
+.grp-meal-list { display: flex; flex-direction: column; gap: 0; }
+.grp-meal-row {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .4rem 0; border-bottom: 1px solid var(--border);
+  font-size: .82rem;
+}
+.grp-meal-row:last-child { border-bottom: none; }
+.grp-meal-date { color: var(--text-muted); font-size: .74rem; white-space: nowrap; flex-shrink: 0; }
+.grp-meal-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grp-meal-ch   { color: #d97706; font-weight: 700; font-size: .78rem; flex-shrink: 0; }
+
+/* Info note */
+.grp-info-note {
+  display: flex; align-items: flex-start; gap: .65rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: .85rem 1rem;
+}
+</style>
 {% endblock %}
