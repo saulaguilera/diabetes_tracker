@@ -1,104 +1,313 @@
 {% extends "base.html" %}
-{% block title %}Backup — DiabetesTracker{% endblock %}
+{% block title %}Backup & Datos — DiabetesTracker{% endblock %}
 
 {% block content %}
-<div class="page-header">
-  <h1><i class="bi bi-database-fill-gear me-2 text-primary"></i>Backup de datos</h1>
-  <small class="text-muted">Exportá tu data para llevarla a otro dispositivo o restaurarla</small>
+
+<div class="list-page-header mb-4">
+  <div>
+    <h1 class="list-page-title">
+      <span class="list-icon-wrap" style="background:rgba(99,102,241,.12);">
+        <i class="bi bi-database-fill-gear" style="color:#6366f1;"></i>
+      </span>
+      Backup & Datos
+    </h1>
+    <p class="list-page-sub">Exportá, importá y gestioná tu historial</p>
+  </div>
 </div>
 
-<div class="row g-3">
-
-  <!-- Exportar -->
-  <div class="col-md-6">
-    <div class="chart-box h-100">
-      <h5 class="fw-semibold mb-1">
-        <i class="bi bi-download text-success me-2"></i>Exportar
-      </h5>
-      <p class="text-muted mb-3" style="font-size:.87rem;">
-        Descarga todos tus datos para hacer backup o migrar a otro servidor.
-      </p>
-
-      <!-- Estadísticas actuales -->
-      <div class="row g-2 mb-3">
-        {% for label, val in [
-          ('Glucemias', stats.glucemia), ('Comidas', stats.comidas),
-          ('Insulinas', stats.insulina), ('Actividades', stats.actividad),
-          ('Alimentos', stats.alimentos)
-        ] %}
-        <div class="col-4">
-          <div class="text-center p-2 rounded" style="background:var(--surface2);">
-            <div class="fw-bold text-primary">{{ val }}</div>
-            <div style="font-size:.72rem; color:var(--text-muted);">{{ label }}</div>
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-
-      <div class="d-grid gap-2">
-        <!-- Descarga SQLite -->
-        <a href="{{ url_for('backup_exportar_db') }}" class="btn btn-primary">
-          <i class="bi bi-database-fill-down me-2"></i>Descargar base de datos (.db)
-          <span class="badge bg-warning text-dark ms-1" style="font-size:.68rem;">SQL</span>
-        </a>
-        <p class="text-muted mb-1" style="font-size:.76rem;">
-          <i class="bi bi-info-circle me-1"></i>
-          Archivo SQLite completo. Abrilo con <strong>DB Browser for SQLite</strong>
-          o usalo directamente con pandas/Python para análisis.
-        </p>
-
-        <!-- Descarga JSON -->
-        <a href="{{ url_for('backup_exportar') }}" class="btn btn-outline-success">
-          <i class="bi bi-filetype-json me-2"></i>Descargar backup (.json)
-        </a>
-        <p class="text-muted mb-0" style="font-size:.76rem;">
-          <i class="bi bi-info-circle me-1"></i>
-          Formato portable para restaurar en otro servidor.
-        </p>
-      </div>
+<!-- Stats resumen -->
+<div class="row g-2 mb-4">
+  {% for label, val, icon, col in [
+    ('Glucemias',   stats.glucemia,  'bi-droplet-fill',    'text-primary'),
+    ('Comidas',     stats.comidas,   'bi-egg-fried',       'text-success'),
+    ('Insulinas',   stats.insulina,  'bi-capsule-pill',    'text-warning'),
+    ('Actividades', stats.actividad, 'bi-bicycle',         'text-info'),
+    ('Alimentos',   stats.alimentos, 'bi-journal-bookmark','text-secondary'),
+  ] %}
+  <div class="col">
+    <div class="backup-stat-chip">
+      <i class="bi {{ icon }} {{ col }}"></i>
+      <div class="bsc-val">{{ val }}</div>
+      <div class="bsc-lbl">{{ label }}</div>
     </div>
   </div>
+  {% endfor %}
+</div>
 
-  <!-- Importar -->
-  <div class="col-md-6">
-    <div class="chart-box h-100">
-      <h5 class="fw-semibold mb-1">
-        <i class="bi bi-upload text-primary me-2"></i>Restaurar
-      </h5>
-      <p class="text-muted mb-3" style="font-size:.87rem;">
-        Subí un archivo de backup para restaurar tus datos.
-        Los registros que ya existen no se duplican.
-      </p>
+<!-- Tabs -->
+<div class="backup-tabs mb-3">
+  <a href="{{ url_for('backup_importar', tab='exportar') }}"
+     class="backup-tab {{ 'backup-tab-active' if active_tab == 'exportar' }}">
+    <i class="bi bi-download"></i> Exportar
+  </a>
+  <a href="{{ url_for('backup_importar', tab='restaurar') }}"
+     class="backup-tab {{ 'backup-tab-active' if active_tab == 'restaurar' }}">
+    <i class="bi bi-upload"></i> Restaurar JSON
+  </a>
+  <a href="{{ url_for('backup_importar', tab='libre') }}"
+     class="backup-tab {{ 'backup-tab-active' if active_tab == 'libre' }}">
+    <i class="bi bi-file-earmark-csv"></i> Importar Libre CSV
+  </a>
+</div>
 
-      <form method="post" enctype="multipart/form-data">
-        <div class="mb-3">
-          <label class="form-label fw-semibold" style="font-size:.87rem;">
-            Archivo de backup (.json)
-          </label>
-          <input type="file" name="archivo" accept=".json"
-                 class="form-control" required>
+<!-- ── Tab: Exportar ──────────────────────────────────────────────────────── -->
+{% if active_tab == 'exportar' %}
+<div class="backup-panel">
+  <p class="backup-panel-desc">
+    Descargá todos tus datos para hacer backup o analizar offline.
+  </p>
+  <div class="backup-download-cards">
+
+    <div class="backup-dl-card">
+      <div class="backup-dl-icon" style="background:rgba(59,130,246,.1);">
+        <i class="bi bi-database-fill-down text-primary" style="font-size:1.5rem;"></i>
+      </div>
+      <div class="backup-dl-info">
+        <div class="backup-dl-title">Base de datos SQLite <span class="backup-badge">SQL</span></div>
+        <div class="backup-dl-desc">
+          Archivo completo con todos los datos. Abrilo con
+          <a href="https://sqlitebrowser.org" target="_blank">DB Browser for SQLite</a>
+          o usalo con Python/pandas para análisis y ML.
         </div>
-        <button type="submit" class="btn btn-primary w-100"
-                onclick="return confirm('¿Importar datos desde este archivo? Los registros existentes no se tocarán.')">
-          <i class="bi bi-upload me-2"></i>Restaurar datos
+      </div>
+      <a href="{{ url_for('backup_exportar_db') }}" class="backup-dl-btn btn-primary-dl">
+        <i class="bi bi-download"></i> .db
+      </a>
+    </div>
+
+    <div class="backup-dl-card">
+      <div class="backup-dl-icon" style="background:rgba(34,197,94,.1);">
+        <i class="bi bi-filetype-json text-success" style="font-size:1.5rem;"></i>
+      </div>
+      <div class="backup-dl-info">
+        <div class="backup-dl-title">Backup JSON <span class="backup-badge backup-badge-green">Portátil</span></div>
+        <div class="backup-dl-desc">
+          Formato para migrar datos entre servidores de la app.
+          Exportá desde Railway → importá en otro servidor (o al revés).
+        </div>
+      </div>
+      <a href="{{ url_for('backup_exportar') }}" class="backup-dl-btn btn-success-dl">
+        <i class="bi bi-download"></i> .json
+      </a>
+    </div>
+
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Tab: Restaurar JSON ────────────────────────────────────────────────── -->
+{% if active_tab == 'restaurar' %}
+<div class="backup-panel">
+  <p class="backup-panel-desc">
+    Subí un archivo <code>.json</code> exportado desde esta app para restaurar tus datos.
+    Los registros que ya existen no se duplican.
+  </p>
+  <form method="post" enctype="multipart/form-data" class="backup-upload-form">
+    <div class="backup-dropzone" id="dropzone-json"
+         onclick="document.getElementById('file-json').click()">
+      <i class="bi bi-filetype-json" style="font-size:2rem; color:#22c55e;"></i>
+      <div class="bdu-title">Elegí un archivo .json</div>
+      <div class="bdu-sub" id="json-filename">o arrastralo aquí</div>
+    </div>
+    <input type="file" name="archivo" id="file-json" accept=".json"
+           required style="display:none;"
+           onchange="document.getElementById('json-filename').textContent = this.files[0]?.name || 'o arrastralo aquí'">
+    <button type="submit" class="backup-submit-btn"
+            onclick="return confirm('¿Restaurar datos desde este archivo? Los registros existentes no se tocarán.')">
+      <i class="bi bi-upload me-2"></i>Restaurar datos
+    </button>
+  </form>
+</div>
+{% endif %}
+
+<!-- ── Tab: Importar Libre CSV ────────────────────────────────────────────── -->
+{% if active_tab == 'libre' %}
+<div class="backup-panel">
+  <p class="backup-panel-desc">
+    Importá lecturas del sensor Freestyle Libre desde el CSV de LibreView.
+    Con la <strong>sync automática activa</strong>, esto ya no es necesario — pero sirve para datos históricos.
+  </p>
+
+  <div class="row g-3">
+    <div class="col-md-6">
+      <form method="post" action="{{ url_for('importar') }}" enctype="multipart/form-data" class="backup-upload-form">
+        <div class="backup-dropzone" id="dropzone-csv"
+             onclick="document.getElementById('file-csv').click()">
+          <i class="bi bi-file-earmark-csv" style="font-size:2rem; color:#3b82f6;"></i>
+          <div class="bdu-title">Elegí un archivo .csv</div>
+          <div class="bdu-sub" id="csv-filename">exportado desde LibreView</div>
+        </div>
+        <input type="file" name="archivo" id="file-csv" accept=".csv"
+               required style="display:none;"
+               onchange="document.getElementById('csv-filename').textContent = this.files[0]?.name || 'exportado desde LibreView'">
+        <button type="submit" class="backup-submit-btn">
+          <i class="bi bi-cloud-upload me-2"></i>Importar CSV
         </button>
       </form>
+
+      <div class="backup-steps mt-3">
+        <div class="backup-steps-title">¿Cómo exportar desde FreeStyle LibreLink?</div>
+        <ol>
+          <li>Abrí la app <strong>FreeStyle LibreLink</strong></li>
+          <li>Menú → Mi cuenta → Conexiones</li>
+          <li>Conectá con <strong>LibreView</strong> (libreview.com)</li>
+          <li>En LibreView: Reportes → Exportar datos</li>
+          <li>Descargá el <code>.csv</code> y cargalo aquí</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <div class="backup-history">
+        <div class="backup-history-title">
+          <i class="bi bi-clock-history me-1"></i> Importaciones anteriores
+        </div>
+        {% if imports %}
+          {% for imp in imports %}
+          <div class="backup-history-row">
+            <div class="backup-history-name">{{ imp.filename }}</div>
+            <div class="backup-history-meta">
+              <span class="list-badge list-badge-rango">{{ imp.records_count }} registros</span>
+              {% if imp.date_from and imp.date_to %}
+                <span class="text-muted" style="font-size:.72rem;">
+                  {{ imp.date_from.strftime('%d/%m') }}–{{ imp.date_to.strftime('%d/%m/%y') }}
+                </span>
+              {% endif %}
+              <span class="text-muted" style="font-size:.72rem;">{{ imp.imported_at.strftime('%d/%m %H:%M') }}</span>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="text-center text-muted py-4" style="font-size:.85rem;">
+            <i class="bi bi-inbox d-block mb-1" style="font-size:1.5rem;"></i>
+            Sin importaciones previas
+          </div>
+        {% endif %}
+      </div>
     </div>
   </div>
+{% endif %}
 
 </div>
+{% endblock %}
 
-<div class="alert border mt-3" style="font-size:.80rem; background:var(--surface2); color:var(--text);">
-  <div class="mb-2">
-    <i class="bi bi-database-fill-down text-primary me-1"></i>
-    <strong>Archivo .db (SQLite)</strong> — para análisis y ML en Python/pandas,
-    o para explorar con <a href="https://sqlitebrowser.org" target="_blank">DB Browser for SQLite</a>.
-    Contiene todos los datos en formato SQL.
-  </div>
-  <div>
-    <i class="bi bi-filetype-json text-success me-1"></i>
-    <strong>Archivo .json</strong> — para migrar datos entre servidores.
-    Exportá desde Railway → importá en otro servidor (o al revés).
-  </div>
-</div>
+{% block scripts %}
+{{ list_styles() }}
+<style>
+/* ── Backup page ─────────────────────────────────────────────────────────── */
+.backup-stat-chip {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: .75rem .5rem;
+  text-align: center; display: flex; flex-direction: column;
+  align-items: center; gap: .2rem;
+}
+.backup-stat-chip i { font-size: 1.1rem; }
+.bsc-val { font-size: 1.2rem; font-weight: 800; line-height: 1; }
+.bsc-lbl { font-size: .65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+
+/* Tabs */
+.backup-tabs {
+  display: flex; gap: .4rem; flex-wrap: wrap;
+}
+.backup-tab {
+  display: inline-flex; align-items: center; gap: .4rem;
+  padding: .4rem 1rem; border-radius: 10px; font-size: .84rem; font-weight: 600;
+  text-decoration: none; color: var(--text-muted);
+  background: var(--surface2); border: 1px solid var(--border);
+  transition: all .15s;
+}
+.backup-tab:hover { color: var(--text); border-color: var(--text-muted); }
+.backup-tab-active {
+  background: #6366f1; color: #fff !important; border-color: #6366f1;
+}
+
+/* Panel */
+.backup-panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 1.5rem;
+}
+.backup-panel-desc {
+  font-size: .88rem; color: var(--text-muted); margin-bottom: 1.25rem;
+}
+
+/* Download cards */
+.backup-download-cards { display: flex; flex-direction: column; gap: .85rem; }
+.backup-dl-card {
+  display: flex; align-items: center; gap: 1rem;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 14px; padding: 1rem 1.1rem;
+}
+.backup-dl-icon {
+  width: 52px; height: 52px; border-radius: 14px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.backup-dl-info { flex: 1; min-width: 0; }
+.backup-dl-title { font-size: .9rem; font-weight: 700; margin-bottom: .25rem; }
+.backup-dl-desc  { font-size: .78rem; color: var(--text-muted); line-height: 1.4; }
+.backup-badge {
+  display: inline-block; font-size: .65rem; font-weight: 700; padding: .1em .45em;
+  border-radius: 6px; background: rgba(59,130,246,.12); color: #2563eb;
+  vertical-align: middle; margin-left: .3rem;
+}
+.backup-badge-green { background: rgba(34,197,94,.12); color: #16a34a; }
+.backup-dl-btn {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: .35rem;
+  padding: .5rem 1rem; border-radius: 10px; font-size: .82rem; font-weight: 700;
+  text-decoration: none; border: none; cursor: pointer; transition: filter .15s;
+}
+.backup-dl-btn:hover { filter: brightness(1.1); }
+.btn-primary-dl { background: #3b82f6; color: #fff; }
+.btn-success-dl { background: #22c55e; color: #fff; }
+
+/* Upload form */
+.backup-upload-form { display: flex; flex-direction: column; gap: .85rem; }
+.backup-dropzone {
+  border: 2px dashed var(--border); border-radius: 14px;
+  padding: 2rem 1rem; text-align: center; cursor: pointer;
+  transition: border-color .15s, background .15s;
+  display: flex; flex-direction: column; align-items: center; gap: .5rem;
+}
+.backup-dropzone:hover { border-color: #6366f1; background: rgba(99,102,241,.04); }
+.bdu-title { font-size: .95rem; font-weight: 700; }
+.bdu-sub   { font-size: .78rem; color: var(--text-muted); }
+.backup-submit-btn {
+  background: #6366f1; color: #fff; border: none; border-radius: 12px;
+  padding: .7rem; font-size: .9rem; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+}
+.backup-submit-btn:hover { background: #4f46e5; }
+
+/* Steps */
+.backup-steps {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 1rem;
+}
+.backup-steps-title { font-size: .8rem; font-weight: 700; margin-bottom: .6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+.backup-steps ol { margin: 0; padding-left: 1.2rem; }
+.backup-steps li { font-size: .83rem; color: var(--text-muted); margin-bottom: .3rem; line-height: 1.4; }
+.backup-steps li strong { color: var(--text); }
+
+/* History */
+.backup-history {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px; overflow: hidden;
+}
+.backup-history-title {
+  padding: .7rem 1rem; font-size: .8rem; font-weight: 700;
+  color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em;
+  border-bottom: 1px solid var(--border);
+}
+.backup-history-row {
+  padding: .6rem 1rem; border-bottom: 1px solid var(--border);
+}
+.backup-history-row:last-child { border-bottom: none; }
+.backup-history-name { font-size: .82rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.backup-history-meta { display: flex; align-items: center; gap: .5rem; margin-top: .2rem; flex-wrap: wrap; }
+
+@media (max-width: 576px) {
+  .backup-dl-card { flex-direction: column; text-align: center; }
+  .backup-dl-icon { margin: 0 auto; }
+}
+</style>
 {% endblock %}

@@ -1300,7 +1300,9 @@ def backup_importar():
         "actividad": Activity.query.count(),
         "alimentos": FoodItem.query.count(),
     }
-    return render_template("backup.html", stats=stats)
+    imports = CGMImport.query.order_by(CGMImport.imported_at.desc()).all()
+    active_tab = request.args.get("tab", "exportar")
+    return render_template("backup.html", stats=stats, imports=imports, active_tab=active_tab)
 
 
 @app.route("/importar", methods=["GET", "POST"])

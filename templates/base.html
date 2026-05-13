@@ -668,11 +668,8 @@
   <a href="{{ url_for('reporte_semanal') }}" class="nav-link {% if request.endpoint == 'reporte_semanal' %}active{% endif %}">
     <i class="bi bi-file-medical-fill"></i> Reporte clínico
   </a>
-  <a href="{{ url_for('importar') }}" class="nav-link {% if request.endpoint == 'importar' %}active{% endif %}">
-    <i class="bi bi-upload"></i> Importar Libre
-  </a>
-  <a href="{{ url_for('backup_importar') }}" class="nav-link {% if 'backup' in request.endpoint %}active{% endif %}">
-    <i class="bi bi-database-fill-gear"></i> Backup
+  <a href="{{ url_for('backup_importar') }}" class="nav-link {% if 'backup' in request.endpoint or request.endpoint == 'importar' %}active{% endif %}">
+    <i class="bi bi-database-fill-gear"></i> Backup & Datos
   </a>
 
   </div><!-- /nav-scroll -->
