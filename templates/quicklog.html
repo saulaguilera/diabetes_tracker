@@ -107,59 +107,32 @@
     </div>
 
     <div id="body-comida" class="ql-body">
-      <div class="position-relative mb-2">
-        <input type="text" id="comida_search" class="form-control"
-               placeholder="Buscar alimento o escribir nombre..."
-               autocomplete="off" oninput="buscarAlimento(this.value)">
-        <input type="hidden" name="comida_nombre" id="comida_nombre_hidden">
-        <input type="hidden" name="food_item_id" id="food_item_id">
-        <div id="alimento-dropdown" class="ql-dropdown"
-             style="display:none;"></div>
+
+      <!-- Nombre del plato -->
+      <div class="mb-2">
+        <input type="text" name="comida_nombre" id="comida_nombre_hidden"
+               class="form-control form-control-sm"
+               placeholder="Nombre del plato (ej. Almuerzo, Desayuno...)" required>
       </div>
-      <div class="row g-2">
-        <div class="col-6">
-          <div class="ql-macro-input">
-            <label>Carbohidratos</label>
-            <div class="input-group input-group-sm">
-              <input type="number" name="comida_carbs" id="comida_carbs"
-                     class="form-control fw-bold text-warning" placeholder="0"
-                     min="0" max="500" step="0.5"
-                     oninput="updateComidaPreview(); sugerirBolo()">
-              <span class="input-group-text">g</span>
-            </div>
-          </div>
-        </div>
-        <div class="col-6">
-          <div class="ql-macro-input">
-            <label>Proteínas</label>
-            <div class="input-group input-group-sm">
-              <input type="number" name="comida_protein" class="form-control"
-                     placeholder="0" min="0" max="200" step="0.5">
-              <span class="input-group-text">g</span>
-            </div>
-          </div>
-        </div>
-        <div class="col-6">
-          <div class="ql-macro-input">
-            <label>Grasas</label>
-            <div class="input-group input-group-sm">
-              <input type="number" name="comida_fat" class="form-control"
-                     placeholder="0" min="0" max="200" step="0.5">
-              <span class="input-group-text">g</span>
-            </div>
-          </div>
-        </div>
-        <div class="col-6">
-          <div class="ql-macro-input">
-            <label>Calorías</label>
-            <div class="input-group input-group-sm">
-              <input type="number" name="comida_cal" class="form-control"
-                     placeholder="0" min="0" max="3000" step="1">
-              <span class="input-group-text">kcal</span>
-            </div>
-          </div>
-        </div>
+
+      <!-- Ingredientes compactos -->
+      <div class="ql-ing-header">
+        <span class="ql-ing-label">Ingredientes</span>
+        <span class="ql-ing-total" id="ql-total-badge">0g CH</span>
       </div>
+
+      <div id="ql-comp-list"></div>
+
+      <button type="button" class="ql-add-ing-btn" onclick="qlAddIngrediente()">
+        <i class="bi bi-plus-circle"></i> Agregar ingrediente
+      </button>
+
+      <!-- Totales hidden (para el backend) -->
+      <input type="hidden" name="carbs_g"   id="ql-total-carbs">
+      <input type="hidden" name="protein_g" id="ql-total-protein">
+      <input type="hidden" name="fat_g"     id="ql-total-fat">
+      <input type="hidden" name="calories"  id="ql-total-cal">
+
     </div>
   </div>
 
@@ -358,6 +331,65 @@
 .ql-resumen-title i { color: #22c55e; }
 #resumen-items div { font-size: .82rem; margin-bottom: .2rem; }
 
+/* ── Ingredient rows (quicklog) ───────────────────────────────────────── */
+.ql-ing-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: .4rem;
+}
+.ql-ing-label {
+  font-size: .7rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--text-muted);
+}
+.ql-ing-total {
+  background: rgba(34,197,94,.12); color: #16a34a;
+  font-size: .72rem; font-weight: 700; padding: .1em .55em; border-radius: 20px;
+}
+
+.ql-ing-row {
+  display: flex; align-items: center; gap: .4rem;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 10px; padding: .4rem .5rem; margin-bottom: .35rem;
+}
+.ql-ing-name-wrap { flex: 1; min-width: 0; position: relative; }
+.ql-ing-macros {
+  display: flex; align-items: center; gap: .3rem; flex-shrink: 0;
+}
+.ql-ing-field {
+  display: flex; align-items: center; gap: .2rem;
+}
+.ql-ing-field input { width: 52px; text-align: center; font-size: .8rem; padding: .2rem .3rem; }
+.ql-ing-opt input   { width: 40px; }
+.qli-unit {
+  font-size: .65rem; color: var(--text-muted); font-weight: 600; white-space: nowrap;
+}
+.ql-ing-remove {
+  background: none; border: none; cursor: pointer;
+  width: 24px; height: 24px; border-radius: 6px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .85rem; color: var(--text-muted); transition: all .15s;
+}
+.ql-ing-remove:hover { background: rgba(239,68,68,.12); color: #ef4444; }
+
+/* Ingredient search dropdown (reuse ql-dropdown) */
+.ql-ing-drop {
+  position: absolute; top: calc(100% + 2px); left: 0; right: 0;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.12);
+  z-index: 300; max-height: 180px; overflow-y: auto;
+}
+
+.ql-add-ing-btn {
+  display: flex; align-items: center; gap: .35rem; justify-content: center;
+  width: 100%; padding: .4rem; border-radius: 8px; margin-top: .3rem;
+  background: none; border: 1.5px dashed var(--border); color: var(--text-muted);
+  font-size: .8rem; font-weight: 600; cursor: pointer; transition: all .15s;
+}
+.ql-add-ing-btn:hover { border-color: #22c55e; color: #22c55e; }
+
+@media (max-width: 480px) {
+  .ql-ing-opt { display: none; }  /* ocultar P/G en móvil chico */
+}
+
 /* Submit */
 .ql-submit-btn {
   width: 100%; background: #6366f1; color: #fff; border: none;
@@ -423,10 +455,11 @@ document.getElementById('glucemia_valor').addEventListener('input', function() {
 });
 
 function updateComidaPreview() {
-  const n = document.getElementById('comida_search').value.trim();
-  const c = document.getElementById('comida_carbs').value;
+  const n = document.getElementById('comida_nombre_hidden').value.trim();
+  const c = parseFloat(document.getElementById('ql-total-carbs').value) || 0;
+  const rows = document.querySelectorAll('.ql-ing-row').length;
   document.getElementById('comida-preview').textContent =
-    n ? (n + (c ? ' · ' + c + 'g CH' : '')) : 'No registrada';
+    n ? (n + (rows ? ` · ${rows} ing., ${Math.round(c)}g CH` : '')) : 'No registrada';
   updateResumen();
 }
 
@@ -439,7 +472,7 @@ function updateInsulinaPreview() {
 let boloTimer;
 async function sugerirBolo() {
   const glucemia = document.getElementById('glucemia_valor').value;
-  const carbs    = document.getElementById('comida_carbs').value;
+  const carbs    = document.getElementById('ql-total-carbs').value || 0;
   const box      = document.getElementById('bolo-sugerencia');
   const tieneG   = document.getElementById('toggle-glucemia').checked && glucemia;
   const tieneC   = document.getElementById('toggle-comida').checked && carbs > 0;
@@ -473,9 +506,10 @@ function updateResumen() {
     if (v) items.push(`<i class="bi bi-droplet-fill text-primary me-1"></i>${v} mg/dL`);
   }
   if (document.getElementById('toggle-comida').checked) {
-    const n = document.getElementById('comida_search').value.trim();
-    const c = document.getElementById('comida_carbs').value;
-    if (n) items.push(`<i class="bi bi-egg-fried text-success me-1"></i>${n}${c?' ('+c+'g CH)':''}`);
+    const n = document.getElementById('comida_nombre_hidden').value.trim();
+    const c = parseFloat(document.getElementById('ql-total-carbs').value) || 0;
+    const rows = document.querySelectorAll('.ql-ing-row').length;
+    if (n) items.push(`<i class="bi bi-egg-fried text-success me-1"></i>${n}${rows ? ` (${Math.round(c)}g CH, ${rows} ing.)` : ''}`);
   }
   if (document.getElementById('toggle-insulina').checked) {
     const u = document.getElementById('insulina_units').value;
@@ -491,61 +525,134 @@ function updateResumen() {
   }
 }
 
-// Autocomplete
-let searchTimer;
-function buscarAlimento(q) {
-  document.getElementById('comida_nombre_hidden').value = q;
-  document.getElementById('food_item_id').value = '';
-  clearTimeout(searchTimer);
+/* ── Ingredientes en quicklog ─────────────────────────────────────────── */
+let qlIdx = 0;
+
+function qlRecalc() {
+  let ch = 0, pr = 0, fa = 0, kc = 0;
+  document.querySelectorAll('.ql-ing-row').forEach(row => {
+    ch += parseFloat(row.querySelector('.qli-carbs').value)    || 0;
+    pr += parseFloat(row.querySelector('.qli-protein').value)  || 0;
+    fa += parseFloat(row.querySelector('.qli-fat').value)      || 0;
+    kc += parseFloat(row.querySelector('.qli-cal').value)      || 0;
+  });
+  document.getElementById('ql-total-carbs').value   = ch.toFixed(1);
+  document.getElementById('ql-total-protein').value = pr.toFixed(1);
+  document.getElementById('ql-total-fat').value     = fa.toFixed(1);
+  document.getElementById('ql-total-cal').value     = kc.toFixed(1);
+  document.getElementById('ql-total-badge').textContent = Math.round(ch) + 'g CH';
   updateComidaPreview();
-  if (q.length < 1) { cerrarDropdown(); return; }
-  searchTimer = setTimeout(() => {
-    fetch('/api/alimentos/buscar?q=' + encodeURIComponent(q))
-      .then(r => r.json())
-      .then(data => {
-        const dd = document.getElementById('alimento-dropdown');
-        if (!data.length) { cerrarDropdown(); return; }
-        dd.innerHTML = data.map(item => `
-          <div class="ql-dropdown-item"
-               onclick="seleccionarAlimento(${item.id},'${item.name.replace(/'/g,"\\'")}',${item.carbs},${item.fat},${item.protein},${item.calories})">
-            <div><strong>${item.name}</strong>
-              ${item.serving_desc ? `<small class="ms-1">${item.serving_desc}</small>` : ''}
-            </div>
-            <span class="list-badge" style="background:rgba(245,158,11,.15);color:#d97706;">${item.carbs}g CH</span>
-          </div>`).join('');
-        dd.style.display = 'block';
-      });
-  }, 220);
+  sugerirBolo();
 }
 
-function seleccionarAlimento(id, nombre, carbs, fat, protein, cal) {
-  document.getElementById('comida_search').value        = nombre;
-  document.getElementById('comida_nombre_hidden').value = nombre;
-  document.getElementById('food_item_id').value         = id;
-  document.getElementById('comida_carbs').value         = carbs;
-  document.getElementById('comida_fat').value           = fat;
-  document.querySelector('[name=comida_protein]').value = protein;
-  document.querySelector('[name=comida_cal]').value     = cal;
-  cerrarDropdown(); updateComidaPreview(); sugerirBolo();
-  fetch('/api/alimentos/' + id + '/usar', { method: 'POST' });
+function qlAddIngrediente(data = {}) {
+  const idx  = qlIdx++;
+  const list = document.getElementById('ql-comp-list');
+  const row  = document.createElement('div');
+  row.className = 'ql-ing-row';
+  row.dataset.idx = idx;
+  row.innerHTML = `
+    <div class="ql-ing-name-wrap position-relative">
+      <input type="text"   name="comp_name[]"    class="form-control form-control-sm qli-name"
+             placeholder="Ingrediente..." value="${esc(data.name||'')}" autocomplete="off">
+      <input type="hidden" name="comp_food_id[]" class="qli-food-id" value="${data.food_id||''}">
+      <div class="ql-ing-drop" id="qli-drop-${idx}" style="display:none;"></div>
+    </div>
+    <div class="ql-ing-macros">
+      <div class="ql-ing-field">
+        <input type="number" name="comp_carbs[]"    class="form-control form-control-sm qli-carbs"
+               placeholder="0" step="0.5" min="0" value="${data.carbs??''}">
+        <span class="qli-unit">g CH</span>
+      </div>
+      <div class="ql-ing-field ql-ing-opt">
+        <input type="number" name="comp_protein[]"  class="form-control form-control-sm qli-protein"
+               placeholder="0" step="0.5" min="0" value="${data.protein??''}">
+        <span class="qli-unit">P</span>
+      </div>
+      <div class="ql-ing-field ql-ing-opt">
+        <input type="number" name="comp_fat[]"      class="form-control form-control-sm qli-fat"
+               placeholder="0" step="0.5" min="0" value="${data.fat??''}">
+        <span class="qli-unit">G</span>
+      </div>
+      <input type="hidden" name="comp_calories[]" class="qli-cal" value="${data.calories??''}">
+      <input type="hidden" name="comp_grams[]"    class="qli-grams" value="">
+    </div>
+    <button type="button" class="ql-ing-remove" onclick="qlRemoveIng(this)" title="Eliminar">
+      <i class="bi bi-x"></i>
+    </button>`;
+
+  list.appendChild(row);
+
+  // Recalc on any numeric input
+  row.querySelectorAll('input[type=number]').forEach(i => i.addEventListener('input', qlRecalc));
+
+  // Search on name input
+  const ni = row.querySelector('.qli-name');
+  const drop = document.getElementById('qli-drop-' + idx);
+  let dt;
+  ni.addEventListener('input', () => {
+    clearTimeout(dt);
+    const q = ni.value.trim();
+    if (q.length < 1) { drop.style.display = 'none'; return; }
+    dt = setTimeout(() => qlFetchFood(q, drop, row), 220);
+  });
+
+  if (!data.name) ni.focus();
+  qlRecalc();
 }
 
-function cerrarDropdown() {
-  document.getElementById('alimento-dropdown').style.display = 'none';
+function qlRemoveIng(btn) {
+  btn.closest('.ql-ing-row').remove();
+  qlRecalc();
 }
+
+async function qlFetchFood(q, drop, row) {
+  try {
+    const res   = await fetch(`/api/alimentos/buscar?q=${encodeURIComponent(q)}`);
+    const items = await res.json();
+    if (!items.length) { drop.style.display = 'none'; return; }
+    drop.innerHTML = items.map(it => `
+      <div class="ql-dropdown-item" onclick='qlFillIng(this, ${JSON.stringify(it).replace(/"/g,"&quot;")})'>
+        <div><strong>${it.name}</strong>${it.serving_desc ? `<small class="ms-1 text-muted">${it.serving_desc}</small>` : ''}</div>
+        <span class="list-badge" style="background:rgba(245,158,11,.15);color:#d97706;">${it.carbs}g CH</span>
+      </div>`).join('');
+    drop.style.display = 'block';
+  } catch(e) {}
+}
+
+function qlFillIng(el, item) {
+  const row = el.closest('.ql-ing-row');
+  row.querySelector('.qli-name').value    = item.name;
+  row.querySelector('.qli-food-id').value = item.id;
+  row.querySelector('.qli-carbs').value   = item.carbs    || '';
+  row.querySelector('.qli-protein').value = item.protein  || '';
+  row.querySelector('.qli-fat').value     = item.fat      || '';
+  row.querySelector('.qli-cal').value     = item.calories || '';
+  el.closest('.ql-ing-drop').style.display = 'none';
+  qlRecalc();
+  fetch(`/api/alimentos/${item.id}/usar`, { method: 'POST' });
+}
+
+// Close dropdowns on outside click
 document.addEventListener('click', e => {
-  if (!e.target.closest('#comida_search') && !e.target.closest('#alimento-dropdown'))
-    cerrarDropdown();
+  if (!e.target.closest('.ql-ing-name-wrap'))
+    document.querySelectorAll('.ql-ing-drop').forEach(d => d.style.display = 'none');
 });
 
-document.getElementById('quicklog-form').addEventListener('submit', function(e) {
-  const search = document.getElementById('comida_search').value.trim();
-  if (document.getElementById('toggle-comida').checked && search)
-    document.getElementById('comida_nombre_hidden').value = search;
+// Update preview when plate name changes
+document.getElementById('comida_nombre_hidden').addEventListener('input', updateComidaPreview);
 
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Start with one empty ingredient row
+qlAddIngrediente();
+
+/* ── Form submit validation ──────────────────────────────────────────── */
+document.getElementById('quicklog-form').addEventListener('submit', function(e) {
   const checks = [
     ['toggle-glucemia', 'glucemia_valor'],
-    ['toggle-comida',   'comida_search'],
     ['toggle-insulina', 'insulina_units'],
   ];
   for (const [tog, fld] of checks) {
@@ -555,6 +662,16 @@ document.getElementById('quicklog-form').addEventListener('submit', function(e) 
       el.focus(); el.classList.add('is-invalid');
       setTimeout(() => el.classList.remove('is-invalid'), 2000);
       return;
+    }
+  }
+  // Comida: validar que haya nombre si está activo
+  if (document.getElementById('toggle-comida').checked) {
+    const nombre = document.getElementById('comida_nombre_hidden').value.trim();
+    if (!nombre) {
+      e.preventDefault();
+      const el = document.getElementById('comida_nombre_hidden');
+      el.focus(); el.classList.add('is-invalid');
+      setTimeout(() => el.classList.remove('is-invalid'), 2000);
     }
   }
 });

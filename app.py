@@ -2151,24 +2151,32 @@ def quicklog():
         if request.form.get("reg_comida"):
             nombre = request.form.get("comida_nombre", "").strip()
             if nombre:
-                carbs = request.form.get("comida_carbs", 0, type=float)
                 comida = Meal(
                     timestamp=ts,
                     name=nombre,
-                    carbs_g=carbs,
-                    fat_g=request.form.get("comida_fat", 0, type=float),
-                    protein_g=request.form.get("comida_protein", 0, type=float),
-                    calories=request.form.get("comida_cal", 0, type=float),
+                    carbs_g=0, fat_g=0, protein_g=0, calories=0,
                     notes="",
                     categoria=_auto_categorizar(nombre),
                 )
                 db.session.add(comida)
-                food_id = request.form.get("food_item_id", type=int)
-                if food_id:
-                    fi = FoodItem.query.get(food_id)
-                    if fi:
-                        fi.times_used += 1
-                guardados.append(f"Comida {nombre} ({int(carbs)}g CH)")
+                db.session.flush()
+
+                componentes = _save_meal_components(comida, request.form)
+                if componentes:
+                    for c in componentes:
+                        c.meal_id = comida.id
+                        db.session.add(c)
+                    total_ch = int(comida.carbs_g)
+                    detalle  = f"{len(componentes)} ingredientes, {total_ch}g CH"
+                else:
+                    # fallback sin componentes
+                    comida.carbs_g   = request.form.get("comida_carbs",   0, type=float)
+                    comida.fat_g     = request.form.get("comida_fat",     0, type=float)
+                    comida.protein_g = request.form.get("comida_protein", 0, type=float)
+                    comida.calories  = request.form.get("comida_cal",     0, type=float)
+                    detalle = f"{int(comida.carbs_g)}g CH"
+
+                guardados.append(f"Comida {nombre} ({detalle})")
 
         # Insulina bolus
         if request.form.get("reg_insulina"):
