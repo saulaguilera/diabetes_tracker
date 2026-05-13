@@ -525,7 +525,7 @@
       .sidebar.open { transform: translateX(0); }
       .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 99; }
       .sidebar-overlay.show { display: block; }
-      .main-content { margin-left: 0; padding: 1rem; }
+      .main-content { margin-left: 0; padding-top: 1rem; padding-left: 1rem; padding-right: 1rem; }
       .mobile-topbar { display: flex !important; }
     }
     .mobile-topbar {
@@ -580,8 +580,13 @@
       /* Botones de período: más pequeños */
       .btn-sm { font-size: .75rem; padding: .25rem .5rem; }
 
-      /* Main padding */
-      .main-content { padding: .75rem; }
+      /* Main padding — usar padding lateral solamente para no pisar padding-bottom */
+      .main-content {
+        padding-top: .75rem;
+        padding-left: .75rem;
+        padding-right: .75rem;
+        /* padding-bottom lo maneja el bloque max-width:768px con el valor correcto */
+      }
     }
 
     /* Tablas siempre con scroll en mobile */
