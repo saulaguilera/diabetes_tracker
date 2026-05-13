@@ -35,75 +35,93 @@ def _get_readings(hours=168):
 
 
 def chart_glucose_timeline(hours=24) -> dict:
-    """Línea de tiempo de glucemia con bandas de rango objetivo."""
+    """
+    Línea de tiempo de glucemia estilo CGM moderno.
+    Línea segmentada por color según rango: verde en rango, rojo hipo, naranja hiper.
+    """
     readings = _get_readings(hours)
 
     if not readings:
         fig = go.Figure()
         fig.update_layout(
-            title="Sin datos de glucemia",
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
         )
         return _to_json(fig)
 
     tiempos = [r.timestamp for r in readings]
-    valores = [r.value_mgdl for r in readings]
-    fuentes = [r.source for r in readings]
-
-    # Colores por estado
-    colores = []
-    for v in valores:
-        if v < RANGO_BAJO:
-            colores.append(COLOR_HIPO)
-        elif v > RANGO_ALTO:
-            colores.append(COLOR_HIPER)
-        else:
-            colores.append(COLOR_GLUCOSA)
+    valores  = [r.value_mgdl for r in readings]
 
     fig = go.Figure()
 
-    # Banda zona objetivo
+    # ── Banda objetivo (70–180) ───────────────────────────────────────────────
     fig.add_hrect(
         y0=RANGO_BAJO, y1=RANGO_ALTO,
-        fillcolor="rgba(34,197,94,0.1)",
+        fillcolor="rgba(34,197,94,0.08)",
         line_width=0,
-        annotation_text="Rango objetivo",
-        annotation_position="top left",
-        annotation_font_size=11,
-        annotation_font_color=COLOR_RANGO,
     )
+    # Líneas de límite sutiles
+    fig.add_hline(y=RANGO_BAJO, line=dict(color="rgba(239,68,68,0.4)",  width=1, dash="dot"))
+    fig.add_hline(y=RANGO_ALTO, line=dict(color="rgba(249,115,22,0.4)", width=1, dash="dot"))
 
-    # Líneas de límite
-    fig.add_hline(y=RANGO_BAJO, line_dash="dot", line_color=COLOR_HIPO, line_width=1)
-    fig.add_hline(y=RANGO_ALTO, line_dash="dot", line_color=COLOR_HIPER, line_width=1)
+    # ── Línea segmentada por color ─────────────────────────────────────────────
+    # Construye segmentos contiguos del mismo rango para colorear la línea
+    def _color(v):
+        if v < RANGO_BAJO:  return COLOR_HIPO
+        if v > RANGO_ALTO:  return COLOR_HIPER
+        return COLOR_RANGO
 
-    # Línea principal
+    # Agrupar índices consecutivos del mismo rango
+    seg_start = 0
+    for i in range(1, len(valores) + 1):
+        # Forzar cierre en el último punto o al cambiar de rango
+        if i == len(valores) or _color(valores[i]) != _color(valores[seg_start]):
+            seg_t = tiempos[seg_start:i + 1 if i < len(valores) else i]
+            seg_v = valores[seg_start:i + 1 if i < len(valores) else i]
+            col   = _color(valores[seg_start])
+            fig.add_trace(go.Scatter(
+                x=seg_t, y=seg_v,
+                mode="lines",
+                line=dict(color=col, width=2.5, shape="spline", smoothing=0.6),
+                showlegend=False,
+                hovertemplate="<b>%{y:.0f} mg/dL</b><br>%{x|%H:%M}<extra></extra>",
+            ))
+            seg_start = i
+
+    # ── Puntos de hover invisibles (para tooltip unificado) ───────────────────
+    colores_pts = [_color(v) for v in valores]
     fig.add_trace(go.Scatter(
-        x=tiempos,
-        y=valores,
-        mode="lines+markers",
-        name="Glucemia",
-        line=dict(color=COLOR_GLUCOSA, width=2),
-        marker=dict(
-            color=colores,
-            size=5,
-            line=dict(width=0),
-        ),
-        hovertemplate="<b>%{y:.0f} mg/dL</b><br>%{x|%d/%m %H:%M}<extra></extra>",
+        x=tiempos, y=valores,
+        mode="markers",
+        marker=dict(color=colores_pts, size=4, opacity=0.7, line=dict(width=0)),
+        showlegend=False,
+        hovertemplate="<b>%{y:.0f} mg/dL</b><br>%{x|%H:%M}<extra></extra>",
     ))
 
+    # ── Anotaciones de rango ───────────────────────────────────────────────────
+    y_min = max(30, min(valores) - 25)
+    y_max = max(valores) + 30
+
     fig.update_layout(
-        title=f"Glucemia — últimas {hours}h",
-        xaxis_title="Fecha/Hora",
-        yaxis_title="mg/dL",
-        yaxis=dict(range=[max(0, min(valores) - 20), max(valores) + 20]),
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(248,250,252,1)",
-        font=dict(family="Inter, system-ui, sans-serif", size=12),
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, system-ui, sans-serif", size=11),
         hovermode="x unified",
-        margin=dict(l=50, r=20, t=50, b=50),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        margin=dict(l=45, r=12, t=12, b=40),
+        yaxis=dict(
+            range=[y_min, y_max],
+            gridcolor="rgba(148,163,184,0.15)",
+            tickfont=dict(size=11),
+            title=None,
+            ticksuffix=" ",
+        ),
+        xaxis=dict(
+            gridcolor="rgba(148,163,184,0.15)",
+            tickformat="%H:%M",
+            tickfont=dict(size=11),
+            title=None,
+        ),
+        showlegend=False,
     )
 
     return _to_json(fig)

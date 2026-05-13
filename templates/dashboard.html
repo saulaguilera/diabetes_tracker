@@ -2,72 +2,292 @@
 {% block title %}Dashboard — DiabetesTracker{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex justify-content-between align-items-center">
-  <div>
-    <h1><i class="bi bi-speedometer2 me-2 text-primary"></i>Dashboard</h1>
-    <small class="text-muted">
-      Resumen de las últimas 24 horas
-      {% if libre_configured %}
-        · <span id="sync-status">
-            {% if ultima_sync %}
-              <i class="bi bi-circle-fill text-success" style="font-size:.5rem; vertical-align:middle;"></i>
-              Libre sync {{ ultima_sync }}
-            {% else %}
-              <i class="bi bi-circle text-muted" style="font-size:.5rem; vertical-align:middle;"></i>
-              Sin sync aún
-            {% endif %}
-          </span>
-      {% endif %}
-    </small>
-  </div>
-  <div class="d-flex gap-2 align-items-center">
-    <a href="{{ url_for('quicklog') }}" class="btn btn-sm btn-warning fw-semibold">
-      <i class="bi bi-lightning-charge-fill"></i> Quick Log
-    </a>
-    {% if libre_configured %}
-    <button class="btn btn-sm btn-outline-info" id="btn-sync"
-            onclick="sincronizarLibre()" title="Sincronizar con Libre">
-      <i class="bi bi-arrow-repeat"></i>
-    </button>
-    {% endif %}
-    <a href="{{ url_for('glucemia_nueva') }}" class="btn btn-sm btn-outline-primary">
-      <i class="bi bi-plus-lg"></i> Glucemia
-    </a>
-    <a href="{{ url_for('comida_nueva') }}" class="btn btn-sm btn-outline-success">
-      <i class="bi bi-plus-lg"></i> Comida
-    </a>
-    <a href="{{ url_for('insulina_nueva') }}" class="btn btn-sm btn-outline-secondary">
-      <i class="bi bi-plus-lg"></i> Insulina
-    </a>
 
-    <!-- Botón notificaciones -->
-    <button class="btn btn-sm btn-outline-secondary position-relative ms-1"
-            type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasAlertas"
-            title="Alertas de patrones"
-            onclick="const b=document.getElementById('notif-badge'); if(b){b.style.display='none';} localStorage.setItem('dt_notif_read_count', {{ alertas|length }});">
-      <i class="bi bi-bell-fill"></i>
-      {% if alertas %}
-        <span id="notif-badge"
-              class="position-absolute top-0 start-100 translate-middle badge rounded-pill
-              {{ 'bg-danger' if alertas | selectattr('nivel','equalto','danger') | list else 'bg-warning text-dark' }}"
-              style="font-size:.6rem;">
-          {{ alertas | length }}
-        </span>
+{# ── Hero row ──────────────────────────────────────────────────────────────── #}
+<div class="row g-3 mb-3 align-items-stretch">
+
+  {# Glucosa actual #}
+  <div class="col-12 col-md-4 col-lg-3">
+    <div class="glucose-hero-card h-100">
+      <div class="d-flex justify-content-between align-items-start mb-1">
+        <span class="hero-label">Glucosa ahora</span>
+        {% if libre_configured %}
+        <div class="d-flex align-items-center gap-2">
+          <span id="sync-dot"
+            class="sync-dot {% if ultima_sync %}sync-ok{% endif %}"
+            title="{{ ultima_sync or 'Sin sync' }}"></span>
+          <button id="btn-sync" onclick="sincronizarLibre()"
+                  class="btn-sync-mini" title="Sincronizar Libre">
+            <i class="bi bi-arrow-repeat"></i>
+          </button>
+        </div>
+        {% endif %}
+      </div>
+
+      {% if stats.ultima_lectura %}
+        {% set v = stats.ultima_lectura.value_mgdl | int %}
+        {% if v < 70 %}
+          {% set estado = "hipo" %}
+          {% set estado_label = "Hipoglucemia" %}
+        {% elif v > 180 %}
+          {% set estado = "hiper" %}
+          {% set estado_label = "Hiperglucemia" %}
+        {% else %}
+          {% set estado = "rango" %}
+          {% set estado_label = "En rango" %}
+        {% endif %}
+
+        <div class="hero-value hero-{{ estado }}">
+          {{ v }}
+          <span class="hero-unit">mg/dL</span>
+        </div>
+
+        <div class="d-flex align-items-center gap-2 mt-1">
+          <span class="trend-pill trend-{{ estado }}">
+            {{ stats.ultima_lectura.notes or '→' }}
+          </span>
+          <span class="hero-status-badge badge-{{ estado }}">{{ estado_label }}</span>
+        </div>
+
+        <div class="hero-meta mt-2">
+          <i class="bi bi-clock me-1"></i>
+          {{ stats.ultima_lectura.timestamp.strftime('%H:%M') }}
+          {% if ultima_sync %}
+            · <span id="sync-status">{{ ultima_sync }}</span>
+          {% endif %}
+        </div>
+
+      {% else %}
+        <div class="hero-value text-muted">—</div>
+        <div class="hero-meta mt-2">Sin lecturas aún</div>
       {% endif %}
-    </button>
+
+      {# Accesos rápidos #}
+      <div class="hero-actions mt-3 pt-3">
+        <a href="{{ url_for('quicklog') }}" class="btn btn-quicklog">
+          <i class="bi bi-lightning-charge-fill"></i> Quick Log
+        </a>
+        <a href="{{ url_for('glucemia_nueva') }}" class="btn btn-action-sm">
+          <i class="bi bi-droplet-fill"></i>
+        </a>
+        <a href="{{ url_for('comida_nueva') }}" class="btn btn-action-sm btn-food">
+          <i class="bi bi-egg-fried"></i>
+        </a>
+        <a href="{{ url_for('insulina_nueva') }}" class="btn btn-action-sm btn-insulin">
+          <i class="bi bi-capsule-pill"></i>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  {# Gráfico CGM #}
+  <div class="col-12 col-md-8 col-lg-9">
+    <div class="chart-card h-100">
+      <div class="chart-card-header">
+        <span class="chart-title">Glucosa — últimas 24h</span>
+        <div class="chart-legend">
+          <span class="legend-dot" style="background:#22c55e;"></span> En rango
+          <span class="legend-dot ms-2" style="background:#ef4444;"></span> Hipo
+          <span class="legend-dot ms-2" style="background:#f97316;"></span> Hiper
+        </div>
+      </div>
+      <div id="chart-timeline" style="height:230px;"></div>
+    </div>
   </div>
 </div>
 
-<!-- Offcanvas de notificaciones -->
+{# ── Stats row ─────────────────────────────────────────────────────────────── #}
+<div class="row g-3 mb-3">
+
+  {# TIR #}
+  <div class="col-6 col-md-3">
+    <div class="stat-card-v2">
+      <div class="stat-v2-label">Tiempo en rango</div>
+      {% if stats.tir_24h is not none %}
+        <div class="tir-wrap">
+          <svg class="tir-ring" viewBox="0 0 36 36">
+            <circle class="tir-bg" cx="18" cy="18" r="15.9"/>
+            <circle class="tir-fill tir-rango"
+                    cx="18" cy="18" r="15.9"
+                    stroke-dasharray="{{ stats.tir_24h }}, 100"/>
+            {% if stats.hipo_24h %}
+            <circle class="tir-fill tir-hipo"
+                    cx="18" cy="18" r="15.9"
+                    stroke-dasharray="{{ stats.hipo_24h }}, 100"
+                    stroke-dashoffset="{{ -(stats.tir_24h) }}"/>
+            {% endif %}
+          </svg>
+          <div class="tir-center">
+            <div class="tir-pct">{{ stats.tir_24h }}<small>%</small></div>
+          </div>
+        </div>
+        <div class="tir-detail">
+          {% if stats.hipo_24h and stats.hipo_24h > 0 %}
+            <span class="text-hipo"><i class="bi bi-arrow-down-short"></i>{{ stats.hipo_24h }}%</span>
+          {% endif %}
+          {% if stats.hiper_24h and stats.hiper_24h > 0 %}
+            <span class="text-hiper ms-1"><i class="bi bi-arrow-up-short"></i>{{ stats.hiper_24h }}%</span>
+          {% endif %}
+        </div>
+      {% else %}
+        <div class="stat-v2-empty">—</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Promedio #}
+  <div class="col-6 col-md-3">
+    <div class="stat-card-v2">
+      <div class="stat-v2-label">Promedio 24h</div>
+      {% if stats.promedio_24h %}
+        {% if stats.promedio_24h < 70 %}
+          {% set avg_cls = "text-hipo" %}
+        {% elif stats.promedio_24h > 180 %}
+          {% set avg_cls = "text-hiper" %}
+        {% else %}
+          {% set avg_cls = "text-rango" %}
+        {% endif %}
+        <div class="stat-v2-value {{ avg_cls }}">{{ stats.promedio_24h | int }}</div>
+        <div class="stat-v2-unit">mg/dL</div>
+      {% else %}
+        <div class="stat-v2-empty">—</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Min / Max #}
+  <div class="col-6 col-md-3">
+    <div class="stat-card-v2">
+      <div class="stat-v2-label">Min / Max 24h</div>
+      {% if stats.minimo_24h %}
+        <div class="minmax-row">
+          <div>
+            <div class="minmax-val text-hipo">{{ stats.minimo_24h | int }}</div>
+            <div class="minmax-lbl">mínimo</div>
+          </div>
+          <div class="minmax-sep">/</div>
+          <div>
+            <div class="minmax-val text-hiper">{{ stats.maximo_24h | int }}</div>
+            <div class="minmax-lbl">máximo</div>
+          </div>
+        </div>
+      {% else %}
+        <div class="stat-v2-empty">—</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Actividad #}
+  <div class="col-6 col-md-3">
+    <div class="stat-card-v2">
+      <div class="stat-v2-label">Lecturas 24h</div>
+      <div class="stat-v2-value">{{ stats.lecturas_24h }}</div>
+      <div class="stat-v2-unit">registros</div>
+      <div class="stat-v2-sub mt-1">{{ stats.comidas_7d }} comidas esta semana</div>
+    </div>
+  </div>
+</div>
+
+{# ── Últimos registros ─────────────────────────────────────────────────────── #}
+<div class="row g-3 mb-3">
+
+  <div class="col-md-4">
+    <div class="event-card">
+      <div class="event-icon bg-primary-soft">
+        <i class="bi bi-droplet-fill text-primary"></i>
+      </div>
+      <div class="event-body">
+        <div class="event-title">Última glucemia</div>
+        {% if stats.ultima_lectura %}
+          {% set v = stats.ultima_lectura.value_mgdl | int %}
+          <div class="event-value
+            {% if v < 70 %}text-hipo{% elif v > 180 %}text-hiper{% else %}text-rango{% endif %}">
+            {{ v }} mg/dL
+          </div>
+          <div class="event-meta">
+            {{ stats.ultima_lectura.timestamp.strftime('%d/%m/%Y %H:%M') }}
+            · {{ stats.ultima_lectura.source }}
+          </div>
+        {% else %}
+          <div class="event-empty">Sin registros</div>
+        {% endif %}
+      </div>
+      <a href="{{ url_for('glucemia') }}" class="event-link">
+        <i class="bi bi-chevron-right"></i>
+      </a>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="event-card">
+      <div class="event-icon bg-success-soft">
+        <i class="bi bi-egg-fried text-success"></i>
+      </div>
+      <div class="event-body">
+        <div class="event-title">Última comida</div>
+        {% if stats.ultima_comida %}
+          <div class="event-value">{{ stats.ultima_comida.name }}</div>
+          <div class="event-meta">
+            {{ stats.ultima_comida.carbs_g }}g CH
+            · {{ stats.ultima_comida.timestamp.strftime('%d/%m/%Y %H:%M') }}
+          </div>
+        {% else %}
+          <div class="event-empty">Sin registros</div>
+        {% endif %}
+      </div>
+      <a href="{{ url_for('comidas') }}" class="event-link">
+        <i class="bi bi-chevron-right"></i>
+      </a>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="event-card">
+      <div class="event-icon bg-warning-soft">
+        <i class="bi bi-capsule-pill text-warning"></i>
+      </div>
+      <div class="event-body">
+        <div class="event-title">Última insulina</div>
+        {% if stats.ultima_insulina %}
+          <div class="event-value">
+            {{ stats.ultima_insulina.units }}U — {{ stats.ultima_insulina.type }}
+          </div>
+          <div class="event-meta">
+            {% if stats.ultima_insulina.brand %}{{ stats.ultima_insulina.brand }} · {% endif %}
+            {{ stats.ultima_insulina.timestamp.strftime('%d/%m/%Y %H:%M') }}
+          </div>
+        {% else %}
+          <div class="event-empty">Sin registros</div>
+        {% endif %}
+      </div>
+      <a href="{{ url_for('insulina') }}" class="event-link">
+        <i class="bi bi-chevron-right"></i>
+      </a>
+    </div>
+  </div>
+</div>
+
+{# ── Offcanvas alertas ─────────────────────────────────────────────────────── #}
+<button id="fab-alertas"
+        class="fab-alertas {% if not alertas %}d-none{% endif %}"
+        type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasAlertas"
+        onclick="const b=document.getElementById('notif-badge'); if(b){b.style.display='none';} localStorage.setItem('dt_notif_read_count', {{ alertas|length }});">
+  <i class="bi bi-bell-fill"></i>
+  {% if alertas %}
+    <span id="notif-badge" class="fab-badge
+          {{ 'fab-badge-danger' if alertas | selectattr('nivel','equalto','danger') | list else 'fab-badge-warning' }}">
+      {{ alertas | length }}
+    </span>
+  {% endif %}
+</button>
+
 <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasAlertas"
      style="width:360px; max-width:95vw;">
   <div class="offcanvas-header border-bottom py-3" style="background:#1e293b;">
     <h6 class="offcanvas-title text-white d-flex align-items-center gap-2 mb-0">
       <i class="bi bi-bell-fill text-warning"></i>
       Alertas de patrones
-      <span class="badge bg-secondary ms-1" style="font-size:.7rem;">
-        últimos 30 días
-      </span>
+      <span class="badge bg-secondary ms-1" style="font-size:.7rem;">últimos 30 días</span>
     </h6>
     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
   </div>
@@ -76,7 +296,6 @@
       {% for a in alertas %}
       <div class="card mb-2 border-0 shadow-sm" style="border-radius:10px; overflow:hidden;">
         <div class="card-body p-0">
-          <!-- Barra de color lateral -->
           <div class="d-flex">
             <div style="width:4px; background:{{ '#ef4444' if a.nivel == 'danger' else '#f59e0b' }}; border-radius:10px 0 0 10px; flex-shrink:0;"></div>
             <div class="p-3 w-100">
@@ -96,10 +315,6 @@
         </div>
       </div>
       {% endfor %}
-      <p class="text-center text-muted mt-3 mb-0" style="font-size:.75rem;">
-        <i class="bi bi-info-circle me-1"></i>
-        Los patrones se recalculan cada vez que abrís el dashboard.
-      </p>
     {% else %}
       <div class="text-center py-5">
         <i class="bi bi-check-circle-fill text-success d-block mb-2" style="font-size:2.5rem;"></i>
@@ -112,181 +327,234 @@
   </div>
 </div>
 
-<!-- Stat cards -->
-<div class="row g-3 mb-4">
-  <!-- Última lectura -->
-  <div class="col-6 col-md-3">
-    <div class="stat-card">
-      <i class="bi bi-droplet-fill stat-icon text-primary"></i>
-      {% if stats.ultima_lectura %}
-        <div class="stat-value
-          {% if stats.ultima_lectura.value_mgdl < 70 %}text-hipo
-          {% elif stats.ultima_lectura.value_mgdl > 180 %}text-hiper
-          {% else %}text-rango{% endif %}">
-          {{ stats.ultima_lectura.value_mgdl | int }}
-        </div>
-        <div class="stat-label">
-          mg/dL ahora
-          <br><span class="text-muted" style="font-size:.75rem;">
-            {{ stats.ultima_lectura.timestamp.strftime('%H:%M') }}
-          </span>
-        </div>
-      {% else %}
-        <div class="stat-value text-muted">—</div>
-        <div class="stat-label">Sin lecturas</div>
-      {% endif %}
-    </div>
-  </div>
-
-  <!-- Promedio 24h -->
-  <div class="col-6 col-md-3">
-    <div class="stat-card">
-      <i class="bi bi-graph-up stat-icon text-info"></i>
-      <div class="stat-value text-info">{{ stats.promedio_24h or '—' }}</div>
-      <div class="stat-label">
-        Promedio 24h (mg/dL)
-        {% if stats.minimo_24h %}
-          <br><span class="text-muted" style="font-size:.75rem;">
-            Min {{ stats.minimo_24h }} / Max {{ stats.maximo_24h }}
-          </span>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-
-  <!-- Tiempo en rango -->
-  <div class="col-6 col-md-3">
-    <div class="stat-card">
-      <i class="bi bi-bullseye stat-icon text-success"></i>
-      <div class="stat-value text-rango">{{ stats.tir_24h or '—' }}{% if stats.tir_24h %}<span style="font-size:1rem;">%</span>{% endif %}</div>
-      <div class="stat-label">
-        Tiempo en rango
-        {% if stats.hipo_24h is not none and stats.hipo_24h > 0 %}
-          <br><span class="text-hipo" style="font-size:.75rem;"><i class="bi bi-arrow-down"></i> Hipo {{ stats.hipo_24h }}%</span>
-        {% endif %}
-        {% if stats.hiper_24h is not none and stats.hiper_24h > 0 %}
-          <span class="text-hiper" style="font-size:.75rem;"> <i class="bi bi-arrow-up"></i> Hiper {{ stats.hiper_24h }}%</span>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-
-  <!-- Lecturas hoy -->
-  <div class="col-6 col-md-3">
-    <div class="stat-card">
-      <i class="bi bi-activity stat-icon text-secondary"></i>
-      <div class="stat-value">{{ stats.lecturas_24h }}</div>
-      <div class="stat-label">
-        Lecturas 24h
-        <br><span class="text-muted" style="font-size:.75rem;">{{ stats.comidas_7d }} comidas esta semana</span>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Gráfica principal -->
-<div class="chart-box mb-4">
-  <div id="chart-timeline" style="height: 300px;"></div>
-</div>
-
-<!-- Últimos registros -->
-<div class="row g-3">
-  <div class="col-md-4">
-    <div class="stat-card">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <strong><i class="bi bi-droplet text-primary me-1"></i>Última glucemia</strong>
-        <a href="{{ url_for('glucemia_nueva') }}" class="btn btn-xs btn-outline-primary btn-sm" style="font-size:.75rem; padding:.15rem .5rem;">+ Nueva</a>
-      </div>
-      {% if stats.ultima_lectura %}
-        <div class="fs-4 fw-bold
-          {% if stats.ultima_lectura.value_mgdl < 70 %}text-hipo
-          {% elif stats.ultima_lectura.value_mgdl > 180 %}text-hiper
-          {% else %}text-rango{% endif %}">
-          {{ stats.ultima_lectura.value_mgdl | int }} mg/dL
-        </div>
-        <div class="text-muted" style="font-size:.85rem;">
-          {{ stats.ultima_lectura.timestamp.strftime('%d/%m/%Y %H:%M') }}
-          · {{ stats.ultima_lectura.source }}
-        </div>
-      {% else %}
-        <p class="text-muted mb-0">Sin registros aún.</p>
-      {% endif %}
-      <a href="{{ url_for('glucemia') }}" class="btn btn-link btn-sm p-0 mt-2">Ver historial →</a>
-    </div>
-  </div>
-
-  <div class="col-md-4">
-    <div class="stat-card">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <strong><i class="bi bi-egg-fried text-success me-1"></i>Última comida</strong>
-        <a href="{{ url_for('comida_nueva') }}" class="btn btn-sm btn-outline-success" style="font-size:.75rem; padding:.15rem .5rem;">+ Nueva</a>
-      </div>
-      {% if stats.ultima_comida %}
-        <div class="fw-semibold">{{ stats.ultima_comida.name }}</div>
-        <div class="text-muted" style="font-size:.85rem;">
-          {{ stats.ultima_comida.carbs_g }}g CH
-          · {{ stats.ultima_comida.timestamp.strftime('%d/%m/%Y %H:%M') }}
-        </div>
-      {% else %}
-        <p class="text-muted mb-0">Sin registros aún.</p>
-      {% endif %}
-      <a href="{{ url_for('comidas') }}" class="btn btn-link btn-sm p-0 mt-2">Ver historial →</a>
-    </div>
-  </div>
-
-  <div class="col-md-4">
-    <div class="stat-card">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <strong><i class="bi bi-capsule-pill text-warning me-1"></i>Última insulina</strong>
-        <a href="{{ url_for('insulina_nueva') }}" class="btn btn-sm btn-outline-warning" style="font-size:.75rem; padding:.15rem .5rem;">+ Nueva</a>
-      </div>
-      {% if stats.ultima_insulina %}
-        <div class="fw-semibold">{{ stats.ultima_insulina.units }}U — {{ stats.ultima_insulina.type }}</div>
-        <div class="text-muted" style="font-size:.85rem;">
-          {% if stats.ultima_insulina.brand %}{{ stats.ultima_insulina.brand }} · {% endif %}
-          {{ stats.ultima_insulina.timestamp.strftime('%d/%m/%Y %H:%M') }}
-        </div>
-      {% else %}
-        <p class="text-muted mb-0">Sin registros aún.</p>
-      {% endif %}
-      <a href="{{ url_for('insulina') }}" class="btn btn-link btn-sm p-0 mt-2">Ver historial →</a>
-    </div>
-  </div>
-</div>
 {% endblock %}
 
 {% block scripts %}
+<style>
+/* ── Hero card ──────────────────────────────────────────────────────────────── */
+.glucose-hero-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.25rem 1.4rem;
+  position: relative;
+  overflow: hidden;
+}
+.glucose-hero-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, #22c55e, #3b82f6);
+  border-radius: 16px 16px 0 0;
+}
+.hero-label {
+  font-size: .75rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-muted);
+}
+.hero-value {
+  font-size: 3.4rem; font-weight: 800; line-height: 1;
+  margin-top: .5rem; letter-spacing: -2px;
+  display: flex; align-items: baseline; gap: .3rem;
+}
+.hero-unit { font-size: 1rem; font-weight: 500; color: var(--text-muted); letter-spacing: 0; }
+.hero-rango { color: #22c55e; }
+.hero-hipo  { color: #ef4444; }
+.hero-hiper { color: #f97316; }
+.trend-pill {
+  font-size: 1.3rem; line-height: 1; padding: .1rem .4rem;
+  border-radius: 8px; font-weight: 700;
+}
+.trend-rango { background: rgba(34,197,94,.12);  color: #16a34a; }
+.trend-hipo  { background: rgba(239,68,68,.12);  color: #dc2626; }
+.trend-hiper { background: rgba(249,115,22,.12); color: #ea580c; }
+.hero-status-badge {
+  font-size: .72rem; font-weight: 600; padding: .2em .6em;
+  border-radius: 20px;
+}
+.badge-rango { background: rgba(34,197,94,.12);  color: #16a34a; }
+.badge-hipo  { background: rgba(239,68,68,.12);  color: #dc2626; }
+.badge-hiper { background: rgba(249,115,22,.12); color: #ea580c; }
+.hero-meta {
+  font-size: .78rem; color: var(--text-muted);
+}
+.hero-actions {
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
+}
+.btn-quicklog {
+  background: #6366f1; color: #fff; border: none;
+  border-radius: 8px; padding: .35rem .85rem;
+  font-size: .82rem; font-weight: 600; cursor: pointer;
+  text-decoration: none; display: inline-flex; align-items: center; gap: .3rem;
+  transition: background .15s;
+}
+.btn-quicklog:hover { background: #4f46e5; color: #fff; }
+.btn-action-sm {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; padding: .3rem .6rem; font-size: .95rem;
+  text-decoration: none; color: var(--text-muted);
+  transition: background .15s;
+}
+.btn-action-sm:hover { background: var(--border); color: var(--text); }
+.btn-food:hover    { color: #16a34a; }
+.btn-insulin:hover { color: #d97706; }
+
+/* ── Sync ────────────────────────────────────────────────────────────────────── */
+.sync-dot {
+  display: inline-block; width: 7px; height: 7px;
+  border-radius: 50%; background: var(--border);
+}
+.sync-dot.sync-ok { background: #22c55e; box-shadow: 0 0 4px #22c55e88; }
+.btn-sync-mini {
+  background: none; border: none; color: var(--text-muted);
+  cursor: pointer; padding: 0; font-size: .95rem; line-height: 1;
+}
+.btn-sync-mini:hover { color: var(--text); }
+
+/* ── Chart card ─────────────────────────────────────────────────────────────── */
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1rem 1.1rem .6rem;
+}
+.chart-card-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: .4rem;
+}
+.chart-title { font-size: .8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+.chart-legend { font-size: .72rem; color: var(--text-muted); display: flex; align-items: center; gap: .2rem; }
+.legend-dot { display:inline-block; width:8px; height:8px; border-radius:50%; }
+
+/* ── Stats v2 ───────────────────────────────────────────────────────────────── */
+.stat-card-v2 {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  height: 100%;
+}
+.stat-v2-label {
+  font-size: .72rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-muted); margin-bottom: .4rem;
+}
+.stat-v2-value { font-size: 2.2rem; font-weight: 800; line-height: 1; letter-spacing: -1px; }
+.stat-v2-unit  { font-size: .75rem; color: var(--text-muted); margin-top: .1rem; }
+.stat-v2-sub   { font-size: .72rem; color: var(--text-muted); }
+.stat-v2-empty { font-size: 1.5rem; color: var(--text-muted); font-weight: 600; }
+
+/* TIR ring */
+.tir-wrap {
+  position: relative; width: 80px; height: 80px; margin: .2rem 0;
+}
+.tir-ring {
+  width: 80px; height: 80px; transform: rotate(-90deg);
+}
+.tir-bg {
+  fill: none; stroke: var(--border); stroke-width: 3.5;
+}
+.tir-fill {
+  fill: none; stroke-width: 3.5;
+  stroke-linecap: round;
+  transition: stroke-dasharray .6s ease;
+}
+.tir-rango { stroke: #22c55e; }
+.tir-hipo  { stroke: #ef4444; }
+/* circumference = 2π×15.9 ≈ 100 — usamos 100 como valor máximo */
+.tir-center {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.tir-pct { font-size: 1.2rem; font-weight: 800; color: var(--text); line-height: 1; }
+.tir-pct small { font-size: .65rem; font-weight: 600; color: var(--text-muted); }
+.tir-detail { font-size: .75rem; margin-top: .2rem; }
+
+/* Min/Max */
+.minmax-row { display: flex; align-items: center; gap: .6rem; margin-top: .2rem; }
+.minmax-val { font-size: 1.6rem; font-weight: 800; line-height: 1; letter-spacing: -1px; }
+.minmax-lbl { font-size: .68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+.minmax-sep { font-size: 1.5rem; color: var(--border); font-weight: 300; }
+
+/* ── Event cards ────────────────────────────────────────────────────────────── */
+.event-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: .9rem 1rem;
+  display: flex; align-items: center; gap: .85rem;
+}
+.event-icon {
+  width: 42px; height: 42px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem; flex-shrink: 0;
+}
+.bg-primary-soft { background: rgba(59,130,246,.1); }
+.bg-success-soft { background: rgba(34,197,94,.1); }
+.bg-warning-soft { background: rgba(245,158,11,.1); }
+.event-body { flex: 1; min-width: 0; }
+.event-title { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
+.event-value { font-size: .95rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: .15rem; }
+.event-meta  { font-size: .75rem; color: var(--text-muted); }
+.event-empty { font-size: .85rem; color: var(--text-muted); margin-top: .15rem; }
+.event-link  { color: var(--text-muted); text-decoration: none; font-size: 1rem; padding: .25rem; flex-shrink: 0; }
+.event-link:hover { color: var(--text); }
+
+/* ── FAB alertas ────────────────────────────────────────────────────────────── */
+.fab-alertas {
+  position: fixed; bottom: 5.5rem; right: 1.2rem; z-index: 300;
+  background: #1e293b; color: #f1f5f9;
+  border: none; border-radius: 50%; width: 48px; height: 48px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem; cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0,0,0,.25);
+}
+@media (min-width: 769px) {
+  .fab-alertas { bottom: 1.5rem; }
+}
+.fab-badge {
+  position: absolute; top: -2px; right: -2px;
+  border-radius: 50%; width: 18px; height: 18px;
+  font-size: .6rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid #1e293b;
+}
+.fab-badge-danger  { background: #ef4444; color: #fff; }
+.fab-badge-warning { background: #f59e0b; color: #fff; }
+
+/* dark mode tweaks */
+[data-theme="dark"] .glucose-hero-card::before {
+  background: linear-gradient(90deg, #16a34a, #2563eb);
+}
+</style>
+
 <script>
   renderChart('chart-timeline', {{ chart | tojson }});
 
-  // ── Sync Libre ────────────────────────────────────────────────────────────
   {% if libre_configured %}
   async function sincronizarLibre() {
-    const btn = document.getElementById('btn-sync');
+    const btn    = document.getElementById('btn-sync');
+    const dot    = document.getElementById('sync-dot');
     const status = document.getElementById('sync-status');
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:.75rem;height:.75rem;"></span>';
     try {
       const r = await fetch('/api/sync/libre');
       const d = await r.json();
       if (d.error) {
-        status.innerHTML = '<i class="bi bi-exclamation-circle text-danger" style="font-size:.5rem;vertical-align:middle;"></i> ' + d.error;
+        dot.className = 'sync-dot';
+        if (status) status.textContent = d.error;
       } else {
-        const msg = d.insertadas > 0
-          ? `<i class="bi bi-circle-fill text-success" style="font-size:.5rem;vertical-align:middle;"></i> +${d.insertadas} lecturas`
-          : `<i class="bi bi-circle-fill text-success" style="font-size:.5rem;vertical-align:middle;"></i> Al día`;
-        status.innerHTML = msg;
+        dot.className = 'sync-dot sync-ok';
+        if (status) status.textContent = d.insertadas > 0 ? `+${d.insertadas} lecturas` : 'Al día';
         if (d.insertadas > 0) setTimeout(() => location.reload(), 1200);
       }
     } catch(e) {
-      status.innerHTML = '<i class="bi bi-exclamation-circle text-warning"></i> Error de red';
+      dot.className = 'sync-dot';
     } finally {
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
     }
   }
 
-  // Auto-sync silencioso al cargar el dashboard
   window.addEventListener('DOMContentLoaded', () => {
     const lastSync = localStorage.getItem('dt_libre_sync');
     const now = Date.now();
@@ -299,17 +567,13 @@
   });
   {% endif %}
 
-  // ── Notificaciones: marcar como leídas al abrir el panel ─────────────────
-  const NOTIF_KEY   = 'dt_notif_read_count';
-  const alertCount  = {{ alertas | length }};
-  const badge       = document.getElementById('notif-badge');
-
-  // Si ya las vio y el número no cambió, ocultar el badge al cargar
+  // Badge de alertas: ocultar si ya fue visto
+  const NOTIF_KEY  = 'dt_notif_read_count';
+  const alertCount = {{ alertas | length }};
+  const badge      = document.getElementById('notif-badge');
   if (badge && parseInt(localStorage.getItem(NOTIF_KEY) || '-1') === alertCount) {
     badge.style.display = 'none';
   }
-
-  // Al abrir el panel: ocultar badge y guardar que las leyó
   const offcanvas = document.getElementById('offcanvasAlertas');
   if (offcanvas) {
     offcanvas.addEventListener('show.bs.offcanvas', function () {
