@@ -442,22 +442,35 @@ def api_sync_libre_debug():
         })
 
     try:
+        from utils.libre_linkup import _decode_jwt_account_id
+        jwt_account_id = _decode_jwt_account_id(token)
+
+        # Usar el account_id del JWT si el cacheado está vacío o difiere
+        effective_account_id = jwt_account_id or account_id
+
         get_headers = {
             "product":        "llu.android",
             "version":        "4.16.0",
             "Accept":         "application/json",
             "User-Agent":     "LibreLinkUp/4.16.0 (Android)",
             "Authorization":  f"Bearer {token}",
-            "Account-Id":     account_id,
+            "Account-Id":     effective_account_id,
         }
         r = _req.get(f"{base_url}/llu/connections",
                      headers=get_headers, timeout=15)
+
+        # Si el JWT account_id funcionó pero el cacheado era diferente, actualizar
+        if r.status_code == 200 and jwt_account_id and jwt_account_id != account_id:
+            _set_setting("libre_account_id", jwt_account_id)
+
         return jsonify({
-            "base_url":          base_url,
-            "account_id":        account_id[:8] + "..." if account_id else "(vacío)",
-            "token_expiry":      expiry,
-            "connections_status": r.status_code,
-            "connections_resp":  r.json() if r.status_code == 200 else r.text[:400],
+            "base_url":            base_url,
+            "account_id_cached":   account_id[:8] + "..." if account_id else "(vacío)",
+            "account_id_jwt":      jwt_account_id[:8] + "..." if jwt_account_id else "(vacío)",
+            "account_id_used":     effective_account_id[:8] + "..." if effective_account_id else "(vacío)",
+            "token_expiry":        expiry,
+            "connections_status":  r.status_code,
+            "connections_resp":    r.json() if r.status_code == 200 else r.text[:400],
         })
     except Exception as e:
         return jsonify({"error": str(e)})

@@ -11,6 +11,8 @@ Referencia: https://github.com/timoschlueter/nightscout-librelink-up
 """
 
 import requests
+import base64
+import json as _json
 from datetime import datetime, timezone, timedelta
 
 # URL base — Abbott detecta la región automáticamente en el login
@@ -85,13 +87,29 @@ def login(email: str, password: str) -> tuple[str, str, str]:
                 f"No se pudo obtener el token. Respuesta: {list(inner.keys())}"
             )
 
-        # Extraer account_id del usuario — requerido como header en requests posteriores
-        user       = inner.get("user") or {}
-        account_id = user.get("id") or user.get("accountId") or ""
+        # Extraer account_id directamente del JWT (más confiable que el campo user.id)
+        account_id = _decode_jwt_account_id(token)
+        if not account_id:
+            # Fallback: intentar desde el objeto user de la respuesta
+            user       = inner.get("user") or {}
+            account_id = user.get("id") or user.get("accountId") or ""
 
         return token, base_url, account_id
 
     raise LibreLinkUpError("No se pudo resolver el servidor regional de Abbott.")
+
+
+def _decode_jwt_account_id(token: str) -> str:
+    """Extrae el account_id del payload del JWT sin verificar firma."""
+    try:
+        payload_b64 = token.split('.')[1]
+        # Agregar padding necesario para base64
+        payload_b64 += '=' * (4 - len(payload_b64) % 4)
+        payload = _json.loads(base64.b64decode(payload_b64))
+        return (payload.get('id') or payload.get('sub') or
+                payload.get('accountId') or payload.get('account_id') or '')
+    except Exception:
+        return ''
 
 
 def _get_headers(token: str, account_id: str) -> dict:
