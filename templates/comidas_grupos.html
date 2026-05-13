@@ -199,6 +199,31 @@
 {# ══ TAB: Ingredientes ════════════════════════════════════════════════════ #}
 {% if active_tab == 'ingredientes' %}
 
+<!-- Coverage bar (siempre visible en este tab) -->
+<div class="grp-coverage-card mb-3">
+  <div class="grp-coverage-header">
+    <span class="grp-coverage-title">
+      <i class="bi bi-pie-chart-fill me-1" style="color:#6366f1;"></i>
+      Cobertura de datos
+    </span>
+    <span class="grp-coverage-pct">{{ cobertura_global }}%</span>
+  </div>
+  <div class="grp-coverage-bar">
+    <div class="grp-coverage-fill" style="width:{{ cobertura_global }}%;"></div>
+  </div>
+  <div class="grp-coverage-legend">
+    <span><strong>{{ con_comp_global }}</strong> comidas con ingredientes</span>
+    <span class="text-muted">·</span>
+    <span style="color:#d97706;"><strong>{{ total_global - con_comp_global }}</strong> sin desglosar (ruido)</span>
+  </div>
+  {% if total_global - con_comp_global > 0 %}
+  <a href="{{ url_for('comidas', dias=365, incompletas='1') }}" class="grp-coverage-action">
+    <i class="bi bi-layout-split me-1"></i>
+    Completar datos históricos →
+  </a>
+  {% endif %}
+</div>
+
 {% if not ingredientes %}
 <div class="list-empty">
   <i class="bi bi-list-check list-empty-icon"></i>
@@ -450,6 +475,37 @@
 .grp-meal-date { color: var(--text-muted); font-size: .74rem; white-space: nowrap; flex-shrink: 0; }
 .grp-meal-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .grp-meal-ch   { color: #d97706; font-weight: 700; font-size: .78rem; flex-shrink: 0; }
+
+/* Coverage card */
+.grp-coverage-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 1rem 1.1rem;
+}
+.grp-coverage-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: .5rem;
+}
+.grp-coverage-title { font-size: .85rem; font-weight: 700; }
+.grp-coverage-pct   { font-size: 1.1rem; font-weight: 800; color: #6366f1; }
+.grp-coverage-bar {
+  height: 8px; background: var(--surface2); border-radius: 10px;
+  overflow: hidden; margin-bottom: .5rem;
+}
+.grp-coverage-fill {
+  height: 100%; background: #6366f1; border-radius: 10px;
+  transition: width .4s ease;
+}
+.grp-coverage-legend {
+  display: flex; align-items: center; gap: .4rem;
+  font-size: .78rem; margin-bottom: .6rem;
+}
+.grp-coverage-action {
+  display: inline-flex; align-items: center;
+  font-size: .8rem; font-weight: 700; color: #6366f1; text-decoration: none;
+  padding: .3rem .7rem; border-radius: 8px; background: rgba(99,102,241,.08);
+  border: 1px solid rgba(99,102,241,.2); transition: all .15s;
+}
+.grp-coverage-action:hover { background: rgba(99,102,241,.15); }
 
 /* Info note */
 .grp-info-note {

@@ -20,6 +20,18 @@
 <div class="form-modern">
   <form method="post" id="meal-form">
 
+    {% if editar and not item.components %}
+    <!-- Banner: invitar a agregar ingredientes en registros viejos -->
+    <div class="comp-upgrade-banner mb-3">
+      <i class="bi bi-layout-split flex-shrink-0" style="font-size:1.1rem; color:#6366f1;"></i>
+      <div>
+        <strong>Esta comida no tiene ingredientes desglosados.</strong>
+        Agregá los ingredientes abajo para que el análisis de patrones sepa qué alimento
+        realmente causó el pico de glucemia.
+      </div>
+    </div>
+    {% endif %}
+
     <!-- Nombre del plato -->
     <div class="fm-section mb-3">
       <div class="fm-section-label">Nombre del plato</div>
@@ -333,6 +345,13 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 
 <style>
+/* ── Edit upgrade banner ──────────────────────────────────────────────── */
+.comp-upgrade-banner {
+  display: flex; align-items: flex-start; gap: .75rem;
+  background: rgba(99,102,241,.07); border: 1px solid rgba(99,102,241,.22);
+  border-radius: 14px; padding: .9rem 1rem; font-size: .86rem;
+}
+
 /* ── Componentes de comida ───────────────────────────────────────────── */
 .comp-row {
   background: var(--surface2); border: 1px solid var(--border);

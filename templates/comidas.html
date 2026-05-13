@@ -24,21 +24,47 @@
   </div>
 </div>
 
-<!-- Filtro días -->
-<div class="range-selector mb-3">
-  {% for d, lbl in [(3,'3d'),(7,'7d'),(14,'14d'),(30,'30d')] %}
-    <a href="{{ url_for('comidas', dias=d) }}"
-       class="range-pill {{ 'range-pill-active range-pill-success' if dias == d else '' }}">{{ lbl }}</a>
-  {% endfor %}
+<!-- Filtros -->
+<div class="d-flex align-items-center gap-2 flex-wrap mb-3">
+  <div class="range-selector">
+    {% for d, lbl in [(3,'3d'),(7,'7d'),(14,'14d'),(30,'30d')] %}
+      <a href="{{ url_for('comidas', dias=d) }}"
+         class="range-pill {{ 'range-pill-active range-pill-success' if (dias == d and not solo_incompletas) else '' }}">{{ lbl }}</a>
+    {% endfor %}
+  </div>
+
+  {% if n_sin_comp > 0 %}
+  <a href="{{ url_for('comidas', dias=dias, incompletas='1') }}"
+     class="comp-filter-btn {{ 'comp-filter-active' if solo_incompletas else '' }}">
+    <i class="bi bi-exclamation-circle"></i>
+    Sin ingredientes ({{ n_sin_comp }})
+  </a>
+  {% endif %}
 </div>
+
+{% if solo_incompletas %}
+<div class="comp-backfill-banner mb-3">
+  <i class="bi bi-magic flex-shrink-0" style="font-size:1.1rem; color:#6366f1;"></i>
+  <div>
+    <strong>Modo completar datos</strong> — estas comidas no tienen ingredientes desglosados.
+    Editá cada una para agregar los ingredientes y mejorar el análisis de patrones.
+  </div>
+  <a href="{{ url_for('comidas', dias=dias) }}" class="btn-list-secondary ms-auto flex-shrink-0">
+    Ver todas
+  </a>
+</div>
+{% endif %}
 
 <!-- Lista -->
 <div class="list-container">
   {% for c in comidas.items %}
     <div class="list-row list-row-neutral">
       <!-- Ícono + nombre -->
-      <div class="list-row-icon bg-success-soft">
+      <div class="list-row-icon bg-success-soft" style="position:relative;">
         <i class="bi bi-egg-fried text-success"></i>
+        {% if not c.components %}
+        <span class="comp-missing-dot" title="Sin ingredientes desglosados"></span>
+        {% endif %}
       </div>
 
       <div class="list-row-body">
@@ -101,6 +127,11 @@
 
       <!-- Acciones -->
       <div class="list-row-actions">
+        {% if not c.components %}
+        <a href="{{ url_for('comida_editar', id=c.id) }}" class="list-btn-split" title="Agregar ingredientes">
+          <i class="bi bi-layout-split"></i>
+        </a>
+        {% endif %}
         <a href="{{ url_for('comida_editar', id=c.id) }}" class="list-btn-edit" title="Editar">
           <i class="bi bi-pencil"></i>
         </a>
@@ -167,6 +198,40 @@
 .macro-kcal { background: var(--surface2); color: var(--text-muted); }
 .list-macros { display: flex; gap: .3rem; align-items: center; flex-shrink: 0; }
 .list-badge-empty { background: var(--surface2); color: var(--text-muted); border: 1px dashed var(--border); }
+
+/* Filter button for incomplete meals */
+.comp-filter-btn {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .28rem .75rem; border-radius: 20px; font-size: .8rem; font-weight: 600;
+  text-decoration: none; background: rgba(245,158,11,.1);
+  border: 1px solid rgba(245,158,11,.3); color: #d97706; transition: all .15s;
+}
+.comp-filter-btn:hover, .comp-filter-active {
+  background: #d97706; color: #fff; border-color: #d97706;
+}
+
+/* Backfill banner */
+.comp-backfill-banner {
+  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+  background: rgba(99,102,241,.07); border: 1px solid rgba(99,102,241,.2);
+  border-radius: 14px; padding: .85rem 1rem; font-size: .86rem;
+}
+
+/* Missing-ingredients dot */
+.comp-missing-dot {
+  position: absolute; top: 3px; right: 3px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #d97706; border: 1.5px solid var(--surface);
+}
+
+/* Split (add ingredients) button */
+.list-btn-split {
+  background: none; border: none; cursor: pointer;
+  width: 30px; height: 30px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .88rem; color: #d97706; transition: background .15s;
+}
+.list-btn-split:hover { background: rgba(245,158,11,.12); }
 
 /* Ingredient pills */
 .comp-pills {

@@ -841,9 +841,13 @@ def comidas_grupos():
     # Ingredientes sin datos de glucosa = menos útiles, los movemos al final
     resumen_ingredientes.sort(key=lambda x: (x["avg_delta"] is None, -x["avg_carbs"]))
 
-    n_sin_cat = len(sin_cat)
-    n_total   = len(comidas)
+    n_sin_cat         = len(sin_cat)
+    n_total           = len(comidas)
     n_con_componentes = sum(1 for c in comidas if c.components)
+    n_sin_componentes = n_total - n_con_componentes
+    # Cobertura global (all-time, no solo el período)
+    total_global       = Meal.query.count()
+    con_comp_global    = Meal.query.filter(Meal.components.any()).count()
 
     return render_template("comidas_grupos.html",
         grupos=resumen_grupos,
@@ -854,6 +858,10 @@ def comidas_grupos():
         n_sin_cat=n_sin_cat,
         n_total=n_total,
         n_con_componentes=n_con_componentes,
+        n_sin_componentes=n_sin_componentes,
+        cobertura_global=round(con_comp_global / total_global * 100) if total_global else 0,
+        total_global=total_global,
+        con_comp_global=con_comp_global,
         dias=dias,
     )
 
@@ -888,13 +896,21 @@ def api_set_categoria(id):
 def comidas():
     page = request.args.get("page", 1, type=int)
     dias = request.args.get("dias", 7, type=int)
+    solo_incompletas = request.args.get("incompletas", "0") == "1"
     desde = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=dias)
-    comidas_list = (
-        Meal.query.filter(Meal.timestamp >= desde)
-        .order_by(Meal.timestamp.desc())
-        .paginate(page=page, per_page=30, error_out=False)
-    )
+
+    q = Meal.query.filter(Meal.timestamp >= desde)
+    if solo_incompletas:
+        # Solo comidas SIN componentes registrados
+        q = q.filter(~Meal.components.any())
+    comidas_list = q.order_by(Meal.timestamp.desc()).paginate(page=page, per_page=30, error_out=False)
+
+    # Contador global de comidas sin ingredientes (para el banner)
+    n_sin_comp = Meal.query.filter(~Meal.components.any()).count()
+
     return render_template("comidas.html", comidas=comidas_list, dias=dias,
+                           solo_incompletas=solo_incompletas,
+                           n_sin_comp=n_sin_comp,
                            categorias=sorted(CATEGORIAS_REGLAS.keys()),
                            colores=CATEGORIA_COLORES)
 
