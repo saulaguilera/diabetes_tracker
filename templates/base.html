@@ -52,12 +52,6 @@
 
 /* Actions */
 .fm-actions { display: flex; gap: .6rem; align-items: center; }
-@media (max-width: 768px) {
-  .fm-actions { flex-direction: column; }
-  .fm-actions .fm-btn-success,
-  .fm-actions .fm-btn-warning,
-  .fm-actions .fm-btn-primary { width: 100%; justify-content: center; }
-}
 .fm-btn-primary, .fm-btn-success, .fm-btn-warning {
   display: inline-flex; align-items: center; gap: .4rem;
   padding: .55rem 1.25rem; border-radius: 10px;
@@ -596,20 +590,17 @@
       .chart-box > table { overflow-x: auto; display: block; }
     }
 
-    /* ── Sticky submit buttons ── */
-    /* En móvil los botones de submit flotan justo encima de la barra inferior */
+    /* ── Submit button breathing room on mobile ── */
+    /* El padding-bottom de main-content (7rem) garantiza que siempre se puede
+       hacer scroll para ver el botón completo por encima de la bottom-nav */
     @media (max-width: 768px) {
       .fm-btn-success[type="submit"],
       .fm-btn-warning[type="submit"],
       .fm-btn-primary[type="submit"],
       button[type="submit"].btn-lg.w-100,
       button[type="submit"].btn-success.w-100,
-      button[type="submit"].btn-primary.w-100,
-      button[type="submit"].backup-submit-btn {
-        position: sticky;
-        bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
-        z-index: 50;
-        box-shadow: 0 -6px 20px rgba(0,0,0,.3);
+      button[type="submit"].btn-primary.w-100 {
+        margin-bottom: 2rem;
       }
     }
   </style>
