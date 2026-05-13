@@ -442,53 +442,36 @@ def api_sync_libre_debug():
         })
 
     try:
-        import base64 as _b64, json as _j
-        # Decodificar payload completo del JWT para diagnóstico
-        try:
-            parts = token.split('.')
-            pad   = parts[1] + '=' * (4 - len(parts[1]) % 4)
-            jwt_payload = _j.loads(_b64.b64decode(pad))
-        except Exception:
-            jwt_payload = {}
+        import hashlib as _hl
+        from utils.libre_linkup import _decode_jwt_account_id, _hash_account_id
+        raw_id = _decode_jwt_account_id(token)
+        hashed = _hash_account_id(raw_id)
 
-        # Probar distintos campos del JWT como Account-Id
-        candidates = {
-            "id":  jwt_payload.get("id", ""),
-            "sid": jwt_payload.get("sid", ""),
-            "jti": jwt_payload.get("jti", ""),
-            "id_nodash": jwt_payload.get("id", "").replace("-", ""),
+        # Abbott espera SHA-256(user_id) como Account-Id
+        effective_account_id = hashed or account_id
+
+        get_headers = {
+            "product":        "llu.android",
+            "version":        "4.16.0",
+            "Accept":         "application/json",
+            "User-Agent":     "LibreLinkUp/4.16.0 (Android)",
+            "Authorization":  f"Bearer {token}",
+            "Account-Id":     effective_account_id,
         }
+        r = _req.get(f"{base_url}/llu/connections",
+                     headers=get_headers, timeout=15)
 
-        results = {}
-        working_key = None
-        for cand_name, cand_val in candidates.items():
-            if not cand_val:
-                results[cand_name] = "vacío"
-                continue
-            h = {
-                "product":       "llu.android",
-                "version":       "4.16.0",
-                "Accept":        "application/json",
-                "User-Agent":    "LibreLinkUp/4.16.0 (Android)",
-                "Authorization": f"Bearer {token}",
-                "Account-Id":    cand_val,
-            }
-            try:
-                rr = _req.get(f"{base_url}/llu/connections", headers=h, timeout=15)
-                results[cand_name] = rr.status_code
-                if rr.status_code == 200 and not working_key:
-                    working_key = cand_name
-                    # Guardar el que funcionó
-                    _set_setting("libre_account_id", cand_val)
-            except Exception as ex:
-                results[cand_name] = str(ex)
+        # Si funcionó con el hash, guardarlo para sync_all
+        if r.status_code == 200 and hashed:
+            _set_setting("libre_account_id", hashed)
 
         return jsonify({
-            "base_url":         base_url,
-            "token_expiry":     expiry,
-            "jwt_payload":      {k: str(v)[:40] for k, v in jwt_payload.items()},
-            "probe_results":    results,
-            "working_key":      working_key or "ninguno",
+            "base_url":           base_url,
+            "raw_user_id":        raw_id[:8] + "..." if raw_id else "(vacío)",
+            "account_id_hashed":  hashed[:16] + "..." if hashed else "(vacío)",
+            "token_expiry":       expiry,
+            "connections_status": r.status_code,
+            "connections_resp":   r.json() if r.status_code == 200 else r.text[:400],
         })
     except Exception as e:
         return jsonify({"error": str(e)})

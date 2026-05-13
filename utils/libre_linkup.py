@@ -12,6 +12,7 @@ Referencia: https://github.com/timoschlueter/nightscout-librelink-up
 
 import requests
 import base64
+import hashlib
 import json as _json
 from datetime import datetime, timezone, timedelta
 
@@ -87,12 +88,14 @@ def login(email: str, password: str) -> tuple[str, str, str]:
                 f"No se pudo obtener el token. Respuesta: {list(inner.keys())}"
             )
 
-        # Extraer account_id directamente del JWT (más confiable que el campo user.id)
-        account_id = _decode_jwt_account_id(token)
-        if not account_id:
-            # Fallback: intentar desde el objeto user de la respuesta
-            user       = inner.get("user") or {}
-            account_id = user.get("id") or user.get("accountId") or ""
+        # Extraer raw user ID del JWT (más confiable que el campo user de la respuesta)
+        raw_id = _decode_jwt_account_id(token)
+        if not raw_id:
+            user   = inner.get("user") or {}
+            raw_id = user.get("id") or user.get("accountId") or ""
+
+        # Abbott espera SHA-256(user_id) como Account-Id header
+        account_id = _hash_account_id(raw_id)
 
         return token, base_url, account_id
 
@@ -103,13 +106,17 @@ def _decode_jwt_account_id(token: str) -> str:
     """Extrae el account_id del payload del JWT sin verificar firma."""
     try:
         payload_b64 = token.split('.')[1]
-        # Agregar padding necesario para base64
         payload_b64 += '=' * (4 - len(payload_b64) % 4)
         payload = _json.loads(base64.b64decode(payload_b64))
         return (payload.get('id') or payload.get('sub') or
                 payload.get('accountId') or payload.get('account_id') or '')
     except Exception:
         return ''
+
+
+def _hash_account_id(raw_id: str) -> str:
+    """Abbott espera SHA-256(user_id) como header Account-Id, no el UUID directo."""
+    return hashlib.sha256(raw_id.encode()).hexdigest() if raw_id else ''
 
 
 def _get_headers(token: str, account_id: str) -> dict:
