@@ -530,7 +530,9 @@
     }
     .mobile-topbar {
       display: none; position: sticky; top: 0; z-index: 98;
-      background: #1e293b; padding: .6rem 1rem;
+      background: #1e293b;
+      padding: .6rem 1rem;
+      padding-top: calc(.6rem + env(safe-area-inset-top, 0px));
       align-items: center; gap: .75rem;
     }
     .mobile-topbar .brand-text { color: #f1f5f9; font-weight: 700; font-size: 1rem; }
