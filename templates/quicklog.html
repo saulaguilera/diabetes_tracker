@@ -2,373 +2,461 @@
 {% block title %}Quick Log — DiabetesTracker{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex justify-content-between align-items-center">
+
+<div class="list-page-header mb-3">
   <div>
-    <h1><i class="bi bi-lightning-charge-fill me-2 text-warning"></i>Quick Log</h1>
-    <small class="text-muted">Registrá todo de una sola vez</small>
+    <h1 class="list-page-title">
+      <span class="list-icon-wrap" style="background:rgba(99,102,241,.15);">
+        <i class="bi bi-lightning-charge-fill" style="color:#6366f1;"></i>
+      </span>
+      Quick Log
+    </h1>
+    <p class="list-page-sub">Registrá todo de una sola vez</p>
   </div>
+  <a href="{{ url_for('dashboard') }}" class="btn-list-secondary">
+    <i class="bi bi-x-lg"></i> Cancelar
+  </a>
 </div>
 
 <form method="POST" action="{{ url_for('quicklog') }}" id="quicklog-form">
 
   <!-- Fecha y hora compartida -->
-  <div class="chart-box mb-3">
-    <div class="d-flex align-items-center gap-2 mb-3">
+  <div class="ql-section mb-3">
+    <div class="ql-section-header">
       <i class="bi bi-clock-fill text-secondary"></i>
-      <strong style="font-size:.95rem;">Fecha y hora del registro</strong>
+      <span>Cuándo</span>
     </div>
-    <div class="row g-2">
-      <div class="col-7">
-        <input type="date" name="fecha" id="fecha" class="form-control"
-               value="{{ fecha }}" required>
+    <div class="ql-section-body">
+      <div class="row g-2 align-items-center">
+        <div class="col-5">
+          <input type="date" name="fecha" id="fecha" class="form-control form-control-sm"
+                 value="{{ fecha }}" required>
+        </div>
+        <div class="col-4">
+          <input type="time" name="hora" id="hora" class="form-control form-control-sm"
+                 value="{{ hora }}" required>
+        </div>
+        <div class="col-3">
+          <button type="button" class="btn btn-sm btn-outline-secondary w-100" onclick="setNow()">
+            Ahora
+          </button>
+        </div>
       </div>
-      <div class="col-5">
-        <input type="time" name="hora" id="hora" class="form-control"
-               value="{{ hora }}" required>
-      </div>
-    </div>
-    <div class="d-flex gap-2 mt-2">
-      <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setNow()">
-        <i class="bi bi-clock"></i> Ahora
-      </button>
     </div>
   </div>
 
   <!-- ── GLUCEMIA ── -->
   <div class="ql-card mb-3" id="card-glucemia">
     <div class="ql-header" onclick="toggleSection('glucemia')" style="cursor:pointer;">
-      <div class="d-flex align-items-center gap-3">
-        <div class="ql-icon-wrap" style="background:rgba(59,130,246,0.15);">
-          <i class="bi bi-droplet-fill text-primary" style="font-size:1.2rem;"></i>
-        </div>
-        <div>
-          <div class="fw-semibold">Glucemia</div>
-          <div class="text-muted" style="font-size:.78rem;" id="glucemia-preview">
-            {% if ultima_glucemia %}
-              Última: {{ ultima_glucemia.value_mgdl|int }} mg/dL
-              ({{ ultima_glucemia.timestamp.strftime('%H:%M') }})
-            {% else %}Sin registros{% endif %}
-          </div>
+      <div class="ql-card-icon" style="background:rgba(59,130,246,.12);">
+        <i class="bi bi-droplet-fill text-primary"></i>
+      </div>
+      <div class="ql-card-info">
+        <div class="ql-card-title">Glucemia</div>
+        <div class="ql-card-sub" id="glucemia-preview">
+          {% if ultima_glucemia %}
+            Última: {{ ultima_glucemia.value_mgdl|int }} mg/dL · {{ ultima_glucemia.timestamp.strftime('%H:%M') }}
+          {% else %}Sin registros{% endif %}
         </div>
       </div>
       <div class="form-check form-switch mb-0 ms-auto" onclick="event.stopPropagation();">
         <input class="form-check-input" type="checkbox" name="reg_glucemia"
-               id="toggle-glucemia" checked style="font-size:1.2rem; cursor:pointer;"
-               onchange="toggleSection('glucemia', this.checked)">
+               id="toggle-glucemia" checked style="cursor:pointer;">
       </div>
     </div>
+
     <div id="body-glucemia" class="ql-body">
-      <div class="row g-2 align-items-end">
-        <div class="col-8">
-          <label class="form-label mb-1" style="font-size:.82rem;">Valor (mg/dL)</label>
-          <div class="input-group">
-            <input type="number" name="glucemia_valor" id="glucemia_valor"
-                   class="form-control form-control-lg fw-bold"
-                   placeholder="120" min="20" max="600" step="1"
-                   style="font-size:1.4rem; text-align:center;">
-            <span class="input-group-text text-muted">mg/dL</span>
-          </div>
+      <!-- Valor grande + badge -->
+      <div class="ql-value-row mb-2">
+        <div class="ql-input-big">
+          <input type="number" name="glucemia_valor" id="glucemia_valor"
+                 class="ql-num-input" placeholder="—"
+                 min="20" max="600" step="1">
+          <span class="ql-num-unit">mg/dL</span>
         </div>
-        <div class="col-4">
-          <div id="glucemia-badge" class="text-center py-2 rounded"
-               style="min-height:48px; background:var(--surface2); border:1px solid var(--border);">
-            <span class="fw-bold" id="glucemia-estado" style="font-size:1rem;">—</span>
-          </div>
+        <div id="glucemia-badge" class="ql-status-badge">
+          <span id="glucemia-estado">—</span>
         </div>
       </div>
-      <!-- Atajos rápidos -->
-      <div class="d-flex gap-2 flex-wrap mt-2">
-        <span class="text-muted" style="font-size:.78rem; align-self:center;">Rápido:</span>
-        {% for v in [70, 80, 100, 120, 140, 160, 180, 200, 250] %}
-        <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2"
-                style="font-size:.78rem;"
-                onclick="document.getElementById('glucemia_valor').value='{{ v }}'; updateGlucemiaBadge({{ v }});">
-          {{ v }}
-        </button>
+      <!-- Quick values -->
+      <div class="ql-quick-row mb-2">
+        {% for v in [70, 80, 100, 120, 140, 160, 180, 220, 280] %}
+        <button type="button" class="ql-quick-btn"
+                onclick="setGlucemia({{ v }})">{{ v }}</button>
         {% endfor %}
       </div>
-      <div class="mt-2">
-        <input type="text" name="glucemia_notas" class="form-control form-control-sm"
-               placeholder="Notas opcionales (ayuno, post-comida...)" style="font-size:.82rem;">
-      </div>
+      <input type="text" name="glucemia_notas" class="form-control form-control-sm"
+             placeholder="Notas: ayuno, post-comida, corrección..." style="font-size:.8rem;">
     </div>
   </div>
 
   <!-- ── COMIDA ── -->
   <div class="ql-card mb-3" id="card-comida">
     <div class="ql-header" onclick="toggleSection('comida')" style="cursor:pointer;">
-      <div class="d-flex align-items-center gap-3">
-        <div class="ql-icon-wrap" style="background:rgba(34,197,94,0.15);">
-          <i class="bi bi-egg-fried text-success" style="font-size:1.2rem;"></i>
-        </div>
-        <div>
-          <div class="fw-semibold">Comida</div>
-          <div class="text-muted" id="comida-preview" style="font-size:.78rem;">No registrada aún</div>
-        </div>
+      <div class="ql-card-icon" style="background:rgba(34,197,94,.12);">
+        <i class="bi bi-egg-fried text-success"></i>
+      </div>
+      <div class="ql-card-info">
+        <div class="ql-card-title">Comida</div>
+        <div class="ql-card-sub" id="comida-preview">No registrada</div>
       </div>
       <div class="form-check form-switch mb-0 ms-auto" onclick="event.stopPropagation();">
         <input class="form-check-input" type="checkbox" name="reg_comida"
-               id="toggle-comida" checked style="font-size:1.2rem; cursor:pointer;"
-               onchange="toggleSection('comida', this.checked)">
+               id="toggle-comida" checked style="cursor:pointer;">
       </div>
     </div>
+
     <div id="body-comida" class="ql-body">
-      <!-- Búsqueda en biblioteca -->
-      <div class="mb-2">
-        <label class="form-label mb-1" style="font-size:.82rem;">Nombre del alimento</label>
-        <div class="position-relative">
-          <input type="text" id="comida_search" class="form-control"
-                 placeholder="Buscar en mis alimentos o escribir nuevo..."
-                 autocomplete="off" oninput="buscarAlimento(this.value)">
-          <input type="hidden" name="comida_nombre" id="comida_nombre_hidden">
-          <input type="hidden" name="food_item_id" id="food_item_id">
-          <div id="alimento-dropdown" class="list-group position-absolute w-100 shadow"
-               style="z-index:1000; display:none; max-height:200px; overflow-y:auto; top:100%;"></div>
-        </div>
+      <div class="position-relative mb-2">
+        <input type="text" id="comida_search" class="form-control"
+               placeholder="Buscar alimento o escribir nombre..."
+               autocomplete="off" oninput="buscarAlimento(this.value)">
+        <input type="hidden" name="comida_nombre" id="comida_nombre_hidden">
+        <input type="hidden" name="food_item_id" id="food_item_id">
+        <div id="alimento-dropdown" class="ql-dropdown"
+             style="display:none;"></div>
       </div>
       <div class="row g-2">
         <div class="col-6">
-          <label class="form-label mb-1" style="font-size:.82rem;">Carbohidratos (g)</label>
-          <input type="number" name="comida_carbs" id="comida_carbs"
-                 class="form-control fw-bold" placeholder="0" min="0" max="500" step="0.5"
-                 oninput="updateComidaPreview(); sugerirBolo()">
+          <div class="ql-macro-input">
+            <label>Carbohidratos</label>
+            <div class="input-group input-group-sm">
+              <input type="number" name="comida_carbs" id="comida_carbs"
+                     class="form-control fw-bold text-warning" placeholder="0"
+                     min="0" max="500" step="0.5"
+                     oninput="updateComidaPreview(); sugerirBolo()">
+              <span class="input-group-text">g</span>
+            </div>
+          </div>
         </div>
         <div class="col-6">
-          <label class="form-label mb-1" style="font-size:.82rem;">Proteínas (g)</label>
-          <input type="number" name="comida_protein" class="form-control"
-                 placeholder="0" min="0" max="200" step="0.5">
+          <div class="ql-macro-input">
+            <label>Proteínas</label>
+            <div class="input-group input-group-sm">
+              <input type="number" name="comida_protein" class="form-control"
+                     placeholder="0" min="0" max="200" step="0.5">
+              <span class="input-group-text">g</span>
+            </div>
+          </div>
         </div>
         <div class="col-6">
-          <label class="form-label mb-1" style="font-size:.82rem;">Grasas (g)</label>
-          <input type="number" name="comida_fat" class="form-control"
-                 placeholder="0" min="0" max="200" step="0.5">
+          <div class="ql-macro-input">
+            <label>Grasas</label>
+            <div class="input-group input-group-sm">
+              <input type="number" name="comida_fat" class="form-control"
+                     placeholder="0" min="0" max="200" step="0.5">
+              <span class="input-group-text">g</span>
+            </div>
+          </div>
         </div>
         <div class="col-6">
-          <label class="form-label mb-1" style="font-size:.82rem;">Calorías</label>
-          <input type="number" name="comida_cal" class="form-control"
-                 placeholder="0" min="0" max="3000" step="1">
+          <div class="ql-macro-input">
+            <label>Calorías</label>
+            <div class="input-group input-group-sm">
+              <input type="number" name="comida_cal" class="form-control"
+                     placeholder="0" min="0" max="3000" step="1">
+              <span class="input-group-text">kcal</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Sugerencia de bolo (aparece si hay glucemia + carbos) -->
-  <div id="bolo-sugerencia" class="mb-3 p-3 rounded border"
-       style="display:none; background:rgba(99,102,241,.08); border-color:rgba(99,102,241,.3) !important;">
-    <div class="d-flex align-items-center gap-3">
-      <i class="bi bi-lightning-charge-fill text-warning fs-5 flex-shrink-0"></i>
-      <div class="flex-grow-1">
-        <div class="fw-semibold" style="font-size:.85rem;">Bolo sugerido</div>
-        <div id="bolo-detalle" class="text-muted" style="font-size:.75rem;"></div>
+  <!-- Bolo sugerido -->
+  <div id="bolo-sugerencia" class="ql-bolo-box mb-3" style="display:none;">
+    <div class="ql-bolo-inner">
+      <div class="ql-bolo-icon">⚡</div>
+      <div class="ql-bolo-info">
+        <div class="ql-bolo-label">Bolo sugerido</div>
+        <div id="bolo-detalle" class="ql-bolo-detail"></div>
       </div>
-      <div id="bolo-valor" class="fw-bold" style="font-size:1.6rem;"></div>
+      <div id="bolo-valor" class="ql-bolo-val"></div>
     </div>
-    <div class="mt-2" style="font-size:.73rem; color:var(--text-muted);">
-      <i class="bi bi-info-circle me-1"></i>
-      Basado en tu ISF y ratio I:CH configurados.
-      <a href="{{ url_for('calculadora') }}" class="ms-1">Configurar →</a>
+    <div class="ql-bolo-hint">
+      Basado en tu ISF y ratio I:CH ·
+      <a href="{{ url_for('calculadora') }}">Configurar</a>
     </div>
   </div>
 
   <!-- ── INSULINA ── -->
   <div class="ql-card mb-4" id="card-insulina">
     <div class="ql-header" onclick="toggleSection('insulina')" style="cursor:pointer;">
-      <div class="d-flex align-items-center gap-3">
-        <div class="ql-icon-wrap" style="background:rgba(234,179,8,0.15);">
-          <i class="bi bi-capsule-pill text-warning" style="font-size:1.2rem;"></i>
-        </div>
-        <div>
-          <div class="fw-semibold">Insulina bolus</div>
-          <div class="text-muted" id="insulina-preview" style="font-size:.78rem;">No registrada aún</div>
-        </div>
+      <div class="ql-card-icon" style="background:rgba(245,158,11,.12);">
+        <i class="bi bi-capsule-pill text-warning"></i>
+      </div>
+      <div class="ql-card-info">
+        <div class="ql-card-title">Insulina bolo</div>
+        <div class="ql-card-sub" id="insulina-preview">No registrada</div>
       </div>
       <div class="form-check form-switch mb-0 ms-auto" onclick="event.stopPropagation();">
         <input class="form-check-input" type="checkbox" name="reg_insulina"
-               id="toggle-insulina" checked style="font-size:1.2rem; cursor:pointer;"
-               onchange="toggleSection('insulina', this.checked)">
+               id="toggle-insulina" checked style="cursor:pointer;">
       </div>
     </div>
+
     <div id="body-insulina" class="ql-body">
-      <div class="row g-2 align-items-end">
-        <div class="col-6">
-          <label class="form-label mb-1" style="font-size:.82rem;">Unidades</label>
-          <div class="input-group">
-            <input type="number" name="insulina_units" id="insulina_units"
-                   class="form-control form-control-lg fw-bold"
-                   placeholder="0" min="0.5" max="80" step="0.5"
-                   style="font-size:1.4rem; text-align:center;"
-                   oninput="updateInsulinaPreview()">
-            <span class="input-group-text text-muted">U</span>
-          </div>
+      <div class="ql-value-row mb-2">
+        <div class="ql-input-big">
+          <input type="number" name="insulina_units" id="insulina_units"
+                 class="ql-num-input" placeholder="—"
+                 min="0.5" max="80" step="0.5"
+                 oninput="updateInsulinaPreview()">
+          <span class="ql-num-unit">U</span>
         </div>
-        <div class="col-6">
-          <label class="form-label mb-1" style="font-size:.82rem;">Marca (opcional)</label>
-          <input type="text" name="insulina_brand" class="form-control"
-                 placeholder="Novorapid, Humalog...">
-        </div>
+        <input type="text" name="insulina_brand" class="form-control form-control-sm"
+               placeholder="Marca: Novorapid, Humalog..." style="flex:1;">
       </div>
-      <!-- Atajos rápidos de unidades -->
-      <div class="d-flex gap-2 flex-wrap mt-2">
-        <span class="text-muted" style="font-size:.78rem; align-self:center;">Rápido:</span>
-        {% for u in [1, 2, 3, 4, 5, 6, 8, 10, 12] %}
-        <button type="button" class="btn btn-sm btn-outline-warning py-0 px-2"
-                style="font-size:.78rem;"
-                onclick="document.getElementById('insulina_units').value='{{ u }}'; updateInsulinaPreview();">
-          {{ u }}U
-        </button>
+      <div class="ql-quick-row">
+        {% for u in [1, 2, 3, 4, 5, 6, 7, 8, 10, 12] %}
+        <button type="button" class="ql-quick-btn ql-quick-btn-insulin"
+                onclick="setInsulina({{ u }})">{{ u }}U</button>
         {% endfor %}
       </div>
     </div>
   </div>
 
-  <!-- Resumen antes de guardar -->
-  <div id="resumen-box" class="mb-3 p-3 rounded border"
-       style="background:var(--surface2); display:none;">
-    <div class="fw-semibold mb-1" style="font-size:.85rem;">
-      <i class="bi bi-check2-circle text-success me-1"></i>Se va a registrar:
+  <!-- Resumen -->
+  <div id="resumen-box" class="ql-resumen mb-3" style="display:none;">
+    <div class="ql-resumen-title">
+      <i class="bi bi-check2-circle text-success"></i> Se va a registrar:
     </div>
-    <div id="resumen-items" style="font-size:.82rem;"></div>
+    <div id="resumen-items"></div>
   </div>
 
-  <!-- Botón principal -->
-  <div class="d-grid gap-2">
-    <button type="submit" class="btn btn-primary btn-lg fw-bold py-3"
-            style="font-size:1.1rem; border-radius:14px;">
-      <i class="bi bi-lightning-charge-fill me-2"></i>Registrar todo
-    </button>
-    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
-      Cancelar
-    </a>
-  </div>
+  <!-- Submit -->
+  <button type="submit" class="ql-submit-btn">
+    <i class="bi bi-lightning-charge-fill"></i> Registrar todo
+  </button>
 
 </form>
 {% endblock %}
 
 {% block scripts %}
+{{ list_styles() }}
 <style>
-  /* ── Quick Log cards ── */
-  .ql-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    overflow: hidden;
-    transition: box-shadow .2s;
-  }
-  .ql-card:has(.form-check-input:checked) {
-    box-shadow: 0 0 0 2px rgba(99,102,241,.25);
-  }
-  .ql-header {
-    display: flex;
-    align-items: center;
-    padding: 1rem 1rem .85rem;
-    user-select: none;
-  }
-  .ql-icon-wrap {
-    width: 42px; height: 42px;
-    border-radius: 12px;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
-  }
-  .ql-body {
-    padding: 0 1rem 1rem;
-    border-top: 1px solid var(--border);
-  }
-  .ql-card.collapsed .ql-body { display: none; }
-  .ql-card.collapsed .ql-header { padding-bottom: .85rem; }
-  .ql-card.collapsed { opacity: .55; }
+/* ── Quick Log styles ─────────────────────────────────────────────────────── */
+.ql-section {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; overflow: hidden;
+}
+.ql-section-header {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .6rem 1rem; font-size: .8rem; font-weight: 600;
+  color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em;
+  border-bottom: 1px solid var(--border); background: var(--surface2);
+}
+.ql-section-body { padding: .85rem 1rem; }
+
+.ql-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; overflow: hidden;
+  transition: box-shadow .2s, border-color .2s;
+}
+.ql-card:has(.form-check-input:checked) {
+  border-color: rgba(99,102,241,.35);
+  box-shadow: 0 0 0 3px rgba(99,102,241,.08);
+}
+.ql-card.collapsed { opacity: .5; }
+.ql-card.collapsed .ql-body { display: none; }
+
+.ql-header {
+  display: flex; align-items: center; gap: .85rem;
+  padding: .9rem 1rem; user-select: none;
+}
+.ql-card-icon {
+  width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+}
+.ql-card-info { flex: 1; min-width: 0; }
+.ql-card-title { font-size: .92rem; font-weight: 700; }
+.ql-card-sub { font-size: .75rem; color: var(--text-muted); margin-top: .05rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.ql-body { padding: 0 1rem 1rem; border-top: 1px solid var(--border); }
+
+/* Big number input */
+.ql-value-row { display: flex; align-items: center; gap: .75rem; }
+.ql-input-big {
+  display: flex; align-items: baseline; gap: .3rem;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px; padding: .4rem .8rem;
+}
+.ql-num-input {
+  width: 90px; font-size: 2rem; font-weight: 800; letter-spacing: -2px;
+  background: none; border: none; outline: none; color: var(--text);
+  text-align: center;
+}
+.ql-num-unit { font-size: .75rem; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
+
+/* Status badge */
+.ql-status-badge {
+  min-width: 70px; text-align: center;
+  padding: .4rem .6rem; border-radius: 10px;
+  font-size: .9rem; font-weight: 700;
+  background: var(--surface2); color: var(--text-muted);
+  border: 1px solid var(--border); transition: all .2s;
+}
+
+/* Quick buttons */
+.ql-quick-row {
+  display: flex; flex-wrap: wrap; gap: .3rem;
+}
+.ql-quick-btn {
+  padding: .2rem .55rem; border-radius: 8px; font-size: .78rem; font-weight: 600;
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text-muted); cursor: pointer; transition: all .12s;
+}
+.ql-quick-btn:hover { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+.ql-quick-btn-insulin:hover { background: #f59e0b; border-color: #f59e0b; color: #fff; }
+
+/* Macro input */
+.ql-macro-input label {
+  display: block; font-size: .72rem; font-weight: 600;
+  color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em;
+  margin-bottom: .2rem;
+}
+
+/* Dropdown alimentos */
+.ql-dropdown {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 1000;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.15);
+  max-height: 220px; overflow-y: auto; margin-top: 2px;
+}
+.ql-dropdown-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .55rem .85rem; font-size: .85rem; cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background .1s;
+}
+.ql-dropdown-item:last-child { border-bottom: none; }
+.ql-dropdown-item:hover { background: var(--surface2); }
+.ql-dropdown-item strong { font-weight: 600; }
+.ql-dropdown-item small { color: var(--text-muted); }
+
+/* Bolo box */
+.ql-bolo-box {
+  background: rgba(99,102,241,.06);
+  border: 1px solid rgba(99,102,241,.25);
+  border-radius: 14px; padding: .85rem 1rem;
+}
+.ql-bolo-inner { display: flex; align-items: center; gap: .85rem; }
+.ql-bolo-icon  { font-size: 1.5rem; flex-shrink: 0; }
+.ql-bolo-info  { flex: 1; }
+.ql-bolo-label { font-size: .85rem; font-weight: 700; }
+.ql-bolo-detail{ font-size: .75rem; color: var(--text-muted); margin-top: .1rem; }
+.ql-bolo-val   { font-size: 2rem; font-weight: 800; letter-spacing: -1px; }
+.ql-bolo-hint  { font-size: .72rem; color: var(--text-muted); margin-top: .5rem; }
+.ql-bolo-hint a { color: #6366f1; }
+
+/* Resumen */
+.ql-resumen {
+  background: rgba(34,197,94,.06); border: 1px solid rgba(34,197,94,.2);
+  border-radius: 12px; padding: .8rem 1rem;
+}
+.ql-resumen-title { font-size: .82rem; font-weight: 700; margin-bottom: .4rem; }
+.ql-resumen-title i { color: #22c55e; }
+#resumen-items div { font-size: .82rem; margin-bottom: .2rem; }
+
+/* Submit */
+.ql-submit-btn {
+  width: 100%; background: #6366f1; color: #fff; border: none;
+  border-radius: 14px; padding: .9rem; font-size: 1rem; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  gap: .5rem; transition: background .15s; margin-bottom: 1rem;
+}
+.ql-submit-btn:hover { background: #4f46e5; }
 </style>
 
 <script>
-// ── Fecha/hora actual ──────────────────────────────────────────────────────────
 function setNow() {
-  const now = new Date();
-  document.getElementById('fecha').value = now.toLocaleDateString('sv');  // YYYY-MM-DD
-  document.getElementById('hora').value  = now.toTimeString().slice(0,5);
+  const n = new Date();
+  document.getElementById('fecha').value = n.toLocaleDateString('sv');
+  document.getElementById('hora').value  = n.toTimeString().slice(0,5);
 }
 
-// ── Toggle de sección ─────────────────────────────────────────────────────────
 function toggleSection(section, force) {
   const card   = document.getElementById('card-' + section);
   const toggle = document.getElementById('toggle-' + section);
   const enabled = force !== undefined ? force : !card.classList.contains('collapsed');
-  if (!enabled) {
-    card.classList.add('collapsed');
-    toggle.checked = false;
-  } else {
-    card.classList.remove('collapsed');
-    toggle.checked = true;
-  }
+  card.classList.toggle('collapsed', !enabled);
+  toggle.checked = enabled;
   updateResumen();
 }
 
-// ── Badge de estado glucémico ─────────────────────────────────────────────────
+function setGlucemia(v) {
+  document.getElementById('glucemia_valor').value = v;
+  updateGlucemiaBadge(v);
+  sugerirBolo();
+}
+
+function setInsulina(u) {
+  document.getElementById('insulina_units').value = u;
+  updateInsulinaPreview();
+}
+
 function updateGlucemiaBadge(val) {
   const badge  = document.getElementById('glucemia-badge');
   const estado = document.getElementById('glucemia-estado');
   val = parseFloat(val);
-  if (isNaN(val)) { estado.textContent = '—'; badge.style.background = 'var(--surface2)'; return; }
-  if (val < 70)        { estado.textContent = val + ' ↓'; estado.style.color = '#ef4444'; badge.style.background = 'rgba(239,68,68,.1)'; }
-  else if (val > 180)  { estado.textContent = val + ' ↑'; estado.style.color = '#f97316'; badge.style.background = 'rgba(249,115,22,.1)'; }
-  else                 { estado.textContent = val + ' ✓'; estado.style.color = '#22c55e'; badge.style.background = 'rgba(34,197,94,.1)'; }
-  document.getElementById('glucemia-preview').textContent = val + ' mg/dL registrado';
+  if (isNaN(val)) {
+    estado.textContent = '—'; badge.style.cssText = '';
+    return;
+  }
+  if (val < 70) {
+    estado.textContent = '↓ Hipo';
+    badge.style.cssText = 'background:rgba(239,68,68,.12);color:#ef4444;border-color:rgba(239,68,68,.3)';
+  } else if (val > 180) {
+    estado.textContent = '↑ Hiper';
+    badge.style.cssText = 'background:rgba(249,115,22,.12);color:#f97316;border-color:rgba(249,115,22,.3)';
+  } else {
+    estado.textContent = '✓ OK';
+    badge.style.cssText = 'background:rgba(34,197,94,.12);color:#22c55e;border-color:rgba(34,197,94,.3)';
+  }
+  document.getElementById('glucemia-preview').textContent = val + ' mg/dL';
   updateResumen();
 }
+
 document.getElementById('glucemia_valor').addEventListener('input', function() {
   updateGlucemiaBadge(this.value);
   sugerirBolo();
 });
 
-// ── Preview comida ─────────────────────────────────────────────────────────────
 function updateComidaPreview() {
-  const nombre = document.getElementById('comida_search').value.trim();
-  const carbs  = document.getElementById('comida_carbs').value;
-  const prev   = document.getElementById('comida-preview');
-  if (nombre) {
-    prev.textContent = nombre + (carbs ? ' · ' + carbs + 'g CH' : '');
-  } else {
-    prev.textContent = 'No registrada aún';
-  }
+  const n = document.getElementById('comida_search').value.trim();
+  const c = document.getElementById('comida_carbs').value;
+  document.getElementById('comida-preview').textContent =
+    n ? (n + (c ? ' · ' + c + 'g CH' : '')) : 'No registrada';
   updateResumen();
 }
 
-// ── Preview insulina ──────────────────────────────────────────────────────────
 function updateInsulinaPreview() {
-  const u    = document.getElementById('insulina_units').value;
-  const prev = document.getElementById('insulina-preview');
-  prev.textContent = u ? u + ' U bolus' : 'No registrada aún';
+  const u = document.getElementById('insulina_units').value;
+  document.getElementById('insulina-preview').textContent = u ? u + ' U bolo' : 'No registrada';
   updateResumen();
 }
 
-// ── Sugerencia de bolo (glucemia + carbos → bolo sugerido) ───────────────────
 let boloTimer;
 async function sugerirBolo() {
   const glucemia = document.getElementById('glucemia_valor').value;
   const carbs    = document.getElementById('comida_carbs').value;
   const box      = document.getElementById('bolo-sugerencia');
-  if (!box) return;
-
-  const tieneGlucemia = document.getElementById('toggle-glucemia').checked && glucemia;
-  const tieneCarbs    = document.getElementById('toggle-comida').checked && carbs > 0;
-
-  if (!tieneGlucemia && !tieneCarbs) { box.style.display = 'none'; return; }
-
+  const tieneG   = document.getElementById('toggle-glucemia').checked && glucemia;
+  const tieneC   = document.getElementById('toggle-comida').checked && carbs > 0;
+  if (!tieneG && !tieneC) { box.style.display = 'none'; return; }
   clearTimeout(boloTimer);
   boloTimer = setTimeout(async () => {
-    let url = `/api/calculadora/correccion?glucemia=${glucemia || 100}&carbs=${carbs || 0}`;
     try {
-      const res = await fetch(url);
+      const res = await fetch(`/api/calculadora/correccion?glucemia=${glucemia||100}&carbs=${carbs||0}`);
       const d   = await res.json();
       if (d.error || d.total_sugerido === undefined) { box.style.display = 'none'; return; }
-
-      const color = d.total_sugerido >= 6 ? '#ef4444' : d.total_sugerido >= 3 ? '#f59e0b' : '#22c55e';
+      const col = d.total_sugerido >= 6 ? '#ef4444' : d.total_sugerido >= 3 ? '#f59e0b' : '#22c55e';
       box.style.display = '';
-      document.getElementById('bolo-valor').textContent   = d.total_sugerido + ' U';
-      document.getElementById('bolo-valor').style.color  = color;
+      document.getElementById('bolo-valor').textContent  = d.total_sugerido + ' U';
+      document.getElementById('bolo-valor').style.color  = col;
       document.getElementById('bolo-detalle').innerHTML  =
-        (d.bolo_comida_exacto > 0 ? `<span>🍽 Comida: ${d.bolo_comida_exacto.toFixed(1)}U</span>` : '') +
-        (d.correccion_exacta   > 0 ? `<span class="ms-2">🔧 Corrección: ${d.correccion_exacta.toFixed(1)}U</span>` : '');
-
-      // Pre-rellenar el campo de insulina si está activado
+        (d.bolo_comida_exacto > 0  ? `<span>🍽 Comida: ${d.bolo_comida_exacto.toFixed(1)}U</span>` : '') +
+        (d.correccion_exacta  > 0  ? `<span class="ms-2">🔧 Corrección: ${d.correccion_exacta.toFixed(1)}U</span>` : '');
       if (document.getElementById('toggle-insulina').checked &&
           !document.getElementById('insulina_units').value) {
         document.getElementById('insulina_units').value = d.total_sugerido;
@@ -378,33 +466,32 @@ async function sugerirBolo() {
   }, 400);
 }
 
-// ── Resumen dinámico ──────────────────────────────────────────────────────────
 function updateResumen() {
   const items = [];
   if (document.getElementById('toggle-glucemia').checked) {
     const v = document.getElementById('glucemia_valor').value;
-    if (v) items.push('<i class="bi bi-droplet-fill text-primary me-1"></i>' + v + ' mg/dL');
+    if (v) items.push(`<i class="bi bi-droplet-fill text-primary me-1"></i>${v} mg/dL`);
   }
   if (document.getElementById('toggle-comida').checked) {
     const n = document.getElementById('comida_search').value.trim();
     const c = document.getElementById('comida_carbs').value;
-    if (n) items.push('<i class="bi bi-egg-fried text-success me-1"></i>' + n + (c ? ' (' + c + 'g CH)' : ''));
+    if (n) items.push(`<i class="bi bi-egg-fried text-success me-1"></i>${n}${c?' ('+c+'g CH)':''}`);
   }
   if (document.getElementById('toggle-insulina').checked) {
     const u = document.getElementById('insulina_units').value;
-    if (u) items.push('<i class="bi bi-capsule-pill text-warning me-1"></i>' + u + 'U bolus');
+    if (u) items.push(`<i class="bi bi-capsule-pill text-warning me-1"></i>${u}U bolus`);
   }
-  const box = document.getElementById('resumen-box');
+  const box  = document.getElementById('resumen-box');
   const list = document.getElementById('resumen-items');
   if (items.length) {
-    list.innerHTML = items.map(i => '<div>' + i + '</div>').join('');
+    list.innerHTML = items.map(i => `<div>${i}</div>`).join('');
     box.style.display = '';
   } else {
     box.style.display = 'none';
   }
 }
 
-// ── Autocompletado alimentos ───────────────────────────────────────────────────
+// Autocomplete
 let searchTimer;
 function buscarAlimento(q) {
   document.getElementById('comida_nombre_hidden').value = q;
@@ -419,28 +506,27 @@ function buscarAlimento(q) {
         const dd = document.getElementById('alimento-dropdown');
         if (!data.length) { cerrarDropdown(); return; }
         dd.innerHTML = data.map(item => `
-          <button type="button" class="list-group-item list-group-item-action py-2 px-3"
-                  style="font-size:.85rem;"
-                  onclick="seleccionarAlimento(${item.id}, '${item.name.replace(/'/g,"\\'")}', ${item.carbs}, ${item.fat}, ${item.protein}, ${item.calories})">
-            <span class="fw-semibold">${item.name}</span>
-            <span class="text-muted ms-2">${item.serving_desc || ''}</span>
-            <span class="badge bg-secondary ms-1">${item.carbs}g CH</span>
-          </button>`).join('');
-        dd.style.display = '';
+          <div class="ql-dropdown-item"
+               onclick="seleccionarAlimento(${item.id},'${item.name.replace(/'/g,"\\'")}',${item.carbs},${item.fat},${item.protein},${item.calories})">
+            <div><strong>${item.name}</strong>
+              ${item.serving_desc ? `<small class="ms-1">${item.serving_desc}</small>` : ''}
+            </div>
+            <span class="list-badge" style="background:rgba(245,158,11,.15);color:#d97706;">${item.carbs}g CH</span>
+          </div>`).join('');
+        dd.style.display = 'block';
       });
   }, 220);
 }
 
 function seleccionarAlimento(id, nombre, carbs, fat, protein, cal) {
-  document.getElementById('comida_search').value         = nombre;
-  document.getElementById('comida_nombre_hidden').value  = nombre;
-  document.getElementById('food_item_id').value          = id;
-  document.getElementById('comida_carbs').value          = carbs;
-  document.getElementById('comida_fat').value            = fat;
-  document.querySelector('[name=comida_protein]').value  = protein;
-  document.querySelector('[name=comida_cal]').value      = cal;
-  cerrarDropdown();
-  updateComidaPreview();
+  document.getElementById('comida_search').value        = nombre;
+  document.getElementById('comida_nombre_hidden').value = nombre;
+  document.getElementById('food_item_id').value         = id;
+  document.getElementById('comida_carbs').value         = carbs;
+  document.getElementById('comida_fat').value           = fat;
+  document.querySelector('[name=comida_protein]').value = protein;
+  document.querySelector('[name=comida_cal]').value     = cal;
+  cerrarDropdown(); updateComidaPreview(); sugerirBolo();
   fetch('/api/alimentos/' + id + '/usar', { method: 'POST' });
 }
 
@@ -452,37 +538,24 @@ document.addEventListener('click', e => {
     cerrarDropdown();
 });
 
-// ── Validación antes de enviar ────────────────────────────────────────────────
 document.getElementById('quicklog-form').addEventListener('submit', function(e) {
-  // Sincronizar nombre de comida en hidden
   const search = document.getElementById('comida_search').value.trim();
-  if (document.getElementById('toggle-comida').checked && search) {
+  if (document.getElementById('toggle-comida').checked && search)
     document.getElementById('comida_nombre_hidden').value = search;
-  }
 
-  const regGluc  = document.getElementById('toggle-glucemia').checked;
-  const regCom   = document.getElementById('toggle-comida').checked;
-  const regInsu  = document.getElementById('toggle-insulina').checked;
-
-  if (regGluc && !document.getElementById('glucemia_valor').value) {
-    e.preventDefault();
-    document.getElementById('glucemia_valor').focus();
-    document.getElementById('glucemia_valor').classList.add('is-invalid');
-    setTimeout(() => document.getElementById('glucemia_valor').classList.remove('is-invalid'), 2000);
-    return;
-  }
-  if (regCom && !search) {
-    e.preventDefault();
-    document.getElementById('comida_search').focus();
-    document.getElementById('comida_search').classList.add('is-invalid');
-    setTimeout(() => document.getElementById('comida_search').classList.remove('is-invalid'), 2000);
-    return;
-  }
-  if (regInsu && !document.getElementById('insulina_units').value) {
-    e.preventDefault();
-    document.getElementById('insulina_units').focus();
-    document.getElementById('insulina_units').classList.add('is-invalid');
-    setTimeout(() => document.getElementById('insulina_units').classList.remove('is-invalid'), 2000);
+  const checks = [
+    ['toggle-glucemia', 'glucemia_valor'],
+    ['toggle-comida',   'comida_search'],
+    ['toggle-insulina', 'insulina_units'],
+  ];
+  for (const [tog, fld] of checks) {
+    if (document.getElementById(tog).checked && !document.getElementById(fld).value) {
+      e.preventDefault();
+      const el = document.getElementById(fld);
+      el.focus(); el.classList.add('is-invalid');
+      setTimeout(() => el.classList.remove('is-invalid'), 2000);
+      return;
+    }
   }
 });
 </script>

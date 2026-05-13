@@ -1,3 +1,76 @@
+{% macro form_styles() %}
+<style>
+/* ── Shared form styles ─────────────────────────────────────────────────── */
+.form-modern {
+  max-width: 520px;
+  display: flex; flex-direction: column; gap: 0;
+}
+.fm-section {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: .85rem 1rem; overflow: visible;
+}
+.fm-section-label {
+  font-size: .7rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--text-muted); margin-bottom: .55rem;
+}
+.fm-label {
+  font-size: .75rem; font-weight: 600; color: var(--text-muted);
+  margin-bottom: .25rem; display: block;
+}
+.fm-value-row {
+  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+}
+.fm-big-input {
+  display: flex; align-items: baseline; gap: .35rem;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px; padding: .4rem .85rem;
+}
+.fm-num {
+  width: 100px; font-size: 2.2rem; font-weight: 800; letter-spacing: -2px;
+  background: none; border: none; outline: none; color: var(--text);
+  text-align: center;
+}
+.fm-num-unit { font-size: .8rem; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
+
+/* Type pills (insulina bolus/basal) */
+.fm-type-pills { display: flex; gap: .6rem; }
+.fm-type-pill { flex: 1; cursor: pointer; }
+.fm-type-pill input { display: none; }
+.fm-type-pill span {
+  display: flex; flex-direction: column; align-items: center;
+  padding: .7rem .5rem; border-radius: 12px;
+  border: 2px solid var(--border); background: var(--surface2);
+  font-size: .85rem; font-weight: 700; color: var(--text-muted);
+  transition: all .15s; gap: .2rem;
+}
+.fm-type-pill span i { font-size: 1.3rem; }
+.fm-type-pill span small { font-size: .7rem; font-weight: 400; }
+.fm-type-pill input:checked + span {
+  border-color: #6366f1; background: rgba(99,102,241,.08); color: #6366f1;
+}
+.fm-type-pill:hover span { border-color: var(--text-muted); }
+
+/* Actions */
+.fm-actions { display: flex; gap: .6rem; align-items: center; }
+.fm-btn-primary, .fm-btn-success, .fm-btn-warning {
+  display: inline-flex; align-items: center; gap: .4rem;
+  padding: .55rem 1.25rem; border-radius: 10px;
+  font-size: .9rem; font-weight: 700; border: none; cursor: pointer;
+  transition: filter .15s; text-decoration: none;
+}
+.fm-btn-primary  { background: #3b82f6; color: #fff; }
+.fm-btn-success  { background: #22c55e; color: #fff; }
+.fm-btn-warning  { background: #f59e0b; color: #fff; }
+.fm-btn-primary:hover, .fm-btn-success:hover, .fm-btn-warning:hover { filter: brightness(1.1); }
+.fm-btn-cancel {
+  color: var(--text-muted); text-decoration: none; font-size: .85rem;
+  padding: .5rem .75rem; border-radius: 8px;
+  transition: color .15s;
+}
+.fm-btn-cancel:hover { color: var(--text); }
+</style>
+{% endmacro %}
+
 {% macro list_styles() %}
 <style>
 /* ── Shared list page styles ─────────────────────────────────────────────── */

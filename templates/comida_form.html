@@ -2,160 +2,183 @@
 {% block title %}{{ 'Editar' if editar else 'Nueva' }} comida — DiabetesTracker{% endblock %}
 
 {% block content %}
-<div class="page-header">
-  <h1><i class="bi bi-egg-fried me-2 text-success"></i>
-    {{ 'Editar comida' if editar else 'Registrar comida' }}
-  </h1>
+
+<div class="list-page-header mb-4">
+  <div>
+    <h1 class="list-page-title">
+      <span class="list-icon-wrap bg-success-soft">
+        <i class="bi bi-egg-fried text-success"></i>
+      </span>
+      {{ 'Editar comida' if editar else 'Registrar comida' }}
+    </h1>
+  </div>
+  <a href="{{ url_for('comidas') }}" class="btn-list-secondary">
+    <i class="bi bi-arrow-left"></i> Volver
+  </a>
 </div>
 
-<div class="form-card">
-
-  {% if not editar %}
-  <!-- Buscador de alimentos guardados (solo en modo nuevo) -->
-  <div class="mb-4">
-    <label class="form-label fw-semibold">
-      <i class="bi bi-search me-1"></i> Buscar en mis alimentos frecuentes
-    </label>
-    <div class="position-relative">
-      <input type="text" id="food-search" class="form-control"
-             placeholder="Escribe para buscar... ej. tortilla, avena, pollo">
-      <div id="food-results" class="list-group position-absolute w-100 shadow-sm"
-           style="z-index:100; display:none; top:100%; max-height:220px; overflow-y:auto;"></div>
-    </div>
-    <div class="form-text">
-      Selecciona un alimento para rellenar el formulario automáticamente.
-      <a href="{{ url_for('alimento_nuevo', next='comida') }}" class="ms-1">
-        <i class="bi bi-plus-lg"></i> Guardar nuevo alimento
-      </a>
-    </div>
-  </div>
-  <hr class="my-3">
-  {% endif %}
-
+<div class="form-modern">
   <form method="post" id="meal-form">
     <input type="hidden" id="food-id-used" name="food_id" value="">
 
-    <div class="row g-3 mb-3">
-      <div class="col-6">
-        <label class="form-label fw-semibold">Fecha</label>
-        <input type="date" name="fecha" class="form-control" value="{{ fecha }}" required>
-      </div>
-      <div class="col-6">
-        <label class="form-label fw-semibold">Hora</label>
-        <input type="time" name="hora" class="form-control" value="{{ hora }}" required>
+    {% if not editar %}
+    <!-- Buscador rápido -->
+    <div class="fm-section mb-3">
+      <div class="fm-section-label">Buscar en mis alimentos</div>
+      <div class="position-relative">
+        <input type="text" id="food-search" class="form-control"
+               placeholder="Escribe para buscar... ej. avena, pollo, arroz">
+        <div id="food-results" class="ql-dropdown" style="display:none;"></div>
       </div>
     </div>
+    {% endif %}
 
-    <div class="mb-3">
-      <label class="form-label fw-semibold">Nombre de la comida</label>
+    <!-- Nombre -->
+    <div class="fm-section mb-3">
+      <div class="fm-section-label">Comida</div>
       <input type="text" id="meal-name" name="nombre" class="form-control"
              value="{{ item.name if editar else '' }}"
-             placeholder="ej. Avena con fruta, Pollo con arroz..." required>
+             placeholder="Nombre de la comida..." required>
     </div>
 
-    <div class="mb-3">
-      <label class="form-label fw-semibold">
-        Carbohidratos <span class="text-warning">(g)</span>
-      </label>
-      <div class="input-group">
-        <input type="number" id="meal-carbs" name="carbs_g" class="form-control form-control-lg"
-               step="0.5" min="0" max="500"
-               value="{{ item.carbs_g if editar else '' }}"
-               placeholder="ej. 45" required>
-        <span class="input-group-text">g</span>
-      </div>
-    </div>
-
-    <div class="row g-3 mb-3">
-      <div class="col-4">
-        <label class="form-label fw-semibold">Proteínas (g)</label>
-        <input type="number" id="meal-protein" name="protein_g" class="form-control"
-               step="0.5" min="0"
-               value="{{ item.protein_g if editar else '' }}" placeholder="0">
-      </div>
-      <div class="col-4">
-        <label class="form-label fw-semibold">Grasas (g)</label>
-        <input type="number" id="meal-fat" name="fat_g" class="form-control"
-               step="0.5" min="0"
-               value="{{ item.fat_g if editar else '' }}" placeholder="0">
-      </div>
-      <div class="col-4">
-        <label class="form-label fw-semibold">Calorías</label>
-        <input type="number" id="meal-calories" name="calories" class="form-control"
-               step="1" min="0"
-               value="{{ item.calories | int if editar and item.calories else '' }}" placeholder="0">
+    <!-- Carbohidratos (destacado) -->
+    <div class="fm-section mb-3">
+      <div class="fm-section-label">Carbohidratos <span style="color:#d97706;">(principal)</span></div>
+      <div class="fm-value-row">
+        <div class="fm-big-input">
+          <input type="number" id="meal-carbs" name="carbs_g"
+                 class="fm-num" step="0.5" min="0" max="500"
+                 value="{{ item.carbs_g if editar else '' }}"
+                 placeholder="0" required>
+          <span class="fm-num-unit">g CH</span>
+        </div>
       </div>
     </div>
 
-    <div class="mb-4">
-      <label class="form-label fw-semibold">Notas <span class="text-muted fw-normal">(opcional)</span></label>
-      <input type="text" name="notas" class="form-control"
+    <!-- Macros secundarios -->
+    <div class="fm-section mb-3">
+      <div class="fm-section-label">Macros adicionales <span class="text-muted">(opcionales)</span></div>
+      <div class="row g-2">
+        <div class="col-4">
+          <label class="fm-label">Proteínas</label>
+          <div class="input-group input-group-sm">
+            <input type="number" id="meal-protein" name="protein_g" class="form-control"
+                   step="0.5" min="0" value="{{ item.protein_g if editar else '' }}" placeholder="0">
+            <span class="input-group-text">g</span>
+          </div>
+        </div>
+        <div class="col-4">
+          <label class="fm-label">Grasas</label>
+          <div class="input-group input-group-sm">
+            <input type="number" id="meal-fat" name="fat_g" class="form-control"
+                   step="0.5" min="0" value="{{ item.fat_g if editar else '' }}" placeholder="0">
+            <span class="input-group-text">g</span>
+          </div>
+        </div>
+        <div class="col-4">
+          <label class="fm-label">Calorías</label>
+          <div class="input-group input-group-sm">
+            <input type="number" id="meal-calories" name="calories" class="form-control"
+                   step="1" min="0"
+                   value="{{ item.calories | int if editar and item.calories else '' }}" placeholder="0">
+            <span class="input-group-text">kcal</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fecha y hora -->
+    <div class="fm-section mb-3">
+      <div class="fm-section-label">Cuándo</div>
+      <div class="row g-2 align-items-center">
+        <div class="col-5">
+          <input type="date" name="fecha" class="form-control form-control-sm"
+                 value="{{ fecha }}" required>
+        </div>
+        <div class="col-4">
+          <input type="time" name="hora" class="form-control form-control-sm"
+                 value="{{ hora }}" required>
+        </div>
+        <div class="col-3">
+          <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                  onclick="setNow()">Ahora</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notas -->
+    <div class="fm-section mb-4">
+      <div class="fm-section-label">Notas <span class="text-muted">(opcional)</span></div>
+      <input type="text" name="notas" class="form-control form-control-sm"
              value="{{ item.notes if editar and item.notes else '' }}"
-             placeholder="ej. porción grande, restaurante, con jugo...">
+             placeholder="porción grande, restaurante, con jugo...">
     </div>
 
-    <div class="d-flex gap-2">
-      <button type="submit" class="btn btn-success btn-lg w-100">
-        <i class="bi bi-check-lg"></i> {{ 'Actualizar comida' if editar else 'Guardar comida' }}
+    <div class="fm-actions">
+      <button type="submit" class="fm-btn-success">
+        <i class="bi bi-check-lg"></i>
+        {{ 'Actualizar comida' if editar else 'Guardar comida' }}
       </button>
+      <a href="{{ url_for('comidas') }}" class="fm-btn-cancel">Cancelar</a>
     </div>
   </form>
 </div>
 {% endblock %}
 
 {% block scripts %}
+{{ list_styles() }}
+{{ form_styles() }}
 {% if not editar %}
 <script>
-  const searchInput = document.getElementById('food-search');
-  const resultsBox  = document.getElementById('food-results');
-  let debounceTimer;
-
-  searchInput.addEventListener('input', () => {
-    clearTimeout(debounceTimer);
-    const q = searchInput.value.trim();
-    if (q.length < 1) { resultsBox.style.display = 'none'; return; }
-    debounceTimer = setTimeout(() => fetchFoods(q), 200);
-  });
-
-  async function fetchFoods(q) {
-    const res = await fetch(`/api/alimentos/buscar?q=${encodeURIComponent(q)}`);
-    const items = await res.json();
-    resultsBox.innerHTML = '';
-    if (!items.length) {
-      resultsBox.innerHTML = `<div class="list-group-item text-muted" style="font-size:.88rem;">
-        Sin resultados — <a href="/alimentos/nuevo?next=comida">¿guardar "${q}"?</a></div>`;
-      resultsBox.style.display = 'block';
-      return;
-    }
-    items.forEach(item => {
-      const el = document.createElement('button');
-      el.type = 'button';
-      el.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
-      el.innerHTML = `<span><strong>${item.name}</strong>
-        ${item.serving_desc ? `<small class="text-muted ms-1">${item.serving_desc}</small>` : ''}</span>
-        <span class="badge bg-warning text-dark">${item.carbs}g CH</span>`;
-      el.addEventListener('click', () => fillForm(item));
-      resultsBox.appendChild(el);
-    });
-    resultsBox.style.display = 'block';
-  }
-
-  function fillForm(item) {
-    document.getElementById('meal-name').value     = item.name;
-    document.getElementById('meal-carbs').value    = item.carbs;
-    document.getElementById('meal-protein').value  = item.protein || '';
-    document.getElementById('meal-fat').value      = item.fat || '';
-    document.getElementById('meal-calories').value = item.calories || '';
-    document.getElementById('food-id-used').value  = item.id;
-    searchInput.value = '';
+function setNow() {
+  const n = new Date();
+  document.querySelector('[name=fecha]').value = n.toLocaleDateString('sv');
+  document.querySelector('[name=hora]').value  = n.toTimeString().slice(0,5);
+}
+const searchInput = document.getElementById('food-search');
+const resultsBox  = document.getElementById('food-results');
+let debounceTimer;
+searchInput.addEventListener('input', () => {
+  clearTimeout(debounceTimer);
+  const q = searchInput.value.trim();
+  if (q.length < 1) { resultsBox.style.display = 'none'; return; }
+  debounceTimer = setTimeout(() => fetchFoods(q), 200);
+});
+async function fetchFoods(q) {
+  const res   = await fetch(`/api/alimentos/buscar?q=${encodeURIComponent(q)}`);
+  const items = await res.json();
+  if (!items.length) { resultsBox.style.display = 'none'; return; }
+  resultsBox.innerHTML = items.map(item => `
+    <div class="ql-dropdown-item" onclick="fillForm(${JSON.stringify(item).replace(/"/g,'&quot;')})">
+      <div><strong>${item.name}</strong>
+        ${item.serving_desc ? `<small class="ms-1">${item.serving_desc}</small>` : ''}
+      </div>
+      <span class="list-badge" style="background:rgba(245,158,11,.15);color:#d97706;">${item.carbs}g CH</span>
+    </div>`).join('');
+  resultsBox.style.display = 'block';
+}
+function fillForm(item) {
+  document.getElementById('meal-name').value     = item.name;
+  document.getElementById('meal-carbs').value    = item.carbs;
+  document.getElementById('meal-protein').value  = item.protein || '';
+  document.getElementById('meal-fat').value      = item.fat || '';
+  document.getElementById('meal-calories').value = item.calories || '';
+  document.getElementById('food-id-used').value  = item.id;
+  searchInput.value = ''; resultsBox.style.display = 'none';
+  fetch(`/api/alimentos/${item.id}/usar`, { method: 'POST' });
+}
+document.addEventListener('click', e => {
+  if (!searchInput.contains(e.target) && !resultsBox.contains(e.target))
     resultsBox.style.display = 'none';
-    fetch(`/api/alimentos/${item.id}/usar`, { method: 'POST' });
-  }
-
-  document.addEventListener('click', e => {
-    if (!searchInput.contains(e.target) && !resultsBox.contains(e.target))
-      resultsBox.style.display = 'none';
-  });
+});
+</script>
+{% else %}
+<script>
+function setNow() {
+  const n = new Date();
+  document.querySelector('[name=fecha]').value = n.toLocaleDateString('sv');
+  document.querySelector('[name=hora]').value  = n.toTimeString().slice(0,5);
+}
 </script>
 {% endif %}
 {% endblock %}

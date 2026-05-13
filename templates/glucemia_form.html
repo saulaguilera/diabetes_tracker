@@ -2,59 +2,125 @@
 {% block title %}{{ 'Editar' if editar else 'Nueva' }} glucemia — DiabetesTracker{% endblock %}
 
 {% block content %}
-<div class="page-header">
-  <h1><i class="bi bi-droplet-fill me-2 text-primary"></i>
-    {{ 'Editar lectura' if editar else 'Registrar glucemia' }}
-  </h1>
+
+<div class="list-page-header mb-4">
+  <div>
+    <h1 class="list-page-title">
+      <span class="list-icon-wrap bg-primary-soft">
+        <i class="bi bi-droplet-fill text-primary"></i>
+      </span>
+      {{ 'Editar lectura' if editar else 'Registrar glucemia' }}
+    </h1>
+  </div>
+  <a href="{{ url_for('glucemia') }}" class="btn-list-secondary">
+    <i class="bi bi-arrow-left"></i> Volver
+  </a>
 </div>
 
-<div class="form-card">
+<div class="form-modern">
   <form method="post">
-    <div class="row g-3 mb-3">
-      <div class="col-6">
-        <label class="form-label fw-semibold">Fecha</label>
-        <input type="date" name="fecha" class="form-control" value="{{ fecha }}" required>
+
+    <!-- Valor principal -->
+    <div class="fm-section mb-3">
+      <div class="fm-section-label">Valor</div>
+      <div class="fm-value-row">
+        <div class="fm-big-input">
+          <input type="number" name="valor" id="valor"
+                 class="fm-num" step="1" min="20" max="600"
+                 value="{{ item.value_mgdl if editar else '' }}"
+                 placeholder="—" required autofocus
+                 oninput="updateBadge(this.value)">
+          <span class="fm-num-unit">mg/dL</span>
+        </div>
+        <div id="glc-badge" class="ql-status-badge">—</div>
       </div>
-      <div class="col-6">
-        <label class="form-label fw-semibold">Hora</label>
-        <input type="time" name="hora" class="form-control" value="{{ hora }}" required>
+      <!-- Quick values -->
+      <div class="ql-quick-row mt-2">
+        {% for v in [60, 70, 80, 90, 100, 110, 120, 140, 160, 180, 220, 280, 350] %}
+        <button type="button" class="ql-quick-btn"
+                onclick="setVal({{ v }})">{{ v }}</button>
+        {% endfor %}
       </div>
     </div>
 
-    <div class="mb-3">
-      <label class="form-label fw-semibold">Glucemia (mg/dL)</label>
-      <div class="input-group">
-        <input type="number" name="valor" class="form-control form-control-lg"
-               step="0.1" min="20" max="600"
-               value="{{ item.value_mgdl if editar else '' }}"
-               placeholder="ej. 120" required autofocus>
-        <span class="input-group-text">mg/dL</span>
+    <!-- Fecha y hora -->
+    <div class="fm-section mb-3">
+      <div class="fm-section-label">Cuándo</div>
+      <div class="row g-2 align-items-center">
+        <div class="col-5">
+          <input type="date" name="fecha" class="form-control form-control-sm"
+                 value="{{ fecha }}" required>
+        </div>
+        <div class="col-4">
+          <input type="time" name="hora" class="form-control form-control-sm"
+                 value="{{ hora }}" required>
+        </div>
+        <div class="col-3">
+          <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                  onclick="setNow()">Ahora</button>
+        </div>
       </div>
-      <div class="form-text">Rango objetivo: 70–180 mg/dL</div>
     </div>
 
-    <div class="mb-3">
-      <label class="form-label fw-semibold">Fuente</label>
-      <select name="fuente" class="form-select">
-        <option value="manual"    {{ 'selected' if not editar or item.source == 'manual' }}>Glucómetro manual</option>
-        <option value="cgm_scan"  {{ 'selected' if editar and item.source == 'cgm_scan' }}>Escáner Freestyle Libre</option>
-        <option value="cgm_strip" {{ 'selected' if editar and item.source == 'cgm_strip' }}>Tira reactiva</option>
-      </select>
+    <!-- Fuente y notas -->
+    <div class="fm-section mb-4">
+      <div class="fm-section-label">Detalles</div>
+      <div class="mb-2">
+        <label class="form-label fm-label">Fuente</label>
+        <select name="fuente" class="form-select form-select-sm">
+          <option value="manual"    {{ 'selected' if not editar or item.source == 'manual' }}>Glucómetro manual</option>
+          <option value="cgm_scan"  {{ 'selected' if editar and item.source == 'cgm_scan' }}>Escáner Libre</option>
+          <option value="cgm_strip" {{ 'selected' if editar and item.source == 'cgm_strip' }}>Tira reactiva</option>
+          <option value="cgm_libre" {{ 'selected' if editar and item.source == 'cgm_libre' }}>CGM Libre (auto)</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label fm-label">Notas <span class="text-muted">(opcional)</span></label>
+        <input type="text" name="notas" class="form-control form-control-sm"
+               value="{{ item.notes if editar and item.notes else '' }}"
+               placeholder="ayuno, post-comida, corrección...">
+      </div>
     </div>
 
-    <div class="mb-4">
-      <label class="form-label fw-semibold">Notas <span class="text-muted fw-normal">(opcional)</span></label>
-      <input type="text" name="notas" class="form-control"
-             value="{{ item.notes if editar and item.notes else '' }}"
-             placeholder="ej. antes de comer, después de ejercicio...">
-    </div>
-
-    <div class="d-flex gap-2">
-      <button type="submit" class="btn btn-primary">
-        <i class="bi bi-check-lg"></i> {{ 'Actualizar' if editar else 'Guardar' }}
+    <div class="fm-actions">
+      <button type="submit" class="fm-btn-primary">
+        <i class="bi bi-check-lg"></i>
+        {{ 'Actualizar' if editar else 'Guardar' }}
       </button>
-      <a href="{{ url_for('glucemia') }}" class="btn btn-outline-secondary">Cancelar</a>
+      <a href="{{ url_for('glucemia') }}" class="fm-btn-cancel">Cancelar</a>
     </div>
   </form>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ list_styles() }}
+{{ form_styles() }}
+<script>
+function setNow() {
+  const n = new Date();
+  document.querySelector('[name=fecha]').value = n.toLocaleDateString('sv');
+  document.querySelector('[name=hora]').value  = n.toTimeString().slice(0,5);
+}
+function setVal(v) {
+  document.getElementById('valor').value = v;
+  updateBadge(v);
+}
+function updateBadge(val) {
+  const badge = document.getElementById('glc-badge');
+  val = parseFloat(val);
+  if (isNaN(val)) { badge.textContent = '—'; badge.style.cssText = ''; return; }
+  if (val < 70) {
+    badge.textContent = '↓ Hipo';
+    badge.style.cssText = 'background:rgba(239,68,68,.12);color:#ef4444;border-color:rgba(239,68,68,.3)';
+  } else if (val > 180) {
+    badge.textContent = '↑ Hiper';
+    badge.style.cssText = 'background:rgba(249,115,22,.12);color:#f97316;border-color:rgba(249,115,22,.3)';
+  } else {
+    badge.textContent = '✓ En rango';
+    badge.style.cssText = 'background:rgba(34,197,94,.12);color:#22c55e;border-color:rgba(34,197,94,.3)';
+  }
+}
+{% if editar %}updateBadge({{ item.value_mgdl }});{% endif %}
+</script>
 {% endblock %}

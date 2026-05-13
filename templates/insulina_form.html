@@ -2,76 +2,123 @@
 {% block title %}{{ 'Editar' if editar else 'Nueva' }} dosis — DiabetesTracker{% endblock %}
 
 {% block content %}
-<div class="page-header">
-  <h1><i class="bi bi-capsule-pill me-2 text-warning"></i>
-    {{ 'Editar dosis' if editar else 'Registrar dosis de insulina' }}
-  </h1>
+
+<div class="list-page-header mb-4">
+  <div>
+    <h1 class="list-page-title">
+      <span class="list-icon-wrap bg-warning-soft">
+        <i class="bi bi-capsule-pill text-warning"></i>
+      </span>
+      {{ 'Editar dosis' if editar else 'Registrar insulina' }}
+    </h1>
+  </div>
+  <a href="{{ url_for('insulina') }}" class="btn-list-secondary">
+    <i class="bi bi-arrow-left"></i> Volver
+  </a>
 </div>
 
-<div class="form-card">
+<div class="form-modern">
   <form method="post">
-    <div class="row g-3 mb-3">
-      <div class="col-6">
-        <label class="form-label fw-semibold">Fecha</label>
-        <input type="date" name="fecha" class="form-control" value="{{ fecha }}" required>
-      </div>
-      <div class="col-6">
-        <label class="form-label fw-semibold">Hora</label>
-        <input type="time" name="hora" class="form-control" value="{{ hora }}" required>
-      </div>
-    </div>
 
-    <div class="mb-3">
-      <label class="form-label fw-semibold">Tipo de insulina</label>
-      <div class="d-flex gap-3">
-        <div class="form-check">
-          <input class="form-check-input" type="radio" name="tipo" id="bolus" value="bolus"
+    <!-- Tipo -->
+    <div class="fm-section mb-3">
+      <div class="fm-section-label">Tipo</div>
+      <div class="fm-type-pills">
+        <label class="fm-type-pill">
+          <input type="radio" name="tipo" value="bolus"
                  {{ 'checked' if not editar or item.type == 'bolus' }}>
-          <label class="form-check-label" for="bolus">
-            <span class="badge bg-warning text-dark me-1">Bolo</span> Rápida / corrección
-          </label>
-        </div>
-        <div class="form-check">
-          <input class="form-check-input" type="radio" name="tipo" id="basal" value="basal"
+          <span>
+            <i class="bi bi-lightning-charge-fill"></i>
+            Bolo
+            <small>Rápida / corrección</small>
+          </span>
+        </label>
+        <label class="fm-type-pill">
+          <input type="radio" name="tipo" value="basal"
                  {{ 'checked' if editar and item.type == 'basal' }}>
-          <label class="form-check-label" for="basal">
-            <span class="badge bg-secondary me-1">Basal</span> Lenta / prolongada
-          </label>
+          <span>
+            <i class="bi bi-clock-history"></i>
+            Basal
+            <small>Lenta / prolongada</small>
+          </span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Unidades -->
+    <div class="fm-section mb-3">
+      <div class="fm-section-label">Unidades</div>
+      <div class="fm-value-row mb-2">
+        <div class="fm-big-input">
+          <input type="number" name="units" id="units-input"
+                 class="fm-num" step="0.5" min="0.5" max="100"
+                 value="{{ item.units if editar else '' }}"
+                 placeholder="0" required autofocus>
+          <span class="fm-num-unit">U</span>
+        </div>
+      </div>
+      <div class="ql-quick-row">
+        {% for u in [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 20] %}
+        <button type="button" class="ql-quick-btn ql-quick-btn-insulin"
+                onclick="document.getElementById('units-input').value='{{ u }}'">{{ u }}U</button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Marca -->
+    <div class="fm-section mb-3">
+      <div class="fm-section-label">Marca <span class="text-muted">(opcional)</span></div>
+      <input type="text" name="brand" class="form-control form-control-sm"
+             value="{{ item.brand if editar and item.brand else '' }}"
+             placeholder="Novorapid, Lantus, Tresiba, Humalog...">
+    </div>
+
+    <!-- Fecha y hora -->
+    <div class="fm-section mb-3">
+      <div class="fm-section-label">Cuándo</div>
+      <div class="row g-2 align-items-center">
+        <div class="col-5">
+          <input type="date" name="fecha" class="form-control form-control-sm"
+                 value="{{ fecha }}" required>
+        </div>
+        <div class="col-4">
+          <input type="time" name="hora" class="form-control form-control-sm"
+                 value="{{ hora }}" required>
+        </div>
+        <div class="col-3">
+          <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                  onclick="setNow()">Ahora</button>
         </div>
       </div>
     </div>
 
-    <div class="mb-3">
-      <label class="form-label fw-semibold">Unidades</label>
-      <div class="input-group">
-        <input type="number" name="units" class="form-control form-control-lg"
-               step="0.5" min="0.5" max="100"
-               value="{{ item.units if editar else '' }}"
-               placeholder="ej. 6" required autofocus>
-        <span class="input-group-text">U</span>
-      </div>
-    </div>
-
-    <div class="mb-3">
-      <label class="form-label fw-semibold">Marca / Nombre <span class="text-muted fw-normal">(opcional)</span></label>
-      <input type="text" name="brand" class="form-control"
-             value="{{ item.brand if editar and item.brand else '' }}"
-             placeholder="ej. Novorapid, Lantus, Tresiba...">
-    </div>
-
-    <div class="mb-4">
-      <label class="form-label fw-semibold">Notas <span class="text-muted fw-normal">(opcional)</span></label>
-      <input type="text" name="notas" class="form-control"
+    <!-- Notas -->
+    <div class="fm-section mb-4">
+      <div class="fm-section-label">Notas <span class="text-muted">(opcional)</span></div>
+      <input type="text" name="notas" class="form-control form-control-sm"
              value="{{ item.notes if editar and item.notes else '' }}"
-             placeholder="ej. corrección por hiperglucemia, antes de comer...">
+             placeholder="corrección, pre-comida, basal nocturna...">
     </div>
 
-    <div class="d-flex gap-2">
-      <button type="submit" class="btn btn-warning">
-        <i class="bi bi-check-lg"></i> {{ 'Actualizar' if editar else 'Guardar' }}
+    <div class="fm-actions">
+      <button type="submit" class="fm-btn-warning">
+        <i class="bi bi-check-lg"></i>
+        {{ 'Actualizar' if editar else 'Guardar dosis' }}
       </button>
-      <a href="{{ url_for('insulina') }}" class="btn btn-outline-secondary">Cancelar</a>
+      <a href="{{ url_for('insulina') }}" class="fm-btn-cancel">Cancelar</a>
     </div>
   </form>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ list_styles() }}
+{{ form_styles() }}
+<script>
+function setNow() {
+  const n = new Date();
+  document.querySelector('[name=fecha]').value = n.toLocaleDateString('sv');
+  document.querySelector('[name=hora]').value  = n.toTimeString().slice(0,5);
+}
+</script>
 {% endblock %}
