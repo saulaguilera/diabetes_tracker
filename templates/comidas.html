@@ -2,135 +2,158 @@
 {% block title %}Comidas — DiabetesTracker{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex justify-content-between align-items-center">
+
+<div class="list-page-header">
   <div>
-    <h1><i class="bi bi-egg-fried me-2 text-success"></i>Comidas</h1>
-    <small class="text-muted">Registro de alimentación y carbohidratos</small>
+    <h1 class="list-page-title">
+      <span class="list-icon-wrap bg-success-soft"><i class="bi bi-egg-fried text-success"></i></span>
+      Comidas
+    </h1>
+    <p class="list-page-sub">Registro de alimentación y carbohidratos</p>
   </div>
-  <div class="d-flex gap-2">
-    <button class="btn btn-outline-secondary btn-sm" id="btn-autocategorizar">
-      <i class="bi bi-tags me-1"></i>Auto-categorizar
+  <div class="d-flex gap-2 align-items-center">
+    <button class="btn-list-secondary" id="btn-autocategorizar" title="Auto-categorizar comidas">
+      <i class="bi bi-tags"></i> <span class="d-none d-sm-inline">Categorizar</span>
     </button>
-    <a href="{{ url_for('comidas_grupos') }}" class="btn btn-outline-primary btn-sm">
-      <i class="bi bi-bar-chart-steps me-1"></i>Ver por grupos
+    <a href="{{ url_for('comidas_grupos') }}" class="btn-list-secondary">
+      <i class="bi bi-bar-chart-steps"></i> <span class="d-none d-sm-inline">Por grupos</span>
     </a>
-    <a href="{{ url_for('comida_nueva') }}" class="btn btn-success">
+    <a href="{{ url_for('comida_nueva') }}" class="btn-list-add btn-add-success">
       <i class="bi bi-plus-lg"></i> Nueva comida
     </a>
   </div>
 </div>
 
 <!-- Filtro días -->
-<div class="mb-3 d-flex gap-2 align-items-center">
-  <span class="text-muted" style="font-size:.85rem;">Mostrar:</span>
-  {% for d in [3, 7, 14, 30] %}
+<div class="range-selector mb-3">
+  {% for d, lbl in [(3,'3d'),(7,'7d'),(14,'14d'),(30,'30d')] %}
     <a href="{{ url_for('comidas', dias=d) }}"
-       class="btn btn-sm {{ 'btn-success' if dias == d else 'btn-outline-secondary' }}">
-      {{ d }}d
-    </a>
+       class="range-pill {{ 'range-pill-active range-pill-success' if dias == d else '' }}">{{ lbl }}</a>
   {% endfor %}
 </div>
 
-<div class="chart-box">
-  <table class="table table-hover mb-0">
-    <thead>
-      <tr>
-        <th>Fecha y hora</th>
-        <th>Comida</th>
-        <th>Categoría</th>
-        <th>Carbohidratos</th>
-        <th>Proteínas</th>
-        <th>Grasas</th>
-        <th>Calorías</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for c in comidas.items %}
-      <tr>
-        <td>{{ c.timestamp.strftime('%d/%m/%Y %H:%M') }}</td>
-        <td class="fw-semibold">{{ c.name }}</td>
-        <td>
-          <span class="categoria-badge" data-id="{{ c.id }}"
-                style="cursor:pointer;" title="Clic para cambiar">
+<!-- Lista -->
+<div class="list-container">
+  {% for c in comidas.items %}
+    <div class="list-row list-row-neutral">
+      <!-- Ícono + nombre -->
+      <div class="list-row-icon bg-success-soft">
+        <i class="bi bi-egg-fried text-success"></i>
+      </div>
+
+      <div class="list-row-body">
+        <div class="list-row-name">{{ c.name }}</div>
+        <div class="list-row-meta">
+          <!-- Categoría -->
+          <span class="categoria-badge" data-id="{{ c.id }}" style="cursor:pointer;">
             {% if c.categoria %}
-              <span class="badge bg-{{ c.categoria | categoria_color }} rounded-pill">
+              <span class="list-badge list-badge-cat-{{ c.categoria | categoria_color }}">
                 {{ c.categoria }}
               </span>
             {% else %}
-              <span class="badge bg-light text-muted border rounded-pill" style="font-size:.72rem;">
-                + categoría
-              </span>
+              <span class="list-badge list-badge-empty">+ categoría</span>
             {% endif %}
           </span>
-        </td>
-        <td>
-          <span class="fw-bold text-warning">{{ c.carbs_g | int }}g</span>
-          <small class="text-muted">CH</small>
-        </td>
-        <td><small>{{ c.protein_g | int }}g</small></td>
-        <td><small>{{ c.fat_g | int }}g</small></td>
-        <td><small>{{ c.calories | int if c.calories else '—' }} kcal</small></td>
-        <td>
-          <div class="d-flex gap-2">
-            <a href="{{ url_for('comida_editar', id=c.id) }}"
-               class="btn btn-sm btn-link text-primary p-0">
-              <i class="bi bi-pencil"></i>
-            </a>
-            <form method="post" action="{{ url_for('comida_eliminar', id=c.id) }}"
-                  onsubmit="return confirm('¿Eliminar esta comida?')">
-              <button class="btn btn-sm btn-link text-danger p-0"><i class="bi bi-trash3"></i></button>
-            </form>
-          </div>
-        </td>
-      </tr>
-      {% else %}
-      <tr>
-        <td colspan="9" class="text-center text-muted py-4">
-          Sin comidas registradas en este período.
-          <a href="{{ url_for('comida_nueva') }}">Registrar una ahora</a>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+          <span class="list-sep">·</span>
+          <span class="list-ts">{{ c.timestamp.strftime('%d/%m %H:%M') }}</span>
+        </div>
+      </div>
 
-  {% if comidas.pages > 1 %}
-  <nav class="mt-3">
-    <ul class="pagination pagination-sm justify-content-center mb-0">
-      {% if comidas.has_prev %}
-        <li class="page-item">
-          <a class="page-link" href="{{ url_for('comidas', page=comidas.prev_num, dias=dias) }}">‹</a>
-        </li>
-      {% endif %}
-      <li class="page-item disabled">
-        <span class="page-link">{{ comidas.page }} / {{ comidas.pages }}</span>
-      </li>
-      {% if comidas.has_next %}
-        <li class="page-item">
-          <a class="page-link" href="{{ url_for('comidas', page=comidas.next_num, dias=dias) }}">›</a>
-        </li>
-      {% endif %}
-    </ul>
-  </nav>
-  {% endif %}
+      <!-- Macros -->
+      <div class="list-macros">
+        <div class="macro-chip macro-ch">
+          <span class="macro-val">{{ c.carbs_g | int }}</span>
+          <span class="macro-lbl">CH</span>
+        </div>
+        {% if c.protein_g %}
+        <div class="macro-chip macro-p">
+          <span class="macro-val">{{ c.protein_g | int }}</span>
+          <span class="macro-lbl">P</span>
+        </div>
+        {% endif %}
+        {% if c.fat_g %}
+        <div class="macro-chip macro-f">
+          <span class="macro-val">{{ c.fat_g | int }}</span>
+          <span class="macro-lbl">G</span>
+        </div>
+        {% endif %}
+        {% if c.calories %}
+        <div class="macro-chip macro-kcal d-none d-md-flex">
+          <span class="macro-val">{{ c.calories | int }}</span>
+          <span class="macro-lbl">kcal</span>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Acciones -->
+      <div class="list-row-actions">
+        <a href="{{ url_for('comida_editar', id=c.id) }}" class="list-btn-edit" title="Editar">
+          <i class="bi bi-pencil"></i>
+        </a>
+        <form method="post" action="{{ url_for('comida_eliminar', id=c.id) }}"
+              onsubmit="return confirm('¿Eliminar esta comida?')" class="d-inline">
+          <button class="list-btn-delete" title="Eliminar">
+            <i class="bi bi-trash3"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+
+  {% else %}
+    <div class="list-empty">
+      <i class="bi bi-egg-fried text-success"></i>
+      <div class="list-empty-title">Sin comidas en este período</div>
+      <a href="{{ url_for('comida_nueva') }}" class="btn-list-add btn-add-success mt-2">
+        <i class="bi bi-plus-lg"></i> Registrar comida
+      </a>
+    </div>
+  {% endfor %}
 </div>
 
-<!-- Modal selector de categoría -->
+<!-- Paginación -->
+{% if comidas.pages > 1 %}
+<div class="list-pagination">
+  {% if comidas.has_prev %}
+    <a href="{{ url_for('comidas', page=comidas.prev_num, dias=dias) }}" class="page-btn">‹ Anterior</a>
+  {% endif %}
+  <span class="page-info">{{ comidas.page }} de {{ comidas.pages }}</span>
+  {% if comidas.has_next %}
+    <a href="{{ url_for('comidas', page=comidas.next_num, dias=dias) }}" class="page-btn">Siguiente ›</a>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Modal categoría -->
 <div class="modal fade" id="modalCategoria" tabindex="-1">
   <div class="modal-dialog modal-sm">
     <div class="modal-content">
       <div class="modal-header py-2">
-        <h6 class="modal-title">Seleccionar categoría</h6>
+        <h6 class="modal-title" style="font-size:.9rem;">Seleccionar categoría</h6>
         <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body py-2" id="modal-cat-lista"></div>
     </div>
   </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
+{{ list_styles() }}
+<style>
+.macro-chip {
+  display: flex; flex-direction: column; align-items: center;
+  padding: .2rem .45rem; border-radius: 8px; min-width: 36px;
+}
+.macro-val { font-size: .85rem; font-weight: 700; line-height: 1; }
+.macro-lbl { font-size: .6rem; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; opacity: .7; }
+.macro-ch   { background: rgba(245,158,11,.12); color: #d97706; }
+.macro-p    { background: rgba(59,130,246,.10); color: #2563eb; }
+.macro-f    { background: rgba(239,68,68,.10);  color: #dc2626; }
+.macro-kcal { background: var(--surface2); color: var(--text-muted); }
+.list-macros { display: flex; gap: .3rem; align-items: center; flex-shrink: 0; }
+.list-badge-empty { background: var(--surface2); color: var(--text-muted); border: 1px dashed var(--border); }
+</style>
 <script>
 const CATEGORIAS = {{ categorias | tojson }};
 const COLORES    = {{ colores    | tojson }};
@@ -142,12 +165,10 @@ document.querySelectorAll('.categoria-badge').forEach(el => {
     const lista = document.getElementById('modal-cat-lista');
     lista.innerHTML =
       `<button class="btn btn-sm btn-outline-secondary w-100 mb-1 text-start"
-               onclick="setCategoria(null)">
-         <i class="bi bi-x me-1"></i>Sin categoría
-       </button>` +
+               onclick="setCategoria(null)"><i class="bi bi-x me-1"></i>Sin categoría</button>` +
       CATEGORIAS.map(c => {
         const col = COLORES[c] || 'secondary';
-        return `<button class="btn btn-sm btn-${col} w-100 mb-1 text-start"
+        return `<button class="btn btn-sm btn-outline-${col} w-100 mb-1 text-start"
                         onclick="setCategoria('${c}')">${c}</button>`;
       }).join('');
     new bootstrap.Modal(document.getElementById('modalCategoria')).show();
@@ -157,8 +178,7 @@ document.querySelectorAll('.categoria-badge').forEach(el => {
 async function setCategoria(cat) {
   bootstrap.Modal.getInstance(document.getElementById('modalCategoria')).hide();
   await fetch(`/api/comidas/${_activeMealId}/categoria`, {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
+    method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({categoria: cat || ''}),
   });
   location.reload();
@@ -166,10 +186,12 @@ async function setCategoria(cat) {
 
 document.getElementById('btn-autocategorizar').addEventListener('click', async function() {
   this.disabled = true;
-  this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Categorizando...';
+  this.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
   const res  = await fetch('/api/comidas/auto-categorizar', {method:'POST'});
   const data = await res.json();
-  alert(`✓ ${data.asignadas} comidas categorizadas.\n${data.sin_match} sin coincidencia (podés asignarlas manualmente).`);
+  this.disabled = false;
+  this.innerHTML = '<i class="bi bi-tags"></i>';
+  alert(`✓ ${data.asignadas} comidas categorizadas.`);
   location.reload();
 });
 </script>

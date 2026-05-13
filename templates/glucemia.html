@@ -2,120 +2,117 @@
 {% block title %}Glucemia — DiabetesTracker{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex justify-content-between align-items-center">
+
+<div class="list-page-header">
   <div>
-    <h1><i class="bi bi-droplet-fill me-2 text-primary"></i>Glucemia</h1>
-    <small class="text-muted">Historial de lecturas de glucosa en sangre</small>
+    <h1 class="list-page-title">
+      <span class="list-icon-wrap bg-primary-soft"><i class="bi bi-droplet-fill text-primary"></i></span>
+      Glucemia
+    </h1>
+    <p class="list-page-sub">Historial de lecturas de glucosa</p>
   </div>
-  <a href="{{ url_for('glucemia_nueva') }}" class="btn btn-primary">
+  <a href="{{ url_for('glucemia_nueva') }}" class="btn-list-add btn-add-primary">
     <i class="bi bi-plus-lg"></i> Nueva lectura
   </a>
 </div>
 
 <!-- Filtro días -->
-<div class="mb-3 d-flex gap-2 align-items-center">
-  <span class="text-muted" style="font-size:.85rem;">Mostrar:</span>
-  {% for d in [1, 3, 7, 14, 30] %}
+<div class="range-selector mb-3">
+  {% for d, lbl in [(1,'1d'),(3,'3d'),(7,'7d'),(14,'14d'),(30,'30d')] %}
     <a href="{{ url_for('glucemia', dias=d) }}"
-       class="btn btn-sm {{ 'btn-primary' if dias == d else 'btn-outline-secondary' }}">
-      {{ d }}d
-    </a>
+       class="range-pill {{ 'range-pill-active' if dias == d else '' }}">{{ lbl }}</a>
   {% endfor %}
 </div>
 
 <!-- Gráfica -->
-<div class="chart-box mb-4">
-  <div id="chart-glucemia" style="height:280px;"></div>
+<div class="chart-card mb-3" style="padding:.8rem 1rem .4rem;">
+  <div class="chart-card-header">
+    <span class="chart-title">Glucosa — últimos {{ dias }}d</span>
+  </div>
+  <div id="chart-glucemia" style="height:200px;"></div>
 </div>
 
-<!-- Tabla -->
-<div class="chart-box">
-  <table class="table table-hover mb-0">
-    <thead>
-      <tr>
-        <th>Fecha y hora</th>
-        <th>Valor</th>
-        <th>Estado</th>
-        <th>Fuente</th>
-        <th>Notas</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for r in lecturas.items %}
-      <tr>
-        <td>{{ r.timestamp.strftime('%d/%m/%Y %H:%M') }}</td>
-        <td class="fw-semibold
-          {% if r.value_mgdl < 70 %}text-hipo
-          {% elif r.value_mgdl > 180 %}text-hiper
-          {% else %}text-rango{% endif %}">
-          {{ r.value_mgdl | int }} mg/dL
-        </td>
-        <td>
-          {% if r.value_mgdl < 70 %}
-            <span class="badge badge-hipo">Hipoglucemia</span>
-          {% elif r.value_mgdl > 180 %}
-            <span class="badge badge-hiper">Hiperglucemia</span>
-          {% else %}
-            <span class="badge badge-rango">En rango</span>
-          {% endif %}
-        </td>
-        <td>
-          <span class="text-muted" style="font-size:.85rem;">
-            {% if r.source == 'cgm_historic' %}<i class="bi bi-wifi"></i> CGM
-            {% elif r.source == 'cgm_scan' %}<i class="bi bi-upc-scan"></i> Escáner
-            {% elif r.source == 'cgm_strip' %}<i class="bi bi-droplet"></i> Tira
-            {% else %}<i class="bi bi-pencil"></i> Manual{% endif %}
-          </span>
-        </td>
-        <td><small class="text-muted">{{ r.notes or '' }}</small></td>
-        <td>
-          <div class="d-flex gap-2">
-            <a href="{{ url_for('glucemia_editar', id=r.id) }}"
-               class="btn btn-sm btn-link text-primary p-0">
-              <i class="bi bi-pencil"></i>
-            </a>
-            <form method="post" action="{{ url_for('glucemia_eliminar', id=r.id) }}"
-                  onsubmit="return confirm('¿Eliminar esta lectura?')">
-              <button class="btn btn-sm btn-link text-danger p-0"><i class="bi bi-trash3"></i></button>
-            </form>
-          </div>
-        </td>
-      </tr>
-      {% else %}
-      <tr>
-        <td colspan="6" class="text-center text-muted py-4">
-          Sin lecturas en este período.
-          <a href="{{ url_for('glucemia_nueva') }}">Registrar una ahora</a>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<!-- Lista -->
+<div class="list-container">
+  {% for r in lecturas.items %}
+    {% if r.value_mgdl < 70 %}
+      {% set estado = "hipo" %}{% set badge_label = "Hipo" %}
+    {% elif r.value_mgdl > 180 %}
+      {% set estado = "hiper" %}{% set badge_label = "Hiper" %}
+    {% else %}
+      {% set estado = "rango" %}{% set badge_label = "En rango" %}
+    {% endif %}
 
-  <!-- Paginación -->
-  {% if lecturas.pages > 1 %}
-  <nav class="mt-3">
-    <ul class="pagination pagination-sm justify-content-center mb-0">
-      {% if lecturas.has_prev %}
-        <li class="page-item">
-          <a class="page-link" href="{{ url_for('glucemia', page=lecturas.prev_num, dias=dias) }}">‹</a>
-        </li>
-      {% endif %}
-      <li class="page-item disabled">
-        <span class="page-link">{{ lecturas.page }} / {{ lecturas.pages }}</span>
-      </li>
-      {% if lecturas.has_next %}
-        <li class="page-item">
-          <a class="page-link" href="{{ url_for('glucemia', page=lecturas.next_num, dias=dias) }}">›</a>
-        </li>
-      {% endif %}
-    </ul>
-  </nav>
+    <div class="list-row list-row-{{ estado }}">
+      <!-- Valor + estado -->
+      <div class="list-row-main">
+        <span class="list-val text-{{ estado }}">{{ r.value_mgdl | int }}</span>
+        <span class="list-unit">mg/dL</span>
+        {% if r.notes and r.notes in ['↑↑','↑','↗','→','↘','↓','↓↓'] %}
+          <span class="list-trend">{{ r.notes }}</span>
+        {% endif %}
+      </div>
+
+      <!-- Meta -->
+      <div class="list-row-meta">
+        <span class="list-badge list-badge-{{ estado }}">{{ badge_label }}</span>
+        <span class="list-sep">·</span>
+        <span class="list-source">
+          {% if r.source == 'cgm_libre' or r.source == 'cgm_historic' %}
+            <i class="bi bi-wifi"></i> CGM
+          {% elif r.source == 'cgm_scan' %}
+            <i class="bi bi-upc-scan"></i> Escáner
+          {% elif r.source == 'cgm_strip' %}
+            <i class="bi bi-droplet"></i> Tira
+          {% else %}
+            <i class="bi bi-pencil"></i> Manual
+          {% endif %}
+        </span>
+        <span class="list-sep">·</span>
+        <span class="list-ts">{{ r.timestamp.strftime('%d/%m %H:%M') }}</span>
+      </div>
+
+      <!-- Acciones -->
+      <div class="list-row-actions">
+        <a href="{{ url_for('glucemia_editar', id=r.id) }}" class="list-btn-edit" title="Editar">
+          <i class="bi bi-pencil"></i>
+        </a>
+        <form method="post" action="{{ url_for('glucemia_eliminar', id=r.id) }}"
+              onsubmit="return confirm('¿Eliminar esta lectura?')" class="d-inline">
+          <button class="list-btn-delete" title="Eliminar">
+            <i class="bi bi-trash3"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+
+  {% else %}
+    <div class="list-empty">
+      <i class="bi bi-droplet text-primary"></i>
+      <div class="list-empty-title">Sin lecturas en este período</div>
+      <a href="{{ url_for('glucemia_nueva') }}" class="btn-list-add btn-add-primary mt-2">
+        <i class="bi bi-plus-lg"></i> Registrar glucemia
+      </a>
+    </div>
+  {% endfor %}
+</div>
+
+<!-- Paginación -->
+{% if lecturas.pages > 1 %}
+<div class="list-pagination">
+  {% if lecturas.has_prev %}
+    <a href="{{ url_for('glucemia', page=lecturas.prev_num, dias=dias) }}" class="page-btn">‹ Anterior</a>
+  {% endif %}
+  <span class="page-info">{{ lecturas.page }} de {{ lecturas.pages }}</span>
+  {% if lecturas.has_next %}
+    <a href="{{ url_for('glucemia', page=lecturas.next_num, dias=dias) }}" class="page-btn">Siguiente ›</a>
   {% endif %}
 </div>
+{% endif %}
+
 {% endblock %}
 
 {% block scripts %}
+{{ list_styles() }}
 <script>renderChart('chart-glucemia', {{ chart | tojson }});</script>
 {% endblock %}

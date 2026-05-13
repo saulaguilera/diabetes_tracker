@@ -2,94 +2,113 @@
 {% block title %}Insulina — DiabetesTracker{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex justify-content-between align-items-center">
+
+<div class="list-page-header">
   <div>
-    <h1><i class="bi bi-capsule-pill me-2 text-warning"></i>Insulina</h1>
-    <small class="text-muted">Registro de dosis de insulina</small>
+    <h1 class="list-page-title">
+      <span class="list-icon-wrap bg-warning-soft"><i class="bi bi-capsule-pill text-warning"></i></span>
+      Insulina
+    </h1>
+    <p class="list-page-sub">Registro de dosis de insulina</p>
   </div>
-  <a href="{{ url_for('insulina_nueva') }}" class="btn btn-warning">
+  <a href="{{ url_for('insulina_nueva') }}" class="btn-list-add btn-add-warning">
     <i class="bi bi-plus-lg"></i> Nueva dosis
   </a>
 </div>
 
-<div class="mb-3 d-flex gap-2 align-items-center">
-  <span class="text-muted" style="font-size:.85rem;">Mostrar:</span>
-  {% for d in [3, 7, 14, 30] %}
+<!-- Filtro días -->
+<div class="range-selector mb-3">
+  {% for d, lbl in [(3,'3d'),(7,'7d'),(14,'14d'),(30,'30d')] %}
     <a href="{{ url_for('insulina', dias=d) }}"
-       class="btn btn-sm {{ 'btn-warning' if dias == d else 'btn-outline-secondary' }}">
-      {{ d }}d
-    </a>
+       class="range-pill {{ 'range-pill-active range-pill-warning' if dias == d else '' }}">{{ lbl }}</a>
   {% endfor %}
 </div>
 
-<div class="chart-box">
-  <table class="table table-hover mb-0">
-    <thead>
-      <tr>
-        <th>Fecha y hora</th>
-        <th>Tipo</th>
-        <th>Unidades</th>
-        <th>Marca / Tipo</th>
-        <th>Notas</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for d in dosis.items %}
-      <tr>
-        <td>{{ d.timestamp.strftime('%d/%m/%Y %H:%M') }}</td>
-        <td>
-          {% if d.type == 'bolus' %}
-            <span class="badge bg-warning text-dark">Bolo</span>
-          {% else %}
-            <span class="badge bg-secondary">Basal</span>
-          {% endif %}
-        </td>
-        <td class="fw-bold">{{ d.units }}U</td>
-        <td><small class="text-muted">{{ d.brand or '—' }}</small></td>
-        <td><small class="text-muted">{{ d.notes or '' }}</small></td>
-        <td>
-          <div class="d-flex gap-2">
-            <a href="{{ url_for('insulina_editar', id=d.id) }}"
-               class="btn btn-sm btn-link text-primary p-0">
-              <i class="bi bi-pencil"></i>
-            </a>
-            <form method="post" action="{{ url_for('insulina_eliminar', id=d.id) }}"
-                  onsubmit="return confirm('¿Eliminar esta dosis?')">
-              <button class="btn btn-sm btn-link text-danger p-0"><i class="bi bi-trash3"></i></button>
-            </form>
-          </div>
-        </td>
-      </tr>
-      {% else %}
-      <tr>
-        <td colspan="6" class="text-center text-muted py-4">
-          Sin dosis registradas en este período.
-          <a href="{{ url_for('insulina_nueva') }}">Registrar una ahora</a>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<!-- Lista -->
+<div class="list-container">
+  {% for d in dosis.items %}
+    {% set is_bolus = d.type == 'bolus' %}
 
-  {% if dosis.pages > 1 %}
-  <nav class="mt-3">
-    <ul class="pagination pagination-sm justify-content-center mb-0">
-      {% if dosis.has_prev %}
-        <li class="page-item">
-          <a class="page-link" href="{{ url_for('insulina', page=dosis.prev_num, dias=dias) }}">‹</a>
-        </li>
-      {% endif %}
-      <li class="page-item disabled">
-        <span class="page-link">{{ dosis.page }} / {{ dosis.pages }}</span>
-      </li>
-      {% if dosis.has_next %}
-        <li class="page-item">
-          <a class="page-link" href="{{ url_for('insulina', page=dosis.next_num, dias=dias) }}">›</a>
-        </li>
-      {% endif %}
-    </ul>
-  </nav>
+    <div class="list-row list-row-neutral">
+      <!-- Ícono tipo -->
+      <div class="list-row-icon {{ 'bg-warning-soft' if is_bolus else 'bg-secondary-soft' }}">
+        <i class="bi bi-capsule-pill {{ 'text-warning' if is_bolus else 'text-secondary' }}"></i>
+      </div>
+
+      <div class="list-row-body">
+        <div class="list-row-name">
+          {% if is_bolus %}
+            <span class="list-badge" style="background:rgba(245,158,11,.15);color:#d97706;">Bolo</span>
+          {% else %}
+            <span class="list-badge" style="background:var(--surface2);color:var(--text-muted);">Basal</span>
+          {% endif %}
+          {% if d.brand %}
+            <span class="ms-1" style="font-size:.85rem;">{{ d.brand }}</span>
+          {% endif %}
+        </div>
+        <div class="list-row-meta">
+          <span class="list-ts">{{ d.timestamp.strftime('%d/%m %H:%M') }}</span>
+          {% if d.notes %}
+            <span class="list-sep">·</span>
+            <span style="font-size:.78rem; color:var(--text-muted);">{{ d.notes }}</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Unidades (elemento destacado) -->
+      <div class="insulin-units">
+        <span class="insulin-val">{{ d.units }}</span>
+        <span class="insulin-u">U</span>
+      </div>
+
+      <!-- Acciones -->
+      <div class="list-row-actions">
+        <a href="{{ url_for('insulina_editar', id=d.id) }}" class="list-btn-edit" title="Editar">
+          <i class="bi bi-pencil"></i>
+        </a>
+        <form method="post" action="{{ url_for('insulina_eliminar', id=d.id) }}"
+              onsubmit="return confirm('¿Eliminar esta dosis?')" class="d-inline">
+          <button class="list-btn-delete" title="Eliminar">
+            <i class="bi bi-trash3"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+
+  {% else %}
+    <div class="list-empty">
+      <i class="bi bi-capsule-pill text-warning"></i>
+      <div class="list-empty-title">Sin dosis en este período</div>
+      <a href="{{ url_for('insulina_nueva') }}" class="btn-list-add btn-add-warning mt-2">
+        <i class="bi bi-plus-lg"></i> Registrar dosis
+      </a>
+    </div>
+  {% endfor %}
+</div>
+
+<!-- Paginación -->
+{% if dosis.pages > 1 %}
+<div class="list-pagination">
+  {% if dosis.has_prev %}
+    <a href="{{ url_for('insulina', page=dosis.prev_num, dias=dias) }}" class="page-btn">‹ Anterior</a>
+  {% endif %}
+  <span class="page-info">{{ dosis.page }} de {{ dosis.pages }}</span>
+  {% if dosis.has_next %}
+    <a href="{{ url_for('insulina', page=dosis.next_num, dias=dias) }}" class="page-btn">Siguiente ›</a>
   {% endif %}
 </div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{{ list_styles() }}
+<style>
+.bg-secondary-soft { background: rgba(100,116,139,.1); }
+.insulin-units {
+  display: flex; align-items: baseline; gap: .15rem; flex-shrink: 0;
+}
+.insulin-val { font-size: 1.6rem; font-weight: 800; line-height: 1; color: var(--text); }
+.insulin-u   { font-size: .8rem; font-weight: 600; color: var(--text-muted); }
+</style>
 {% endblock %}

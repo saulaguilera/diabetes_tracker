@@ -1,3 +1,159 @@
+{% macro list_styles() %}
+<style>
+/* ── Shared list page styles ─────────────────────────────────────────────── */
+.list-page-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 1rem; margin-bottom: 1.25rem;
+}
+.list-page-title {
+  font-size: 1.4rem; font-weight: 700; margin: 0;
+  display: flex; align-items: center; gap: .6rem;
+}
+.list-icon-wrap {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1rem; flex-shrink: 0;
+}
+.list-page-sub { font-size: .8rem; color: var(--text-muted); margin: .15rem 0 0 2.8rem; }
+
+/* Range selector */
+.range-selector {
+  display: flex; gap: .35rem; align-items: center; flex-wrap: wrap;
+}
+.range-pill {
+  padding: .28rem .75rem; border-radius: 20px; font-size: .8rem; font-weight: 600;
+  text-decoration: none; color: var(--text-muted);
+  background: var(--surface2); border: 1px solid var(--border);
+  transition: all .15s;
+}
+.range-pill:hover { color: var(--text); border-color: var(--text-muted); }
+.range-pill-active { background: #3b82f6; color: #fff !important; border-color: #3b82f6; }
+.range-pill-success.range-pill-active { background: #22c55e; border-color: #22c55e; }
+.range-pill-warning.range-pill-active { background: #f59e0b; border-color: #f59e0b; }
+
+/* Buttons */
+.btn-list-add {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .4rem .9rem; border-radius: 10px; font-size: .85rem;
+  font-weight: 600; text-decoration: none; border: none; cursor: pointer;
+  white-space: nowrap; transition: filter .15s;
+}
+.btn-list-add:hover { filter: brightness(1.1); }
+.btn-add-primary { background: #3b82f6; color: #fff; }
+.btn-add-success { background: #22c55e; color: #fff; }
+.btn-add-warning { background: #f59e0b; color: #fff; }
+.btn-list-secondary {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .38rem .8rem; border-radius: 10px; font-size: .82rem;
+  font-weight: 600; text-decoration: none; cursor: pointer;
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text-muted); transition: all .15s;
+}
+.btn-list-secondary:hover { color: var(--text); border-color: var(--text-muted); }
+
+/* List container */
+.list-container {
+  display: flex; flex-direction: column; gap: .45rem; margin-bottom: 1rem;
+}
+
+/* List row */
+.list-row {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 12px;
+  padding: .75rem 1rem;
+  display: flex; align-items: center; gap: .85rem;
+  transition: box-shadow .15s, border-color .15s;
+}
+.list-row:hover { box-shadow: 0 2px 8px rgba(0,0,0,.07); }
+.list-row-rango { border-left-color: #22c55e; }
+.list-row-hipo  { border-left-color: #ef4444; }
+.list-row-hiper { border-left-color: #f97316; }
+.list-row-neutral { border-left-color: var(--border); }
+
+/* Main value (glucemia) */
+.list-row-main { display: flex; align-items: baseline; gap: .25rem; min-width: 90px; }
+.list-val  { font-size: 1.5rem; font-weight: 800; line-height: 1; letter-spacing: -1px; }
+.list-unit { font-size: .72rem; font-weight: 600; color: var(--text-muted); }
+.list-trend { font-size: 1.1rem; margin-left: .1rem; }
+
+/* Icon + body (comidas/insulina) */
+.list-row-icon {
+  width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 1rem;
+}
+.list-row-body { flex: 1; min-width: 0; }
+.list-row-name {
+  font-size: .92rem; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Meta row */
+.list-row-meta {
+  font-size: .75rem; color: var(--text-muted);
+  display: flex; align-items: center; gap: .3rem; flex-wrap: wrap; margin-top: .1rem;
+}
+.list-ts     { font-variant-numeric: tabular-nums; }
+.list-source { display: flex; align-items: center; gap: .2rem; }
+.list-sep    { opacity: .4; }
+
+/* Badges */
+.list-badge {
+  display: inline-block; font-size: .7rem; font-weight: 600;
+  padding: .15em .55em; border-radius: 20px;
+}
+.list-badge-rango { background: rgba(34,197,94,.12);  color: #16a34a; }
+.list-badge-hipo  { background: rgba(239,68,68,.12);  color: #dc2626; }
+.list-badge-hiper { background: rgba(249,115,22,.12); color: #ea580c; }
+.list-badge-cat-success  { background: rgba(34,197,94,.12);  color: #16a34a; }
+.list-badge-cat-warning  { background: rgba(245,158,11,.12); color: #d97706; }
+.list-badge-cat-primary  { background: rgba(59,130,246,.12); color: #2563eb; }
+.list-badge-cat-danger   { background: rgba(239,68,68,.12);  color: #dc2626; }
+.list-badge-cat-info     { background: rgba(14,165,233,.12); color: #0284c7; }
+.list-badge-cat-secondary{ background: var(--surface2); color: var(--text-muted); }
+
+/* Actions */
+.list-row-actions {
+  display: flex; gap: .3rem; align-items: center; flex-shrink: 0; opacity: 0;
+  transition: opacity .15s;
+}
+.list-row:hover .list-row-actions { opacity: 1; }
+@media (max-width: 576px) { .list-row-actions { opacity: 1; } }
+.list-btn-edit, .list-btn-delete {
+  background: none; border: none; cursor: pointer;
+  width: 30px; height: 30px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .9rem; transition: background .15s;
+}
+.list-btn-edit  { color: #3b82f6; }
+.list-btn-edit:hover  { background: rgba(59,130,246,.1); }
+.list-btn-delete { color: #ef4444; }
+.list-btn-delete:hover { background: rgba(239,68,68,.1); }
+
+/* Empty state */
+.list-empty {
+  text-align: center; padding: 3rem 1rem;
+  color: var(--text-muted); font-size: 2rem;
+  display: flex; flex-direction: column; align-items: center; gap: .5rem;
+}
+.list-empty-title { font-size: .95rem; font-weight: 500; color: var(--text-muted); }
+
+/* Pagination */
+.list-pagination {
+  display: flex; justify-content: center; align-items: center; gap: .75rem;
+  padding: .75rem 0; margin-bottom: 1rem;
+}
+.page-btn {
+  padding: .3rem .8rem; border-radius: 8px; font-size: .82rem; font-weight: 600;
+  text-decoration: none; background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text-muted); transition: all .15s;
+}
+.page-btn:hover { color: var(--text); border-color: var(--text-muted); }
+.page-info { font-size: .82rem; color: var(--text-muted); }
+</style>
+{% endmacro %}
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -137,6 +293,22 @@
     }
     .sidebar .brand { color: #f1f5f9 !important; }
     .sidebar .brand .badge-t1 { background: #ef4444 !important; color: white !important; }
+
+    /* ── Mini widget glucosa sidebar ── */
+    .sidebar-glucose {
+      margin: .5rem .75rem .25rem;
+      background: #273549; border-radius: 10px;
+      padding: .6rem .85rem; border: 1px solid #334155;
+    }
+    .sg-label { font-size: .65rem; text-transform: uppercase; letter-spacing: .07em; color: #64748b; font-weight: 600; }
+    .sg-row { display: flex; align-items: baseline; gap: .3rem; margin-top: .2rem; }
+    .sg-val  { font-size: 1.5rem; font-weight: 800; line-height: 1; letter-spacing: -1px; }
+    .sg-val.sg-rango { color: #22c55e; }
+    .sg-val.sg-hipo  { color: #ef4444; }
+    .sg-val.sg-hiper { color: #f97316; }
+    .sg-unit  { font-size: .7rem; color: #64748b; font-weight: 600; }
+    .sg-trend { font-size: 1rem; }
+    .sg-ts    { font-size: .68rem; color: #64748b; margin-top: .1rem; }
 
     /* ── Botón dark mode al fondo del sidebar ── */
     .sidebar-footer {
@@ -432,6 +604,17 @@
 
   </div><!-- /nav-scroll -->
 
+  <!-- Mini-widget glucosa en sidebar -->
+  <div id="sidebar-glucose-widget" class="sidebar-glucose" style="display:none;">
+    <div class="sg-label">Glucosa actual</div>
+    <div class="sg-row">
+      <span id="sg-val" class="sg-val">—</span>
+      <span class="sg-unit">mg/dL</span>
+      <span id="sg-trend" class="sg-trend"></span>
+    </div>
+    <div id="sg-ts" class="sg-ts"></div>
+  </div>
+
   <!-- Footer: solo logout -->
   <div class="sidebar-footer">
     <a href="{{ url_for('logout') }}"
@@ -596,6 +779,25 @@
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/static/sw.js');
   }
+
+  // ── Mini widget glucosa en sidebar ──────────────────────────────────────────
+  (async function() {
+    try {
+      const r = await fetch('/api/ultima-lectura');
+      if (!r.ok) return;
+      const d = await r.json();
+      if (!d.value) return;
+      const widget = document.getElementById('sidebar-glucose-widget');
+      const valEl  = document.getElementById('sg-val');
+      const tsEl   = document.getElementById('sg-ts');
+      const trEl   = document.getElementById('sg-trend');
+      valEl.textContent = d.value;
+      trEl.textContent  = d.trend || '';
+      tsEl.textContent  = d.time_ago || '';
+      valEl.className   = 'sg-val ' + (d.value < 70 ? 'sg-hipo' : d.value > 180 ? 'sg-hiper' : 'sg-rango');
+      widget.style.display = 'block';
+    } catch(e) {}
+  })();
 </script>
 </body>
 </html>

@@ -409,6 +409,27 @@ def _do_libre_sync(email: str, password: str) -> dict:
     }
 
 
+@app.route("/api/ultima-lectura")
+def api_ultima_lectura():
+    """Mini-widget sidebar: última lectura de glucosa."""
+    r = GlucoseReading.query.order_by(GlucoseReading.timestamp.desc()).first()
+    if not r:
+        return jsonify({"value": None})
+    delta = datetime.now() - r.timestamp
+    mins  = int(delta.total_seconds() / 60)
+    if mins < 1:
+        time_ago = "ahora"
+    elif mins < 60:
+        time_ago = f"hace {mins}min"
+    else:
+        time_ago = f"hace {mins // 60}h"
+    return jsonify({
+        "value":    int(r.value_mgdl),
+        "trend":    r.notes if r.notes in ["↑↑","↑","↗","→","↘","↓","↓↓"] else "→",
+        "time_ago": time_ago,
+    })
+
+
 @app.route("/api/sync/libre/reset")
 def api_sync_libre_reset():
     """Borra el caché de token para forzar un login fresco."""
