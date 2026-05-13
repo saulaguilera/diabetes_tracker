@@ -2,124 +2,110 @@
 {% block title %}Recomendaciones — DiabetesTracker{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex justify-content-between align-items-center">
+
+<div class="list-page-header mb-4">
   <div>
-    <h1><i class="bi bi-lightbulb-fill me-2 text-warning"></i>Recomendaciones</h1>
-    <small class="text-muted">Basadas en tus datos reales — no en promedios generales</small>
+    <h1 class="list-page-title">
+      <span class="list-icon-wrap bg-warning-soft">
+        <i class="bi bi-lightbulb-fill text-warning"></i>
+      </span>
+      Recomendaciones
+    </h1>
+    <p class="list-page-sub">Basadas en tus datos reales — no en promedios generales</p>
   </div>
-  <div class="d-flex gap-2 align-items-center">
-    <span class="text-muted" style="font-size:.85rem;">Analizar últimos:</span>
+  <div class="range-selector">
     {% for d in [7, 14, 30, 90] %}
       <a href="{{ url_for('recomendaciones', dias=d) }}"
-         class="btn btn-sm {{ 'btn-primary' if dias == d else 'btn-outline-secondary' }}">
-        {{ d }}d
-      </a>
+         class="range-pill {{ 'range-pill-active' if dias == d }}">{{ d }}d</a>
     {% endfor %}
   </div>
 </div>
 
 <!-- Aviso médico -->
-<div class="alert border d-flex gap-3 align-items-start mb-4" style="font-size:.88rem; background:var(--surface2,#f1f5f9); color:var(--text,inherit);">
-  <i class="bi bi-shield-check text-primary fs-5 mt-1 flex-shrink-0"></i>
+<div class="rec-disclaimer mb-4">
+  <i class="bi bi-shield-check text-primary flex-shrink-0" style="font-size:1.2rem;"></i>
   <div>
     <strong>Estas recomendaciones son orientativas, no diagnósticos médicos.</strong>
-    Están generadas automáticamente a partir de tus datos registrados. Antes de cambiar
-    cualquier dosis de insulina o rutina, consulta con tu endocrinólogo.
+    Están generadas automáticamente a partir de tus datos. Antes de cambiar
+    cualquier dosis de insulina o rutina, consultá con tu endocrinólogo.
   </div>
 </div>
 
 {% if not recs %}
-  <div class="chart-box text-center py-5">
-    <i class="bi bi-hourglass-split fs-1 text-muted"></i>
-    <p class="text-muted mt-3">Sin datos suficientes para generar recomendaciones.</p>
+  <div class="list-empty">
+    <i class="bi bi-hourglass-split list-empty-icon"></i>
+    <p class="list-empty-text">Sin datos suficientes para generar recomendaciones.</p>
   </div>
 {% else %}
 
-<!-- Resumen rápido de prioridades -->
-{% set urgentes   = recs | selectattr('priority', 'eq', 'urgente')    | list %}
+<!-- Resumen de prioridades -->
+{% set urgentes    = recs | selectattr('priority', 'eq', 'urgente')    | list %}
 {% set importantes = recs | selectattr('priority', 'eq', 'importante') | list %}
 {% set informativos = recs | selectattr('priority', 'eq', 'informativo') | list %}
 
-{% if urgentes or importantes %}
-<div class="row g-2 mb-4">
+{% if urgentes or importantes or informativos %}
+<div class="rec-priority-row mb-4">
   {% if urgentes %}
-  <div class="col-auto">
-    <span class="badge bg-danger fs-6 px-3 py-2">
-      <i class="bi bi-exclamation-triangle-fill me-1"></i>
-      {{ urgentes | length }} urgente{{ 's' if urgentes | length > 1 }}
-    </span>
+  <div class="rec-priority-chip rec-chip-urgente">
+    <i class="bi bi-exclamation-triangle-fill"></i>
+    {{ urgentes | length }} urgente{{ 's' if urgentes | length > 1 }}
   </div>
   {% endif %}
   {% if importantes %}
-  <div class="col-auto">
-    <span class="badge bg-warning text-dark fs-6 px-3 py-2">
-      <i class="bi bi-arrow-up-circle-fill me-1"></i>
-      {{ importantes | length }} importante{{ 's' if importantes | length > 1 }}
-    </span>
+  <div class="rec-priority-chip rec-chip-importante">
+    <i class="bi bi-arrow-up-circle-fill"></i>
+    {{ importantes | length }} importante{{ 's' if importantes | length > 1 }}
   </div>
   {% endif %}
   {% if informativos %}
-  <div class="col-auto">
-    <span class="badge bg-info text-dark fs-6 px-3 py-2">
-      <i class="bi bi-info-circle-fill me-1"></i>
-      {{ informativos | length }} informativo{{ 's' if informativos | length > 1 }}
-    </span>
+  <div class="rec-priority-chip rec-chip-informativo">
+    <i class="bi bi-info-circle-fill"></i>
+    {{ informativos | length }} informativo{{ 's' if informativos | length > 1 }}
   </div>
   {% endif %}
 </div>
 {% endif %}
 
-<!-- Tarjetas de recomendaciones -->
+<!-- Tarjetas -->
 <div class="d-flex flex-column gap-3">
 {% for rec in recs %}
-  <div class="chart-box border-start border-4 border-{{ rec.color }}"
-       style="border-left-width: 4px !important;">
+  <div class="rec-card rec-card-{{ rec.color }}">
 
-    <div class="d-flex justify-content-between align-items-start mb-2">
-      <div class="d-flex align-items-center gap-2">
-        <i class="bi {{ rec.icon }} text-{{ rec.color }} fs-5"></i>
-        <h5 class="mb-0 fw-semibold" style="font-size:1rem;">{{ rec.title }}</h5>
+    <div class="rec-card-top">
+      <div class="rec-card-title-row">
+        <i class="bi {{ rec.icon }} text-{{ rec.color }}" style="font-size:1.1rem;"></i>
+        <h5 class="rec-title">{{ rec.title }}</h5>
       </div>
-      <div class="d-flex gap-2 align-items-center flex-shrink-0 ms-2">
-        <!-- Categoría -->
-        <span class="badge border text-muted" style="font-size:.72rem; background:var(--surface2,#f1f5f9);">
-          {% if rec.category == 'glucemia' %}<i class="bi bi-droplet-fill"></i> Glucemia
-          {% elif rec.category == 'comidas' %}<i class="bi bi-egg-fried"></i> Comidas
-          {% elif rec.category == 'insulina' %}<i class="bi bi-capsule-pill"></i> Insulina
-          {% elif rec.category == 'ejercicio' %}<i class="bi bi-bicycle"></i> Ejercicio
-          {% else %}<i class="bi bi-journal"></i> Hábitos{% endif %}
+      <div class="rec-badges">
+        <span class="rec-cat-badge">
+          {% if rec.category == 'glucemia' %}<i class="bi bi-droplet-fill me-1"></i>Glucemia
+          {% elif rec.category == 'comidas' %}<i class="bi bi-egg-fried me-1"></i>Comidas
+          {% elif rec.category == 'insulina' %}<i class="bi bi-capsule-pill me-1"></i>Insulina
+          {% elif rec.category == 'ejercicio' %}<i class="bi bi-bicycle me-1"></i>Ejercicio
+          {% else %}<i class="bi bi-journal me-1"></i>Hábitos{% endif %}
         </span>
-        <!-- Prioridad -->
-        <span class="badge
-          {% if rec.priority == 'urgente' %}bg-danger
-          {% elif rec.priority == 'importante' %}bg-warning text-dark
-          {% else %}bg-info text-dark{% endif %}"
-          style="font-size:.72rem;">
+        <span class="rec-priority-badge rec-pbadge-{{ rec.priority }}">
           {{ rec.priority | capitalize }}
         </span>
       </div>
     </div>
 
-    <!-- Cuerpo -->
-    <p class="mb-2" style="font-size:.92rem;">{{ rec.body }}</p>
+    <p class="rec-body">{{ rec.body }}</p>
 
-    <!-- Acción recomendada -->
-    <div class="d-flex gap-2 align-items-start p-2 rounded"
-         style="background: rgba(59,130,246,0.10); border: 1px solid rgba(59,130,246,0.25);">
-      <i class="bi bi-arrow-right-circle-fill text-primary mt-1 flex-shrink-0"></i>
-      <span class="text-primary" style="font-size:.88rem;"><strong>Qué hacer:</strong> {{ rec.action }}</span>
+    <div class="rec-action">
+      <i class="bi bi-arrow-right-circle-fill flex-shrink-0 mt-1" style="color:#6366f1;"></i>
+      <span><strong>Qué hacer:</strong> {{ rec.action }}</span>
     </div>
 
-    <!-- Datos de soporte (colapsable) -->
     {% if rec.data %}
     <div class="mt-2">
-      <button class="btn btn-link btn-sm text-muted p-0" type="button"
+      <button class="rec-data-toggle" type="button"
               data-bs-toggle="collapse" data-bs-target="#data-{{ loop.index }}">
-        <i class="bi bi-chevron-down" style="font-size:.75rem;"></i>
-        Ver datos
+        <i class="bi bi-chevron-down" style="font-size:.72rem;"></i>
+        Ver datos de soporte
       </button>
       <div class="collapse" id="data-{{ loop.index }}">
-        <div class="mt-2 p-2 rounded" style="background:var(--surface2,#f1f5f9); font-size:.8rem; font-family: monospace;">
+        <div class="rec-data-box">
           {% for key, val in rec.data.items() %}
             <span class="text-muted">{{ key }}:</span>
             <strong>{{ val }}</strong>
@@ -134,11 +120,97 @@
 {% endfor %}
 </div>
 
-<!-- Nota sobre frecuencia de actualización -->
-<div class="text-center text-muted mt-4" style="font-size:.82rem;">
+<div class="text-center mt-4" style="font-size:.8rem; color:var(--text-muted);">
   <i class="bi bi-arrow-clockwise me-1"></i>
-  Las recomendaciones se recalculan cada vez que abres esta página con tus datos más recientes.
+  Las recomendaciones se recalculan cada vez que abris esta página con tus datos más recientes.
 </div>
 
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+{{ list_styles() }}
+<style>
+/* ── Recomendaciones ──────────────────────────────────────────────────── */
+.rec-disclaimer {
+  display: flex; align-items: flex-start; gap: .85rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 1rem 1.1rem; font-size: .87rem;
+}
+
+.rec-priority-row {
+  display: flex; gap: .5rem; flex-wrap: wrap;
+}
+.rec-priority-chip {
+  display: inline-flex; align-items: center; gap: .4rem;
+  padding: .4rem 1rem; border-radius: 10px; font-size: .84rem; font-weight: 700;
+}
+.rec-chip-urgente    { background: rgba(239,68,68,.12);  color: #dc2626; border: 1px solid rgba(239,68,68,.2); }
+.rec-chip-importante { background: rgba(245,158,11,.12); color: #d97706; border: 1px solid rgba(245,158,11,.2); }
+.rec-chip-informativo{ background: rgba(59,130,246,.12); color: #2563eb; border: 1px solid rgba(59,130,246,.2); }
+
+/* Rec card */
+.rec-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 1.1rem 1.25rem;
+  border-left-width: 4px; border-left-style: solid;
+}
+.rec-card-danger  { border-left-color: #ef4444; }
+.rec-card-warning { border-left-color: #f59e0b; }
+.rec-card-success { border-left-color: #22c55e; }
+.rec-card-info    { border-left-color: #3b82f6; }
+.rec-card-primary { border-left-color: #6366f1; }
+.rec-card-secondary { border-left-color: #64748b; }
+
+.rec-card-top {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: .6rem; gap: .75rem;
+}
+.rec-card-title-row {
+  display: flex; align-items: center; gap: .5rem; flex: 1;
+}
+.rec-title {
+  margin: 0; font-size: .95rem; font-weight: 700; line-height: 1.3;
+}
+.rec-badges {
+  display: flex; align-items: center; gap: .4rem; flex-shrink: 0;
+}
+.rec-cat-badge {
+  display: inline-flex; align-items: center;
+  padding: .2em .6em; border-radius: 8px; font-size: .7rem; font-weight: 600;
+  background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted);
+}
+.rec-priority-badge {
+  display: inline-block; padding: .2em .6em; border-radius: 8px;
+  font-size: .7rem; font-weight: 700;
+}
+.rec-pbadge-urgente    { background: rgba(239,68,68,.15);  color: #dc2626; }
+.rec-pbadge-importante { background: rgba(245,158,11,.15); color: #d97706; }
+.rec-pbadge-informativo{ background: rgba(59,130,246,.15); color: #2563eb; }
+
+.rec-body {
+  font-size: .88rem; color: var(--text); line-height: 1.55; margin-bottom: .65rem;
+}
+.rec-action {
+  display: flex; align-items: flex-start; gap: .5rem;
+  background: rgba(99,102,241,.08); border: 1px solid rgba(99,102,241,.18);
+  border-radius: 10px; padding: .6rem .8rem; font-size: .85rem; color: var(--text);
+}
+
+.rec-data-toggle {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--text-muted); font-size: .78rem;
+  display: flex; align-items: center; gap: .3rem;
+}
+.rec-data-toggle:hover { color: var(--text); }
+.rec-data-box {
+  margin-top: .5rem; padding: .5rem .75rem; border-radius: 8px;
+  background: var(--surface2); font-size: .78rem; font-family: monospace;
+}
+
+@media (max-width: 576px) {
+  .rec-card-top { flex-direction: column; }
+  .rec-badges   { flex-wrap: wrap; }
+}
+</style>
 {% endblock %}

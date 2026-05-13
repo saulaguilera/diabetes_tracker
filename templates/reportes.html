@@ -2,76 +2,88 @@
 {% block title %}Correlaciones — DiabetesTracker{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex justify-content-between align-items-center">
+
+<div class="list-page-header mb-4">
   <div>
-    <h1><i class="bi bi-diagram-3-fill me-2 text-primary"></i>Correlaciones</h1>
-    <small class="text-muted">Relación entre glucemia, comidas, insulina y ejercicio</small>
+    <h1 class="list-page-title">
+      <span class="list-icon-wrap" style="background:rgba(59,130,246,.12);">
+        <i class="bi bi-diagram-3-fill" style="color:#3b82f6;"></i>
+      </span>
+      Correlaciones
+    </h1>
+    <p class="list-page-sub">Glucemia, comidas, insulina y ejercicio</p>
   </div>
-  <div class="d-flex gap-2 align-items-center">
-    <span class="text-muted" style="font-size:.85rem;">Período:</span>
-    {% for d in [7, 14, 30, 90] %}
-      <a href="{{ url_for('reportes', dias=d) }}"
-         class="btn btn-sm {{ 'btn-primary' if dias == d else 'btn-outline-secondary' }}">{{ d }}d</a>
-    {% endfor %}
-    <a href="{{ url_for('agp', dias=dias) }}" class="btn btn-sm btn-outline-primary ms-1"
-       title="Ver distribución estadística en el AGP">
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    <div class="range-selector">
+      {% for d in [7, 14, 30, 90] %}
+        <a href="{{ url_for('reportes', dias=d) }}"
+           class="range-pill {{ 'range-pill-active' if dias == d }}">{{ d }}d</a>
+      {% endfor %}
+    </div>
+    <a href="{{ url_for('agp', dias=dias) }}" class="btn-list-secondary" style="font-size:.8rem;">
       <i class="bi bi-layers me-1"></i>Ver AGP
     </a>
   </div>
 </div>
 
-<!-- 1 · Timeline con eventos (comidas, insulina, ejercicio) -->
+<!-- 1 · Timeline con eventos -->
 <div class="chart-box mb-3">
-  <div class="d-flex justify-content-between align-items-center mb-2">
-    <h6 class="fw-semibold mb-0">
-      <i class="bi bi-activity me-1 text-primary"></i>Timeline con eventos
-    </h6>
-    <div class="d-flex gap-3" style="font-size:.78rem; color:#64748b;">
-      <span><span style="display:inline-block;width:10px;height:10px;background:#f59e0b;clip-path:polygon(50% 0%,0% 100%,100% 100%);margin-right:4px;"></span>Comida</span>
-      <span><span style="display:inline-block;width:10px;height:10px;background:#8b5cf6;clip-path:polygon(50% 100%,0% 0%,100% 0%);margin-right:4px;"></span>Insulina</span>
-      <span><span style="display:inline-block;width:10px;height:10px;background:#22c55e;transform:rotate(45deg);margin-right:4px;"></span>Ejercicio</span>
+  <div class="chart-card-header">
+    <span class="chart-card-title">
+      <i class="bi bi-activity text-primary"></i>
+      Timeline con eventos
+    </span>
+    <div class="d-flex gap-3" style="font-size:.76rem; color:var(--text-muted);">
+      <span><span style="display:inline-block;width:9px;height:9px;background:#f59e0b;clip-path:polygon(50% 0%,0% 100%,100% 100%);margin-right:3px;vertical-align:middle;"></span>Comida</span>
+      <span><span style="display:inline-block;width:9px;height:9px;background:#8b5cf6;clip-path:polygon(50% 100%,0% 0%,100% 0%);margin-right:3px;vertical-align:middle;"></span>Insulina</span>
+      <span><span style="display:inline-block;width:9px;height:9px;background:#22c55e;transform:rotate(45deg);margin-right:3px;vertical-align:middle;"></span>Ejercicio</span>
     </div>
   </div>
-  <div id="chart-timeline-full" style="min-height:320px;"></div>
+  <div id="chart-timeline-full" style="min-height:300px;"></div>
 </div>
 
 <!-- 2 · Patrón circadiano -->
 <div class="chart-box mb-3">
-  <h6 class="fw-semibold mb-2">
-    <i class="bi bi-clock me-1 text-primary"></i>Patrón circadiano
-    <small class="text-muted fw-normal">— glucemia promedio por hora del día</small>
-  </h6>
+  <div class="chart-card-header">
+    <span class="chart-card-title">
+      <i class="bi bi-clock text-primary"></i>
+      Patrón circadiano
+    </span>
+    <span style="font-size:.76rem; color:var(--text-muted);">glucemia promedio por hora del día</span>
+  </div>
   <div id="chart-por-hora" style="min-height:240px;"></div>
 </div>
 
 <!-- 3 · Ejercicio y glucemia -->
 <div class="chart-box mb-3">
-  <h6 class="fw-semibold mb-2">
-    <i class="bi bi-bicycle me-1 text-primary"></i>Impacto del ejercicio sobre la glucemia
-    <small class="text-muted fw-normal">— cada línea es una sesión · 0 = inicio</small>
-  </h6>
-  <div id="chart-actividad" style="min-height:300px;"></div>
+  <div class="chart-card-header">
+    <span class="chart-card-title">
+      <i class="bi bi-bicycle text-primary"></i>
+      Impacto del ejercicio
+    </span>
+    <span style="font-size:.76rem; color:var(--text-muted);">cada línea es una sesión · 0 = inicio</span>
+  </div>
+  <div id="chart-actividad" style="min-height:280px;"></div>
 </div>
 
 <!-- 4 · Impacto comidas -->
 <div class="row g-3 mb-3">
 
-  <!-- Tabla individual -->
   <div class="col-lg-7">
     <div class="chart-box h-100">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h6 class="fw-semibold mb-0">
-          <i class="bi bi-table text-warning me-1"></i>Impacto por comida
-        </h6>
-        <a href="{{ url_for('comidas_grupos') }}" class="btn btn-sm btn-outline-secondary"
-           style="font-size:.75rem;">
+      <div class="chart-card-header">
+        <span class="chart-card-title">
+          <i class="bi bi-table text-warning"></i>
+          Impacto por comida
+        </span>
+        <a href="{{ url_for('comidas_grupos') }}" class="btn-list-secondary" style="font-size:.75rem;">
           <i class="bi bi-tags me-1"></i>Ver por grupos
         </a>
       </div>
       {% if tabla_filas %}
       <div style="max-height:380px; overflow-y:auto;">
-        <table class="table table-sm table-hover mb-0" style="font-size:.84rem;">
-          <thead class="table-light sticky-top">
+        <table class="corr-table">
+          <thead>
             <tr>
               <th>Fecha</th>
               <th>Alimento</th>
@@ -86,10 +98,10 @@
           <tbody>
             {% for f in tabla_filas %}
             <tr>
-              <td class="text-muted" style="white-space:nowrap; font-size:.78rem;">{{ f.fecha }}</td>
-              <td>{{ f.nombre[:26] }}</td>
-              <td class="text-center fw-semibold text-warning">{{ f.carbs }}g</td>
-              <td class="text-center">
+              <td class="text-muted" style="white-space:nowrap; font-size:.76rem;">{{ f.fecha }}</td>
+              <td style="font-size:.82rem;">{{ f.nombre[:26] }}</td>
+              <td class="text-center fw-semibold" style="color:#d97706; font-size:.82rem;">{{ f.carbs }}g</td>
+              <td class="text-center" style="font-size:.82rem;">
                 {% if f.insulina %}
                   {% for d in f.insulina %}
                     <span class="d-block" style="white-space:nowrap; line-height:1.3;">
@@ -101,25 +113,23 @@
                   <span class="text-muted">—</span>
                 {% endif %}
               </td>
-              <td class="text-center text-muted">{{ f.pre }}</td>
-              <td class="text-center fw-semibold
-                {% if f.pico > 180 %}text-danger
-                {% elif f.pico < 70 %}text-primary
-                {% else %}text-success{% endif %}">{{ f.pico }}</td>
-              <td class="text-center fw-bold
-                {% if f.delta > 80 %}text-danger
-                {% elif f.delta > 40 %}text-warning
-                {% elif f.delta < 0 %}text-primary
-                {% else %}text-success{% endif %}">
-                {{ '+' if f.delta > 0 else '' }}{{ f.delta }}
+              <td class="text-center text-muted" style="font-size:.82rem;">{{ f.pre }}</td>
+              <td class="text-center fw-semibold" style="font-size:.82rem;">
+                <span class="{{ 'text-danger' if f.pico > 180 else ('text-primary' if f.pico < 70 else 'text-success') }}">{{ f.pico }}</span>
+              </td>
+              <td class="text-center fw-bold" style="font-size:.82rem;">
+                <span class="corr-delta
+                  {% if f.delta > 80 %}delta-bad{% elif f.delta > 40 %}delta-warn{% elif f.delta < 0 %}delta-low{% else %}delta-ok{% endif %}">
+                  {{ '+' if f.delta > 0 else '' }}{{ f.delta }}
+                </span>
               </td>
               <td class="text-center">
                 {% if f.estado == 'hiper' %}
-                  <span class="badge bg-danger" style="font-size:.68rem;">Hiper</span>
+                  <span class="list-badge list-badge-hiper">Hiper</span>
                 {% elif f.estado == 'hipo' %}
-                  <span class="badge bg-primary" style="font-size:.68rem;">Hipo</span>
+                  <span class="list-badge list-badge-hipo">Hipo</span>
                 {% else %}
-                  <span class="badge bg-success" style="font-size:.68rem;">OK</span>
+                  <span class="list-badge list-badge-rango">OK</span>
                 {% endif %}
               </td>
             </tr>
@@ -128,22 +138,24 @@
         </table>
       </div>
       {% else %}
-      <p class="text-muted text-center py-4" style="font-size:.85rem;">
-        <i class="bi bi-info-circle d-block mb-2 fs-4 opacity-25"></i>
-        Registrá comidas y glucemias cercanas para ver el impacto.
-      </p>
+      <div class="list-empty" style="padding:2rem 1rem;">
+        <i class="bi bi-info-circle list-empty-icon"></i>
+        <p class="list-empty-text">Registrá comidas y glucemias cercanas para ver el impacto.</p>
+      </div>
       {% endif %}
     </div>
   </div>
 
-  <!-- Scatter CH vs Δ glucemia -->
   <div class="col-lg-5">
     <div class="chart-box h-100">
-      <h6 class="fw-semibold mb-2">
-        <i class="bi bi-scatter-chart me-1 text-primary"></i>Carbohidratos vs alza glucémica
-      </h6>
-      <div id="chart-carbs" style="min-height:320px;"></div>
-      <p class="text-muted mt-1 mb-0" style="font-size:.76rem;">
+      <div class="chart-card-header">
+        <span class="chart-card-title">
+          <i class="bi bi-scatter-chart text-primary"></i>
+          Carbohidratos vs alza glucémica
+        </span>
+      </div>
+      <div id="chart-carbs" style="min-height:280px;"></div>
+      <p class="mt-2 mb-0" style="font-size:.74rem; color:var(--text-muted);">
         Cada punto es una comida. Idealmente los puntos de más CH deberían
         correlacionar con mayor alza, ajustada por la insulina usada.
       </p>
@@ -152,17 +164,20 @@
 
 </div>
 
-<!-- Nota de referencia -->
-<div class="alert alert-light border" style="font-size:.78rem;">
-  <i class="bi bi-info-circle text-primary me-1"></i>
-  <strong>Δ glucemia</strong> = pico en las 2h post-comida menos lectura previa (30 min antes).
-  Para el análisis estadístico de distribución, TIR y GMI andá al
-  <a href="{{ url_for('agp', dias=dias) }}">AGP</a>.
+<!-- Nota -->
+<div class="agp-note">
+  <i class="bi bi-info-circle text-primary me-2 flex-shrink-0"></i>
+  <div style="font-size:.78rem;">
+    <strong>Δ glucemia</strong> = pico en las 2h post-comida menos lectura previa (30 min antes).
+    Para análisis estadístico de distribución, TIR y GMI andá al
+    <a href="{{ url_for('agp', dias=dias) }}" style="color:#6366f1;">AGP</a>.
+  </div>
 </div>
 
 {% endblock %}
 
 {% block scripts %}
+{{ list_styles() }}
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     renderChart('chart-timeline-full', {{ charts.timeline_full | tojson }});
@@ -171,4 +186,48 @@
     renderChart('chart-carbs',         {{ charts.carbs         | tojson }});
   });
 </script>
+<style>
+/* ── Reportes / Correlaciones ─────────────────────────────────────────── */
+.chart-card-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: .75rem; flex-wrap: wrap; gap: .4rem;
+}
+.chart-card-title {
+  display: flex; align-items: center; gap: .4rem;
+  font-size: .87rem; font-weight: 700;
+}
+
+.corr-table {
+  width: 100%; border-collapse: collapse; font-size: .82rem;
+}
+.corr-table thead tr {
+  border-bottom: 1px solid var(--border);
+}
+.corr-table th {
+  padding: .4rem .6rem; font-size: .72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted);
+}
+.corr-table td {
+  padding: .5rem .6rem; border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.corr-table tr:last-child td { border-bottom: none; }
+.corr-table tr:hover td { background: var(--surface2); }
+
+.corr-delta {
+  display: inline-block; padding: .15em .45em; border-radius: 6px;
+  font-size: .78rem; font-weight: 700;
+}
+.delta-bad  { background: rgba(239,68,68,.12);  color: #dc2626; }
+.delta-warn { background: rgba(245,158,11,.12); color: #d97706; }
+.delta-low  { background: rgba(59,130,246,.12); color: #2563eb; }
+.delta-ok   { background: rgba(34,197,94,.12);  color: #16a34a; }
+
+.agp-note {
+  display: flex; align-items: flex-start; gap: .75rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: .9rem 1rem;
+  color: var(--text-muted); margin-top: .5rem;
+}
+</style>
 {% endblock %}

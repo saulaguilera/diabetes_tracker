@@ -3,191 +3,159 @@
 
 {% block content %}
 
-<style>
-  /* ── Estilos específicos del reporte ── */
-  .report-header { border-bottom: 3px solid var(--border); padding-bottom: 1rem; margin-bottom: 1.5rem; }
-  .metric-card {
-    background: var(--surface); border-radius: 10px; border: 1px solid var(--border);
-    padding: 1rem 1.25rem; height: 100%;
-  }
-  .metric-card .val { font-size: 1.9rem; font-weight: 700; line-height: 1.1; }
-  .metric-card .label { font-size: .75rem; color: var(--text-muted); margin-top: .2rem; }
-  .metric-card .meta  { font-size: .7rem; color: var(--text-muted); margin-top: .15rem; }
-  .target-ok   { color: #16a34a; }
-  .target-warn { color: #d97706; }
-  .target-bad  { color: #dc2626; }
-  .section-title {
-    font-size: .75rem; font-weight: 700; text-transform: uppercase;
-    letter-spacing: .08em; color: var(--text-muted);
-    border-bottom: 1px solid var(--border); padding-bottom: .35rem; margin-bottom: .75rem;
-  }
-
-  @media print {
-    .no-print { display: none !important; }
-    .sidebar, .mobile-topbar, .bottom-nav { display: none !important; }
-    .main-content { margin-left: 0 !important; padding: 0 !important; }
-    .chart-box, .metric-card { break-inside: avoid; }
-    body { background: white !important; }
-    a { text-decoration: none !important; color: inherit !important; }
-    .page-break { page-break-before: always; }
-  }
-</style>
-
 <!-- Controles (se ocultan al imprimir) -->
-<div class="d-flex justify-content-between align-items-start mb-3 no-print">
+<div class="list-page-header mb-4 no-print">
   <div>
-    <h1 class="h4 fw-bold mb-0">
-      <i class="bi bi-file-medical-fill me-2 text-primary"></i>Reporte clínico
+    <h1 class="list-page-title">
+      <span class="list-icon-wrap" style="background:rgba(239,68,68,.1);">
+        <i class="bi bi-file-medical-fill" style="color:#ef4444;"></i>
+      </span>
+      Reporte clínico
     </h1>
-    <small class="text-muted">Para llevar a tu endocrinólogo</small>
+    <p class="list-page-sub">Para llevar a tu endocrinólogo</p>
   </div>
-  <div class="d-flex gap-2 align-items-center flex-wrap">
-    <span class="text-muted" style="font-size:.85rem;">Período:</span>
-    {% for d in [7, 14, 30] %}
-      <a href="{{ url_for('reporte_semanal', dias=d) }}"
-         class="btn btn-sm {{ 'btn-primary' if dias == d else 'btn-outline-secondary' }}">{{ d }}d</a>
-    {% endfor %}
-    <button onclick="window.print()" class="btn btn-sm btn-success ms-2">
-      <i class="bi bi-printer-fill me-1"></i>Imprimir
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    <div class="range-selector">
+      {% for d in [7, 14, 30] %}
+        <a href="{{ url_for('reporte_semanal', dias=d) }}"
+           class="range-pill {{ 'range-pill-active' if dias == d }}">{{ d }}d</a>
+      {% endfor %}
+    </div>
+    <button onclick="window.print()" class="rpt-action-btn rpt-print">
+      <i class="bi bi-printer-fill"></i> Imprimir
     </button>
-    <a href="{{ url_for('reporte_semanal_pdf', dias=dias) }}"
-       class="btn btn-sm btn-danger ms-1">
-      <i class="bi bi-file-earmark-pdf-fill me-1"></i>Descargar PDF
+    <a href="{{ url_for('reporte_semanal_pdf', dias=dias) }}" class="rpt-action-btn rpt-pdf">
+      <i class="bi bi-file-earmark-pdf-fill"></i> PDF
     </a>
   </div>
 </div>
 
-<!-- ═══ ENCABEZADO DEL REPORTE ═══ -->
-<div class="chart-box report-header mb-3">
+<!-- ══ ENCABEZADO DEL REPORTE ══ -->
+<div class="chart-box rpt-header mb-3">
   <div class="row align-items-center">
     <div class="col">
-      <h2 class="h5 fw-bold mb-1">
-        <i class="bi bi-heart-pulse-fill text-danger me-2"></i>DiabetesTracker — Reporte de Glucemia
-      </h2>
-      <div class="text-muted" style="font-size:.9rem;">
-        Período analizado:
+      <div class="rpt-header-title">
+        <i class="bi bi-heart-pulse-fill" style="color:#ef4444;"></i>
+        DiabetesTracker — Reporte de Glucemia
+      </div>
+      <div class="rpt-header-period">
+        Período:
         <strong>{{ desde.strftime('%d de %B de %Y') }}</strong> al
         <strong>{{ hasta.strftime('%d de %B de %Y') }}</strong>
         ({{ dias }} días)
       </div>
     </div>
-    <div class="col-auto text-end text-muted" style="font-size:.8rem;">
+    <div class="col-auto text-end" style="font-size:.78rem; color:var(--text-muted);">
       Generado: {{ hasta.strftime('%d/%m/%Y %H:%M') }}<br>
-      <span class="badge bg-primary mt-1">Diabetes Tipo 1</span>
+      <span class="list-badge list-badge-rango mt-1 d-inline-block">Diabetes Tipo 1</span>
     </div>
   </div>
 </div>
 
 {% if stats %}
 
-<!-- ═══ MÉTRICAS PRINCIPALES ═══ -->
-<div class="section-title">Métricas principales ({{ stats.n }} lecturas)</div>
+<!-- ══ MÉTRICAS PRINCIPALES ══ -->
+<div class="rpt-section-title">Métricas principales ({{ stats.n }} lecturas)</div>
 <div class="row g-2 mb-3">
 
-  <!-- GMI -->
   <div class="col-6 col-md-4 col-lg-2">
-    <div class="metric-card text-center">
-      <div class="val {{ 'target-ok' if stats.gmi < 7.0 else ('target-warn' if stats.gmi < 8.0 else 'target-bad') }}">
+    <div class="rpt-metric-card text-center">
+      <div class="rmc-val {{ 'rmc-ok' if stats.gmi < 7.0 else ('rmc-warn' if stats.gmi < 8.0 else 'rmc-bad') }}">
         {{ stats.gmi }}%
       </div>
-      <div class="label">GMI (≈ HbA1c)</div>
-      <div class="meta">Meta &lt;7%</div>
+      <div class="rmc-lbl">GMI (≈ HbA1c)</div>
+      <div class="rmc-meta">Meta &lt;7%</div>
     </div>
   </div>
 
-  <!-- TIR -->
   <div class="col-6 col-md-4 col-lg-2">
-    <div class="metric-card text-center">
-      <div class="val {{ 'target-ok' if stats.tir >= 70 else ('target-warn' if stats.tir >= 50 else 'target-bad') }}">
+    <div class="rpt-metric-card text-center">
+      <div class="rmc-val {{ 'rmc-ok' if stats.tir >= 70 else ('rmc-warn' if stats.tir >= 50 else 'rmc-bad') }}">
         {{ stats.tir }}%
       </div>
-      <div class="label">Tiempo en rango</div>
-      <div class="meta">70–180 mg/dL · Meta ≥70%</div>
+      <div class="rmc-lbl">Tiempo en rango</div>
+      <div class="rmc-meta">70–180 mg/dL · Meta ≥70%</div>
     </div>
   </div>
 
-  <!-- TBR -->
   <div class="col-6 col-md-4 col-lg-2">
-    <div class="metric-card text-center">
-      <div class="val {{ 'target-ok' if stats.tbr <= 4 else 'target-bad' }}">
+    <div class="rpt-metric-card text-center">
+      <div class="rmc-val {{ 'rmc-ok' if stats.tbr <= 4 else 'rmc-bad' }}">
         {{ stats.tbr }}%
       </div>
-      <div class="label">Tiempo bajo rango</div>
-      <div class="meta">&lt;70 mg/dL · Meta ≤4%</div>
+      <div class="rmc-lbl">Tiempo bajo rango</div>
+      <div class="rmc-meta">&lt;70 mg/dL · Meta ≤4%</div>
     </div>
   </div>
 
-  <!-- TAR -->
   <div class="col-6 col-md-4 col-lg-2">
-    <div class="metric-card text-center">
-      <div class="val {{ 'target-ok' if stats.tar <= 25 else ('target-warn' if stats.tar <= 40 else 'target-bad') }}">
+    <div class="rpt-metric-card text-center">
+      <div class="rmc-val {{ 'rmc-ok' if stats.tar <= 25 else ('rmc-warn' if stats.tar <= 40 else 'rmc-bad') }}">
         {{ stats.tar }}%
       </div>
-      <div class="label">Tiempo alto rango</div>
-      <div class="meta">&gt;180 mg/dL · Meta ≤25%</div>
+      <div class="rmc-lbl">Tiempo alto rango</div>
+      <div class="rmc-meta">&gt;180 mg/dL · Meta ≤25%</div>
     </div>
   </div>
 
-  <!-- Media -->
   <div class="col-6 col-md-4 col-lg-2">
-    <div class="metric-card text-center">
-      <div class="val {{ 'target-ok' if 100 <= stats.mean <= 154 else 'target-warn' }}">
+    <div class="rpt-metric-card text-center">
+      <div class="rmc-val {{ 'rmc-ok' if 100 <= stats.mean <= 154 else 'rmc-warn' }}">
         {{ stats.mean }}
       </div>
-      <div class="label">Glucemia media</div>
-      <div class="meta">mg/dL</div>
+      <div class="rmc-lbl">Glucemia media</div>
+      <div class="rmc-meta">mg/dL</div>
     </div>
   </div>
 
-  <!-- CV -->
   <div class="col-6 col-md-4 col-lg-2">
-    <div class="metric-card text-center">
-      <div class="val {{ 'target-ok' if stats.cv <= 36 else 'target-warn' }}">
+    <div class="rpt-metric-card text-center">
+      <div class="rmc-val {{ 'rmc-ok' if stats.cv <= 36 else 'rmc-warn' }}">
         {{ stats.cv }}%
       </div>
-      <div class="label">Coef. variación</div>
-      <div class="meta">Meta ≤36%</div>
+      <div class="rmc-lbl">Coef. variación</div>
+      <div class="rmc-meta">Meta ≤36%</div>
     </div>
   </div>
 </div>
 
-<!-- Fila secundaria de métricas -->
+<!-- Métricas secundarias -->
 <div class="row g-2 mb-3">
   <div class="col-6 col-md-3">
-    <div class="metric-card text-center">
-      <div class="val" style="font-size:1.4rem;">{{ stats.min }}</div>
-      <div class="label">Mínimo</div>
-      <div class="meta">mg/dL en el período</div>
+    <div class="rpt-metric-card text-center">
+      <div class="rmc-val rmc-secondary">{{ stats.min }}</div>
+      <div class="rmc-lbl">Mínimo</div>
+      <div class="rmc-meta">mg/dL en el período</div>
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="metric-card text-center">
-      <div class="val" style="font-size:1.4rem;">{{ stats.max }}</div>
-      <div class="label">Máximo</div>
-      <div class="meta">mg/dL en el período</div>
+    <div class="rpt-metric-card text-center">
+      <div class="rmc-val rmc-secondary">{{ stats.max }}</div>
+      <div class="rmc-lbl">Máximo</div>
+      <div class="rmc-meta">mg/dL en el período</div>
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="metric-card text-center">
-      <div class="val {{ 'target-bad' if stats.tbr54 > 1 else 'target-ok' }}" style="font-size:1.4rem;">
+    <div class="rpt-metric-card text-center">
+      <div class="rmc-val {{ 'rmc-bad' if stats.tbr54 > 1 else 'rmc-ok' }}">
         {{ stats.tbr54 }}%
       </div>
-      <div class="label">Hipoglucemia grave</div>
-      <div class="meta">&lt;54 mg/dL · Meta ≤1%</div>
+      <div class="rmc-lbl">Hipoglucemia grave</div>
+      <div class="rmc-meta">&lt;54 mg/dL · Meta ≤1%</div>
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="metric-card text-center">
-      <div class="val {{ 'target-bad' if stats.tar250 > 5 else 'target-warn' }}" style="font-size:1.4rem;">
+    <div class="rpt-metric-card text-center">
+      <div class="rmc-val {{ 'rmc-bad' if stats.tar250 > 5 else 'rmc-warn' }}">
         {{ stats.tar250 }}%
       </div>
-      <div class="label">Hiperglucemia grave</div>
-      <div class="meta">&gt;250 mg/dL · Meta ≤5%</div>
+      <div class="rmc-lbl">Hiperglucemia grave</div>
+      <div class="rmc-meta">&gt;250 mg/dL · Meta ≤5%</div>
     </div>
   </div>
 </div>
 
-<!-- ═══ GRÁFICAS ═══ -->
+<!-- Gráficas -->
 <div class="row g-3 mb-3">
   <div class="col-lg-4">
     <div class="chart-box">
@@ -200,24 +168,20 @@
     </div>
   </div>
 </div>
-<div class="row g-3 mb-3">
-  <div class="col-12">
-    <div class="chart-box">
-      <div id="r-chart-timeline" style="min-height:220px;"></div>
-    </div>
-  </div>
+<div class="chart-box mb-3">
+  <div id="r-chart-timeline" style="min-height:220px;"></div>
 </div>
 
-<!-- ═══ DISTRIBUCIÓN POR FRANJA HORARIA ═══ -->
+<!-- Franja horaria + tratamiento -->
 <div class="row g-3 mb-3">
   <div class="col-lg-6">
     <div class="chart-box">
-      <div class="section-title">Glucemia por franja horaria</div>
-      <table class="table table-sm mb-0" style="font-size:.88rem;">
+      <div class="rpt-section-title mb-2">Glucemia por franja horaria</div>
+      <table class="rpt-table">
         <thead>
           <tr>
             <th>Franja</th>
-            <th class="text-center">Promedio</th>
+            <th class="text-center">Prom.</th>
             <th class="text-center">Min</th>
             <th class="text-center">Max</th>
             <th class="text-center">TIR</th>
@@ -227,18 +191,21 @@
         <tbody>
           {% for f in franjas %}
           <tr>
-            <td><strong>{{ f.nombre }}</strong><br><small class="text-muted">{{ f.label }}</small></td>
+            <td>
+              <strong style="font-size:.83rem;">{{ f.nombre }}</strong>
+              <br><small class="text-muted">{{ f.label }}</small>
+            </td>
             {% if f.sin_datos is defined %}
-            <td colspan="5" class="text-muted text-center" style="font-size:.8rem;">Sin datos</td>
+            <td colspan="5" class="text-muted text-center" style="font-size:.78rem;">Sin datos</td>
             {% else %}
             <td class="text-center fw-semibold
               {% if f.avg > 180 %}text-danger{% elif f.avg < 70 %}text-primary{% else %}text-success{% endif %}">
-              {{ f.avg }} mg/dL
+              {{ f.avg }}
             </td>
             <td class="text-center text-muted">{{ f.min }}</td>
             <td class="text-center text-muted">{{ f.max }}</td>
             <td class="text-center">
-              <span class="fw-semibold {{ 'text-success' if f.tir >= 70 else ('text-warning' if f.tir >= 50 else 'text-danger') }}">
+              <span class="fw-bold {{ 'text-success' if f.tir >= 70 else ('text-warning' if f.tir >= 50 else 'text-danger') }}">
                 {{ f.tir }}%
               </span>
             </td>
@@ -251,37 +218,36 @@
     </div>
   </div>
 
-  <!-- ═══ RESUMEN TRATAMIENTO ═══ -->
   <div class="col-lg-6">
     <div class="chart-box h-100">
-      <div class="section-title">Resumen de tratamiento</div>
-      <div class="row g-2 mb-3">
+      <div class="rpt-section-title mb-2">Resumen de tratamiento</div>
+      <div class="row g-2">
         <div class="col-6">
-          <div class="metric-card text-center">
-            <div class="val text-purple" style="color:#7c3aed; font-size:1.5rem;">{{ bolus_total }}U</div>
-            <div class="label">Insulina rápida (total)</div>
-            <div class="meta">{{ bolus_diario }}U/día promedio</div>
+          <div class="rpt-metric-card text-center">
+            <div class="rmc-val" style="color:#7c3aed;">{{ bolus_total }}U</div>
+            <div class="rmc-lbl">Insulina rápida</div>
+            <div class="rmc-meta">{{ bolus_diario }}U/día promedio</div>
           </div>
         </div>
         <div class="col-6">
-          <div class="metric-card text-center">
-            <div class="val text-info" style="font-size:1.5rem;">{{ basal_total }}U</div>
-            <div class="label">Insulina basal (total)</div>
-            <div class="meta">{{ basal_diario }}U/día promedio</div>
+          <div class="rpt-metric-card text-center">
+            <div class="rmc-val text-info">{{ basal_total }}U</div>
+            <div class="rmc-lbl">Insulina basal</div>
+            <div class="rmc-meta">{{ basal_diario }}U/día promedio</div>
           </div>
         </div>
         <div class="col-6">
-          <div class="metric-card text-center">
-            <div class="val" style="font-size:1.5rem; color:#f59e0b;">{{ carbs_diario|int }}g</div>
-            <div class="label">Carbohidratos/día</div>
-            <div class="meta">{{ n_comidas }} comidas registradas</div>
+          <div class="rpt-metric-card text-center">
+            <div class="rmc-val" style="color:#f59e0b;">{{ carbs_diario|int }}g</div>
+            <div class="rmc-lbl">Carbohidratos/día</div>
+            <div class="rmc-meta">{{ n_comidas }} comidas registradas</div>
           </div>
         </div>
         <div class="col-6">
-          <div class="metric-card text-center">
-            <div class="val text-success" style="font-size:1.5rem;">{{ min_actividad }}</div>
-            <div class="label">Minutos de ejercicio</div>
-            <div class="meta">{{ n_actividades }} sesiones registradas</div>
+          <div class="rpt-metric-card text-center">
+            <div class="rmc-val text-success">{{ min_actividad }}</div>
+            <div class="rmc-lbl">Min. de ejercicio</div>
+            <div class="rmc-meta">{{ n_actividades }} sesiones registradas</div>
           </div>
         </div>
       </div>
@@ -289,16 +255,16 @@
   </div>
 </div>
 
-<!-- ═══ EPISODIOS DE HIPOGLUCEMIA ═══ -->
+<!-- Episodios de hipoglucemia -->
 {% if hipos %}
 <div class="chart-box mb-3">
-  <div class="section-title">
+  <div class="rpt-section-title mb-2">
     <i class="bi bi-exclamation-triangle-fill text-danger me-1"></i>
     Episodios de hipoglucemia (&lt;70 mg/dL) — últimos {{ dias }} días
   </div>
   <div style="max-height:220px; overflow-y:auto;">
-    <table class="table table-sm mb-0" style="font-size:.88rem;">
-      <thead class="table-light sticky-top">
+    <table class="rpt-table">
+      <thead>
         <tr>
           <th>Fecha y hora</th>
           <th class="text-center">Valor</th>
@@ -313,12 +279,12 @@
           <td class="text-center fw-bold text-danger">{{ r.value_mgdl | int }} mg/dL</td>
           <td class="text-center">
             {% if r.value_mgdl < 54 %}
-              <span class="badge bg-danger">Grave (&lt;54)</span>
+              <span class="list-badge list-badge-hipo">Grave &lt;54</span>
             {% else %}
-              <span class="badge bg-warning text-dark">Leve</span>
+              <span class="list-badge" style="background:rgba(245,158,11,.12);color:#d97706;">Leve</span>
             {% endif %}
           </td>
-          <td class="text-muted" style="font-size:.8rem;">
+          <td class="text-muted" style="font-size:.78rem;">
             {% if r.source == 'cgm_historic' %}CGM
             {% elif r.source == 'cgm_scan' %}Escáner
             {% else %}Manual{% endif %}
@@ -331,21 +297,20 @@
 </div>
 {% endif %}
 
-<!-- ═══ IMPACTO DE COMIDAS ═══ -->
+<!-- Impacto de comidas -->
 {% if tabla_comidas or resumen_comidas %}
 <div class="row g-3 mb-3">
 
-  <!-- Tabla detallada por comida -->
   {% if tabla_comidas %}
   <div class="col-lg-7">
     <div class="chart-box">
-      <div class="section-title">
+      <div class="rpt-section-title mb-2">
         <i class="bi bi-egg-fried text-warning me-1"></i>
         Impacto de comidas en glucemia
       </div>
       <div style="max-height:320px; overflow-y:auto;">
-        <table class="table table-sm mb-0" style="font-size:.82rem;">
-          <thead class="table-light sticky-top">
+        <table class="rpt-table">
+          <thead>
             <tr>
               <th>Fecha</th>
               <th>Alimento</th>
@@ -359,10 +324,10 @@
           <tbody>
             {% for f in tabla_comidas %}
             <tr>
-              <td class="text-muted" style="white-space:nowrap;">{{ f.fecha }}</td>
-              <td>{{ f.nombre[:24] }}</td>
-              <td class="text-center fw-semibold text-warning">{{ f.carbs }}g</td>
-              <td class="text-center">
+              <td class="text-muted" style="white-space:nowrap; font-size:.76rem;">{{ f.fecha }}</td>
+              <td style="font-size:.82rem;">{{ f.nombre[:24] }}</td>
+              <td class="text-center fw-semibold" style="color:#d97706; font-size:.82rem;">{{ f.carbs }}g</td>
+              <td class="text-center" style="font-size:.82rem;">
                 {% if f.insulina %}
                   {% for d in f.insulina %}
                     <span class="d-block" style="white-space:nowrap; line-height:1.3; color:#7c3aed; font-weight:600;">
@@ -373,14 +338,16 @@
                   <span class="text-muted">—</span>
                 {% endif %}
               </td>
-              <td class="text-center text-muted">{{ f.pre }}</td>
-              <td class="text-center fw-semibold
-                {% if f.pico > 180 %}text-danger{% elif f.pico < 70 %}text-primary{% else %}text-success{% endif %}">
-                {{ f.pico }}
+              <td class="text-center text-muted" style="font-size:.82rem;">{{ f.pre }}</td>
+              <td class="text-center fw-semibold" style="font-size:.82rem;">
+                <span class="{{ 'text-danger' if f.pico > 180 else ('text-primary' if f.pico < 70 else 'text-success') }}">
+                  {{ f.pico }}
+                </span>
               </td>
-              <td class="text-center fw-bold
-                {% if f.delta > 80 %}text-danger{% elif f.delta > 40 %}text-warning{% elif f.delta < 0 %}text-primary{% else %}text-success{% endif %}">
-                {{ '+' if f.delta > 0 else '' }}{{ f.delta }}
+              <td class="text-center fw-bold" style="font-size:.82rem;">
+                <span class="{{ 'text-danger' if f.delta > 80 else ('text-warning' if f.delta > 40 else ('text-primary' if f.delta < 0 else 'text-success')) }}">
+                  {{ '+' if f.delta > 0 else '' }}{{ f.delta }}
+                </span>
               </td>
             </tr>
             {% endfor %}
@@ -391,19 +358,18 @@
   </div>
   {% endif %}
 
-  <!-- Resumen por alimento -->
   {% if resumen_comidas %}
   <div class="col-lg-5">
     <div class="chart-box">
-      <div class="section-title">
+      <div class="rpt-section-title mb-2">
         <i class="bi bi-sort-down text-danger me-1"></i>
-        Alimentos por mayor impacto (promedio)
+        Alimentos por mayor impacto
       </div>
-      <table class="table table-sm mb-0" style="font-size:.82rem;">
-        <thead class="table-light">
+      <table class="rpt-table">
+        <thead>
           <tr>
             <th>Alimento</th>
-            <th class="text-center">Veces</th>
+            <th class="text-center">N</th>
             <th class="text-center">Δ prom.</th>
             <th class="text-center">Pico prom.</th>
           </tr>
@@ -411,21 +377,23 @@
         <tbody>
           {% for r in resumen_comidas[:10] %}
           <tr>
-            <td>{{ r.nombre[:22] }}</td>
-            <td class="text-center text-muted">{{ r.n }}</td>
-            <td class="text-center fw-bold
-              {% if r.avg_delta > 80 %}text-danger{% elif r.avg_delta > 40 %}text-warning{% else %}text-success{% endif %}">
-              {{ '+' if r.avg_delta > 0 else '' }}{{ r.avg_delta }}
+            <td style="font-size:.82rem;">{{ r.nombre[:22] }}</td>
+            <td class="text-center text-muted" style="font-size:.82rem;">{{ r.n }}</td>
+            <td class="text-center fw-bold" style="font-size:.82rem;">
+              <span class="{{ 'text-danger' if r.avg_delta > 80 else ('text-warning' if r.avg_delta > 40 else 'text-success') }}">
+                {{ '+' if r.avg_delta > 0 else '' }}{{ r.avg_delta }}
+              </span>
             </td>
-            <td class="text-center fw-semibold
-              {% if r.avg_pico > 180 %}text-danger{% else %}text-success{% endif %}">
-              {{ r.avg_pico }}
+            <td class="text-center fw-semibold" style="font-size:.82rem;">
+              <span class="{{ 'text-danger' if r.avg_pico > 180 else 'text-success' }}">
+                {{ r.avg_pico }}
+              </span>
             </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
-      <div class="text-muted mt-2" style="font-size:.75rem;">
+      <div class="text-muted mt-2" style="font-size:.72rem;">
         Δ = alza de glucemia post-comida (mg/dL)
       </div>
     </div>
@@ -435,25 +403,31 @@
 </div>
 {% endif %}
 
-<!-- ═══ NOTA CLÍNICA ═══ -->
-<div class="alert alert-light border" style="font-size:.82rem;">
-  <strong>Nota metodológica:</strong>
-  GMI calculado con fórmula ADA/EASD: GMI = 3.31 + 0.02392 × glucemia media (mg/dL).
-  Metas de referencia según estándares internacionales para Diabetes Tipo 1 (ADA 2024 / TIR Consensus 2019).
-  Este reporte no reemplaza la evaluación clínica de tu médico tratante.
+<!-- Nota metodológica -->
+<div class="agp-note">
+  <i class="bi bi-info-circle text-primary flex-shrink-0 me-2"></i>
+  <div style="font-size:.78rem;">
+    <strong>Nota metodológica:</strong>
+    GMI calculado con fórmula ADA/EASD: GMI = 3.31 + 0.02392 × glucemia media (mg/dL).
+    Metas según estándares internacionales para Diabetes Tipo 1 (ADA 2024 / TIR Consensus 2019).
+    Este reporte no reemplaza la evaluación clínica de tu médico tratante.
+  </div>
 </div>
 
 {% else %}
-<div class="alert alert-warning">
-  <i class="bi bi-exclamation-triangle me-2"></i>
-  No hay lecturas de glucemia registradas en los últimos {{ dias }} días.
-  Importa datos del Freestyle Libre o registrá lecturas manuales.
+<div class="list-empty">
+  <i class="bi bi-exclamation-triangle list-empty-icon" style="color:#d97706;"></i>
+  <p class="list-empty-text">
+    No hay lecturas de glucemia en los últimos {{ dias }} días.
+    Importá datos del Freestyle Libre o registrá lecturas manuales.
+  </p>
 </div>
 {% endif %}
 
 {% endblock %}
 
 {% block scripts %}
+{{ list_styles() }}
 <script>
   const rc = {
     tir:      {{ charts.tir      | tojson }},
@@ -466,4 +440,74 @@
     renderChart('r-chart-timeline', rc.timeline);
   });
 </script>
+<style>
+/* ── Reporte clínico ──────────────────────────────────────────────────── */
+.rpt-header { border-bottom: 2px solid var(--border); padding-bottom: 1rem; }
+.rpt-header-title {
+  display: flex; align-items: center; gap: .5rem;
+  font-size: 1rem; font-weight: 700; margin-bottom: .3rem;
+}
+.rpt-header-period { font-size: .88rem; color: var(--text-muted); }
+
+.rpt-section-title {
+  font-size: .72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--text-muted);
+  border-bottom: 1px solid var(--border); padding-bottom: .3rem; margin-bottom: .65rem;
+}
+
+/* Metric cards */
+.rpt-metric-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: .85rem .75rem;
+}
+.rmc-val      { font-size: 1.7rem; font-weight: 800; line-height: 1.1; }
+.rmc-lbl      { font-size: .72rem; font-weight: 700; color: var(--text); margin-top: .2rem; }
+.rmc-meta     { font-size: .65rem; color: var(--text-muted); margin-top: .1rem; }
+.rmc-ok       { color: #16a34a; }
+.rmc-warn     { color: #d97706; }
+.rmc-bad      { color: #dc2626; }
+.rmc-secondary{ color: var(--text-muted); }
+
+/* Tables */
+.rpt-table {
+  width: 100%; border-collapse: collapse; font-size: .84rem;
+}
+.rpt-table thead tr { border-bottom: 1px solid var(--border); }
+.rpt-table th {
+  padding: .4rem .6rem; font-size: .7rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted);
+}
+.rpt-table td {
+  padding: .5rem .6rem; border-bottom: 1px solid var(--border); vertical-align: middle;
+}
+.rpt-table tr:last-child td { border-bottom: none; }
+.rpt-table tr:hover td { background: var(--surface2); }
+
+/* Action buttons */
+.rpt-action-btn {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .4rem .85rem; border-radius: 10px; font-size: .82rem; font-weight: 700;
+  border: none; cursor: pointer; text-decoration: none; transition: filter .15s;
+}
+.rpt-action-btn:hover { filter: brightness(1.1); }
+.rpt-print { background: var(--surface2); border: 1px solid var(--border); color: var(--text); }
+.rpt-pdf   { background: #ef4444; color: #fff; }
+
+/* Note bar */
+.agp-note {
+  display: flex; align-items: flex-start; gap: .75rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: .9rem 1rem; color: var(--text-muted);
+  margin-top: .5rem;
+}
+
+/* Print */
+@media print {
+  .no-print, .sidebar, .mobile-topbar, .bottom-nav { display: none !important; }
+  .main-content { margin-left: 0 !important; padding: 0 !important; }
+  .chart-box, .rpt-metric-card { break-inside: avoid; }
+  body { background: white !important; }
+  a { text-decoration: none !important; color: inherit !important; }
+}
+</style>
 {% endblock %}

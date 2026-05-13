@@ -2,16 +2,21 @@
 {% block title %}AGP — DiabetesTracker{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex justify-content-between align-items-center">
+
+<div class="list-page-header mb-4">
   <div>
-    <h1><i class="bi bi-layers-fill me-2 text-primary"></i>Perfil de Glucosa Ambulatorio</h1>
-    <small class="text-muted">Superposición de días · estándar clínico AGP</small>
+    <h1 class="list-page-title">
+      <span class="list-icon-wrap" style="background:rgba(99,102,241,.12);">
+        <i class="bi bi-layers-fill" style="color:#6366f1;"></i>
+      </span>
+      Perfil Ambulatorio
+    </h1>
+    <p class="list-page-sub">Superposición de días · estándar clínico AGP</p>
   </div>
-  <div class="d-flex gap-2 align-items-center">
-    <span class="text-muted" style="font-size:.85rem;">Período:</span>
+  <div class="range-selector">
     {% for d in [14, 30, 60, 90] %}
       <a href="{{ url_for('agp', dias=d) }}"
-         class="btn btn-sm {{ 'btn-primary' if dias == d else 'btn-outline-secondary' }}">{{ d }}d</a>
+         class="range-pill {{ 'range-pill-active' if dias == d }}">{{ d }}d</a>
     {% endfor %}
   </div>
 </div>
@@ -24,55 +29,57 @@
 {% else %}
 
 <!-- Métricas resumen -->
-<div class="row g-2 mb-3">
+<div class="row g-2 mb-4">
 
   <div class="col-6 col-md-2">
-    <div class="stat-card text-center">
-      <div class="stat-value text-primary" style="font-size:1.6rem;">{{ stats.media or '—' }}</div>
-      <div class="stat-label">Promedio<br><span style="font-size:.7rem;">mg/dL</span></div>
+    <div class="agp-stat-card">
+      <div class="asc-val text-primary">{{ stats.media or '—' }}</div>
+      <div class="asc-lbl">Promedio</div>
+      <div class="asc-meta">mg/dL</div>
     </div>
   </div>
 
   <div class="col-6 col-md-2">
-    <div class="stat-card text-center">
-      <div class="stat-value {{ 'text-success' if stats.gmi and stats.gmi < 7 else ('text-warning' if stats.gmi and stats.gmi < 8 else 'text-danger') }}"
-           style="font-size:1.6rem;">{{ stats.gmi or '—' }}{% if stats.gmi %}<span style="font-size:.9rem;">%</span>{% endif %}</div>
-      <div class="stat-label">GMI estimada<br>
-        <span style="font-size:.7rem;" class="text-muted">objetivo &lt; 7%</span>
+    <div class="agp-stat-card">
+      <div class="asc-val {{ 'text-success' if stats.gmi and stats.gmi < 7 else ('text-warning' if stats.gmi and stats.gmi < 8 else 'text-danger') }}">
+        {{ stats.gmi or '—' }}{% if stats.gmi %}<span class="asc-unit">%</span>{% endif %}
       </div>
+      <div class="asc-lbl">GMI estimada</div>
+      <div class="asc-meta">objetivo &lt; 7%</div>
     </div>
   </div>
 
   <div class="col-6 col-md-2">
-    <div class="stat-card text-center">
-      <div class="stat-value {{ 'text-success' if stats.cv and stats.cv <= 36 else 'text-danger' }}"
-           style="font-size:1.6rem;">{{ stats.cv or '—' }}{% if stats.cv %}<span style="font-size:.9rem;">%</span>{% endif %}</div>
-      <div class="stat-label">Variabilidad (CV)<br>
-        <span style="font-size:.7rem;" class="text-muted">objetivo ≤ 36%</span>
+    <div class="agp-stat-card">
+      <div class="asc-val {{ 'text-success' if stats.cv and stats.cv <= 36 else 'text-danger' }}">
+        {{ stats.cv or '—' }}{% if stats.cv %}<span class="asc-unit">%</span>{% endif %}
       </div>
+      <div class="asc-lbl">Variabilidad</div>
+      <div class="asc-meta">objetivo ≤ 36%</div>
     </div>
   </div>
 
   <div class="col-6 col-md-2">
-    <div class="stat-card text-center">
-      <div class="stat-value text-muted" style="font-size:1.6rem;">{{ stats.std or '—' }}</div>
-      <div class="stat-label">Desv. estándar<br><span style="font-size:.7rem;">mg/dL</span></div>
+    <div class="agp-stat-card">
+      <div class="asc-val" style="color:var(--text-muted);">{{ stats.std or '—' }}</div>
+      <div class="asc-lbl">Desv. estándar</div>
+      <div class="asc-meta">mg/dL</div>
     </div>
   </div>
 
   <div class="col-6 col-md-2">
-    <div class="stat-card text-center">
-      <div class="stat-value text-info" style="font-size:1.6rem;">{{ stats.n_dias }}</div>
-      <div class="stat-label">Días con datos<br>
-        <span style="font-size:.7rem;" class="text-muted">de {{ dias }} solicitados</span>
-      </div>
+    <div class="agp-stat-card">
+      <div class="asc-val text-info">{{ stats.n_dias }}</div>
+      <div class="asc-lbl">Días con datos</div>
+      <div class="asc-meta">de {{ dias }} solicitados</div>
     </div>
   </div>
 
   <div class="col-6 col-md-2">
-    <div class="stat-card text-center">
-      <div class="stat-value text-secondary" style="font-size:1.6rem;">{{ stats.n_lecturas }}</div>
-      <div class="stat-label">Lecturas totales</div>
+    <div class="agp-stat-card">
+      <div class="asc-val" style="color:var(--text-muted);">{{ stats.n_lecturas }}</div>
+      <div class="asc-lbl">Lecturas totales</div>
+      <div class="asc-meta">&nbsp;</div>
     </div>
   </div>
 
@@ -81,18 +88,18 @@
 <!-- Gráfica AGP -->
 <div class="chart-box mb-3">
   <div class="d-flex justify-content-between align-items-center mb-2">
-    <h6 class="fw-semibold mb-0">
+    <h6 class="fw-semibold mb-0" style="font-size:.88rem;">
       <i class="bi bi-layers me-1 text-primary"></i>
       Distribución de glucosa por hora del día
     </h6>
-    <div class="d-flex gap-3 align-items-center" style="font-size:.78rem; color:#64748b;">
-      <span><span style="display:inline-block;width:28px;height:4px;background:#6366f1;border-radius:2px;vertical-align:middle;"></span> Mediana</span>
-      <span><span style="display:inline-block;width:14px;height:10px;background:rgba(99,102,241,0.28);border-radius:2px;vertical-align:middle;"></span> P25–P75</span>
-      <span><span style="display:inline-block;width:14px;height:10px;background:rgba(99,102,241,0.12);border-radius:2px;vertical-align:middle;"></span> P10–P90</span>
+    <div class="d-flex gap-3 align-items-center" style="font-size:.76rem; color:var(--text-muted);">
+      <span><span style="display:inline-block;width:28px;height:3px;background:#6366f1;border-radius:2px;vertical-align:middle;"></span> Mediana</span>
+      <span><span style="display:inline-block;width:12px;height:9px;background:rgba(99,102,241,0.28);border-radius:2px;vertical-align:middle;"></span> P25–P75</span>
+      <span><span style="display:inline-block;width:12px;height:9px;background:rgba(99,102,241,0.12);border-radius:2px;vertical-align:middle;"></span> P10–P90</span>
     </div>
   </div>
-  <div id="chart-agp" style="height:320px;"></div>
-  <p class="text-muted mt-2 mb-0" style="font-size:.77rem;">
+  <div id="chart-agp" style="height:300px;"></div>
+  <p class="mt-2 mb-0" style="font-size:.74rem; color:var(--text-muted);">
     <i class="bi bi-info-circle me-1"></i>
     Cada línea y banda representa la distribución de <strong>todas las lecturas de ese horario</strong>
     en el período seleccionado. La banda verde indica el rango objetivo (70–180 mg/dL).
@@ -101,13 +108,13 @@
 
 <!-- Barra de tiempo en rango (5 zonas ADA) -->
 <div class="chart-box mb-3">
-  <h6 class="fw-semibold mb-3">
+  <h6 class="fw-semibold mb-3" style="font-size:.88rem;">
     <i class="bi bi-bar-chart-steps me-1 text-primary"></i>
     Tiempo en rango — 5 zonas (ADA 2024)
   </h6>
 
-  <!-- Barra apilada visual -->
-  <div class="d-flex rounded overflow-hidden mb-3" style="height:28px; font-size:.75rem; font-weight:600;">
+  <!-- Barra apilada -->
+  <div class="d-flex rounded-3 overflow-hidden mb-3" style="height:26px; font-size:.73rem; font-weight:700;">
     {% if stats.tir_muy_bajo and stats.tir_muy_bajo > 0 %}
     <div style="width:{{ stats.tir_muy_bajo }}%; background:#7f1d1d; color:#fef2f2;"
          class="d-flex align-items-center justify-content-center"
@@ -143,140 +150,166 @@
     {% endif %}
   </div>
 
-  <!-- Leyenda con objetivos ADA -->
-  <div class="row g-2" style="font-size:.82rem;">
+  <!-- Leyenda con objetivos -->
+  <div class="row g-2" style="font-size:.81rem;">
     <div class="col-md col-6">
-      <div class="d-flex align-items-center gap-2">
-        <div style="width:12px;height:12px;background:#7f1d1d;border-radius:2px;flex-shrink:0;"></div>
+      <div class="tir-zone-item">
+        <div class="tir-dot" style="background:#7f1d1d;"></div>
         <div>
-          <div class="fw-semibold" style="color:#7f1d1d;">{{ stats.tir_muy_bajo }}%</div>
-          <div class="text-muted" style="font-size:.73rem;">&lt; 54 mg/dL · objetivo &lt; 1%</div>
+          <div class="fw-bold" style="color:#7f1d1d;">{{ stats.tir_muy_bajo }}%</div>
+          <div class="tir-zone-meta">&lt; 54 mg/dL · obj &lt; 1%</div>
         </div>
       </div>
     </div>
     <div class="col-md col-6">
-      <div class="d-flex align-items-center gap-2">
-        <div style="width:12px;height:12px;background:#ef4444;border-radius:2px;flex-shrink:0;"></div>
+      <div class="tir-zone-item">
+        <div class="tir-dot" style="background:#ef4444;"></div>
         <div>
-          <div class="fw-semibold text-danger">{{ stats.tir_bajo }}%</div>
-          <div class="text-muted" style="font-size:.73rem;">54–70 mg/dL · objetivo &lt; 4%</div>
+          <div class="fw-bold text-danger">{{ stats.tir_bajo }}%</div>
+          <div class="tir-zone-meta">54–70 mg/dL · obj &lt; 4%</div>
         </div>
       </div>
     </div>
     <div class="col-md col-6">
-      <div class="d-flex align-items-center gap-2">
-        <div style="width:12px;height:12px;background:#22c55e;border-radius:2px;flex-shrink:0;"></div>
+      <div class="tir-zone-item">
+        <div class="tir-dot" style="background:#22c55e;"></div>
         <div>
-          <div class="fw-semibold text-success">{{ stats.tir_rango }}%</div>
-          <div class="text-muted" style="font-size:.73rem;">70–180 mg/dL · objetivo &gt; 70%</div>
+          <div class="fw-bold text-success">{{ stats.tir_rango }}%</div>
+          <div class="tir-zone-meta">70–180 mg/dL · obj &gt; 70%</div>
         </div>
       </div>
     </div>
     <div class="col-md col-6">
-      <div class="d-flex align-items-center gap-2">
-        <div style="width:12px;height:12px;background:#f97316;border-radius:2px;flex-shrink:0;"></div>
+      <div class="tir-zone-item">
+        <div class="tir-dot" style="background:#f97316;"></div>
         <div>
-          <div class="fw-semibold text-hiper">{{ stats.tir_alto }}%</div>
-          <div class="text-muted" style="font-size:.73rem;">180–250 mg/dL · objetivo &lt; 25%</div>
+          <div class="fw-bold" style="color:#f97316;">{{ stats.tir_alto }}%</div>
+          <div class="tir-zone-meta">180–250 mg/dL · obj &lt; 25%</div>
         </div>
       </div>
     </div>
     <div class="col-md col-6">
-      <div class="d-flex align-items-center gap-2">
-        <div style="width:12px;height:12px;background:#7c2d12;border-radius:2px;flex-shrink:0;"></div>
+      <div class="tir-zone-item">
+        <div class="tir-dot" style="background:#7c2d12;"></div>
         <div>
-          <div class="fw-semibold" style="color:#7c2d12;">{{ stats.tir_muy_alto }}%</div>
-          <div class="text-muted" style="font-size:.73rem;">&gt; 250 mg/dL · objetivo &lt; 5%</div>
+          <div class="fw-bold" style="color:#7c2d12;">{{ stats.tir_muy_alto }}%</div>
+          <div class="tir-zone-meta">&gt; 250 mg/dL · obj &lt; 5%</div>
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Interpretación -->
+<!-- CV y GMI cards -->
 <div class="row g-3 mb-3">
-  <!-- CV -->
   <div class="col-md-6">
     <div class="chart-box h-100">
-      <h6 class="fw-semibold mb-2">
-        <i class="bi bi-activity me-1 text-primary"></i>Variabilidad glucémica (CV)
-      </h6>
+      <div class="interp-card-header">
+        <i class="bi bi-activity text-primary"></i>
+        <span>Variabilidad glucémica (CV)</span>
+      </div>
       {% if stats.cv %}
-        {% if stats.cv <= 36 %}
-        <div class="alert alert-success py-2 mb-2" style="font-size:.83rem;">
-          <i class="bi bi-check-circle-fill me-1"></i>
-          <strong>{{ stats.cv }}%</strong> — Variabilidad controlada (≤ 36%)
+        <div class="interp-badge
+          {% if stats.cv <= 36 %}interp-ok{% elif stats.cv <= 50 %}interp-warn{% else %}interp-bad{% endif %}">
+          <i class="bi {{ 'bi-check-circle-fill' if stats.cv <= 36 else ('bi-exclamation-triangle-fill' if stats.cv <= 50 else 'bi-x-circle-fill') }} me-1"></i>
+          <strong>{{ stats.cv }}%</strong> —
+          {% if stats.cv <= 36 %}Variabilidad controlada (≤ 36%)
+          {% elif stats.cv <= 50 %}Variabilidad moderada (36–50%)
+          {% else %}Variabilidad alta (&gt; 50%){% endif %}
         </div>
-        {% elif stats.cv <= 50 %}
-        <div class="alert alert-warning py-2 mb-2" style="font-size:.83rem;">
-          <i class="bi bi-exclamation-triangle-fill me-1"></i>
-          <strong>{{ stats.cv }}%</strong> — Variabilidad moderada (36–50%)
-        </div>
-        {% else %}
-        <div class="alert alert-danger py-2 mb-2" style="font-size:.83rem;">
-          <i class="bi bi-x-circle-fill me-1"></i>
-          <strong>{{ stats.cv }}%</strong> — Variabilidad alta (&gt; 50%)
-        </div>
-        {% endif %}
-        <p class="text-muted mb-0" style="font-size:.80rem;">
+        <p class="interp-desc">
           El CV mide cuánto varía la glucosa respecto a su promedio.
           Un CV alto indica mayor riesgo de hipoglucemias impredecibles.
           Objetivo: ≤ 36%.
         </p>
       {% else %}
-        <p class="text-muted mb-0" style="font-size:.83rem;">Sin datos suficientes.</p>
+        <p class="interp-desc">Sin datos suficientes.</p>
       {% endif %}
     </div>
   </div>
 
-  <!-- GMI -->
   <div class="col-md-6">
     <div class="chart-box h-100">
-      <h6 class="fw-semibold mb-2">
-        <i class="bi bi-thermometer-half me-1 text-primary"></i>Indicador de gestión de glucosa (GMI)
-      </h6>
+      <div class="interp-card-header">
+        <i class="bi bi-thermometer-half text-primary"></i>
+        <span>Indicador de gestión de glucosa (GMI)</span>
+      </div>
       {% if stats.gmi %}
-        {% if stats.gmi < 7 %}
-        <div class="alert alert-success py-2 mb-2" style="font-size:.83rem;">
-          <i class="bi bi-check-circle-fill me-1"></i>
-          <strong>{{ stats.gmi }}%</strong> — Excelente control (&lt; 7%)
+        <div class="interp-badge
+          {% if stats.gmi < 7 %}interp-ok{% elif stats.gmi < 8 %}interp-warn{% else %}interp-bad{% endif %}">
+          <i class="bi {{ 'bi-check-circle-fill' if stats.gmi < 7 else ('bi-exclamation-triangle-fill' if stats.gmi < 8 else 'bi-x-circle-fill') }} me-1"></i>
+          <strong>{{ stats.gmi }}%</strong> —
+          {% if stats.gmi < 7 %}Excelente control (&lt; 7%)
+          {% elif stats.gmi < 8 %}Control aceptable (7–8%)
+          {% else %}Requiere ajuste (&gt; 8%){% endif %}
         </div>
-        {% elif stats.gmi < 8 %}
-        <div class="alert alert-warning py-2 mb-2" style="font-size:.83rem;">
-          <i class="bi bi-exclamation-triangle-fill me-1"></i>
-          <strong>{{ stats.gmi }}%</strong> — Control aceptable (7–8%)
-        </div>
-        {% else %}
-        <div class="alert alert-danger py-2 mb-2" style="font-size:.83rem;">
-          <i class="bi bi-x-circle-fill me-1"></i>
-          <strong>{{ stats.gmi }}%</strong> — Requiere ajuste (&gt; 8%)
-        </div>
-        {% endif %}
-        <p class="text-muted mb-0" style="font-size:.80rem;">
+        <p class="interp-desc">
           El GMI estima la HbA1c a partir del promedio de glucosa sensor.
           Fórmula: 3.31 + 0.02392 × promedio (mg/dL).
           Objetivo para T1D: &lt; 7%.
         </p>
       {% else %}
-        <p class="text-muted mb-0" style="font-size:.83rem;">Sin datos suficientes.</p>
+        <p class="interp-desc">Sin datos suficientes.</p>
       {% endif %}
     </div>
   </div>
 </div>
 
-<div class="alert alert-light border" style="font-size:.78rem;">
-  <i class="bi bi-info-circle text-primary me-1"></i>
-  <strong>AGP (Ambulatory Glucose Profile)</strong>: estándar internacional (ATTD 2017).
-  La banda muestra cómo se distribuye la glucosa a cada hora del día.
-  <strong>P50 (mediana)</strong>: en el 50% de los días estuviste por encima y 50% por debajo de ese valor a esa hora.
-  Las bandas P25–P75 y P10–P90 muestran la dispersión típica.
+<!-- Nota AGP -->
+<div class="agp-note">
+  <i class="bi bi-info-circle text-primary me-2 flex-shrink-0"></i>
+  <div style="font-size:.78rem;">
+    <strong>AGP (Ambulatory Glucose Profile)</strong>: estándar internacional (ATTD 2017).
+    La banda muestra cómo se distribuye la glucosa a cada hora del día.
+    <strong>P50 (mediana)</strong>: en el 50% de los días estuviste por encima y 50% por debajo de ese valor a esa hora.
+    Las bandas P25–P75 y P10–P90 muestran la dispersión típica.
+  </div>
 </div>
 
 {% endif %}
 {% endblock %}
 
 {% block scripts %}
+{{ list_styles() }}
 <script>
   renderChart('chart-agp', {{ chart | tojson }});
 </script>
+<style>
+/* ── AGP page ──────────────────────────────────────────────────────────── */
+.agp-stat-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: .9rem .75rem; text-align: center;
+}
+.asc-val  { font-size: 1.55rem; font-weight: 800; line-height: 1.1; }
+.asc-unit { font-size: .9rem; font-weight: 600; }
+.asc-lbl  { font-size: .72rem; font-weight: 700; color: var(--text); margin-top: .2rem; text-transform: uppercase; letter-spacing: .04em; }
+.asc-meta { font-size: .65rem; color: var(--text-muted); }
+
+/* TIR zone legend */
+.tir-zone-item { display: flex; align-items: center; gap: .5rem; }
+.tir-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.tir-zone-meta { font-size: .7rem; color: var(--text-muted); }
+
+/* Interpretation cards */
+.interp-card-header {
+  display: flex; align-items: center; gap: .5rem;
+  font-size: .85rem; font-weight: 700; margin-bottom: .75rem;
+}
+.interp-badge {
+  display: flex; align-items: center; font-size: .82rem;
+  padding: .5rem .75rem; border-radius: 10px; margin-bottom: .65rem; font-weight: 500;
+}
+.interp-ok   { background: rgba(34,197,94,.1);  color: #16a34a; border: 1px solid rgba(34,197,94,.2); }
+.interp-warn { background: rgba(245,158,11,.1); color: #d97706; border: 1px solid rgba(245,158,11,.2); }
+.interp-bad  { background: rgba(239,68,68,.1);  color: #dc2626; border: 1px solid rgba(239,68,68,.2); }
+.interp-desc { font-size: .8rem; color: var(--text-muted); line-height: 1.5; margin: 0; }
+
+/* Note bar */
+.agp-note {
+  display: flex; align-items: flex-start; gap: .75rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: .9rem 1rem;
+  color: var(--text-muted);
+}
+</style>
 {% endblock %}
