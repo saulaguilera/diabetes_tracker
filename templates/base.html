@@ -575,6 +575,10 @@
 
       /* Offcanvas notificaciones full width en mobile */
       #offcanvasAlertas { width: 100vw !important; }
+      /* El header del offcanvas también necesita safe-area-inset-top */
+      .offcanvas-header {
+        padding-top: calc(.75rem + env(safe-area-inset-top, 0px)) !important;
+      }
 
       /* Formularios */
       .form-card { padding: 1.25rem; }
