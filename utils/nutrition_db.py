@@ -155,12 +155,43 @@ NUTRITION_DB = {
 }
 
 
-def _extraer_cantidad(nombre: str):
-    """Extrae un número del inicio del nombre. Ej: '4 huevos' → 4, 'huevos' → None."""
-    m = re.match(r'^(\d+(?:[.,]\d+)?)\s*', nombre.strip())
+def _parsear_nombre(nombre: str):
+    """
+    Extrae gramos/unidades y nombre limpio de un string libre.
+
+    Soporta:
+      "250 g Carne"   → (250.0, True,  "carne")   [gramos explícitos]
+      "Carne 250 g"   → (250.0, True,  "carne")
+      "250g pollo"    → (250.0, True,  "pollo")
+      "pollo 200gr"   → (200.0, True,  "pollo")
+      "4 huevos"      → (4.0,   False, "huevos")   [unidades, sin 'g']
+      "huevos"        → (None,  False, "huevos")
+    Devuelve: (cantidad_o_None, es_gramos: bool, nombre_limpio: str)
+    """
+    s = nombre.strip()
+    # Patrón: número (con coma o punto) opcionalmente seguido de g/gr/gramos
+    NUM   = r'(\d+(?:[.,]\d+)?)'
+    UNIG  = r'\s*(gr?(?:amos?)?)'   # g / gr / gram / gramos (opcional)
+
+    # Buscar "NNN [g]  texto" al inicio
+    m = re.match(r'^' + NUM + UNIG + r'?\s+(.+)$', s, re.IGNORECASE)
     if m:
-        return float(m.group(1).replace(',', '.'))
-    return None
+        cantidad      = float(m.group(1).replace(',', '.'))
+        unidad_str    = (m.group(2) or '').strip()
+        nombre_limpio = m.group(3).strip()
+        es_gramos     = bool(unidad_str)
+        return cantidad, es_gramos, nombre_limpio.lower()
+
+    # Buscar "texto  NNN [g]" al final
+    m = re.match(r'^(.+?)\s+' + NUM + UNIG + r'?\s*$', s, re.IGNORECASE)
+    if m:
+        nombre_limpio = m.group(1).strip()
+        cantidad      = float(m.group(2).replace(',', '.'))
+        unidad_str    = (m.group(3) or '').strip()
+        es_gramos     = bool(unidad_str)
+        return cantidad, es_gramos, nombre_limpio.lower()
+
+    return None, False, s.lower()
 
 
 def buscar_nutricion(nombre: str):
@@ -168,11 +199,12 @@ def buscar_nutricion(nombre: str):
     Busca el alimento en la DB interna.
     Devuelve (key_encontrada, carbs_100g, protein_100g, fat_100g, kcal_100g) o None.
     """
-    nombre_lower = nombre.lower().strip()
-    # Quitar número inicial para buscar ("4 huevos" → "huevos")
-    nombre_sin_num = re.sub(r'^\d+(?:[.,]\d+)?\s*', '', nombre_lower).strip()
+    _, _, nombre_limpio = _parsear_nombre(nombre)
 
-    for buscar in [nombre_lower, nombre_sin_num]:
+    for buscar in [nombre_limpio, nombre.lower().strip()]:
+        buscar = buscar.strip()
+        if not buscar:
+            continue
         # 1. Coincidencia exacta
         if buscar in NUTRITION_DB:
             return (buscar,) + NUTRITION_DB[buscar]
@@ -194,19 +226,39 @@ def buscar_nutricion(nombre: str):
 def estimar(nombre: str, carbs_usuario: float = 0, grams_usuario: float = 0):
     """
     Estima macros dado un nombre de alimento.
-    - Si tiene CH (arroz, garbanzos…): escala por carbs_usuario.
-    - Si no tiene CH (huevos, carnes…): escala por grams_usuario
-      o por la porción estándar × cantidad detectada en el nombre.
-    Retorna dict o None.
+
+    Lógica de escalado (en orden de prioridad):
+    1. Gramos explícitos en el nombre: "250g carne", "carne 250 g"
+    2. Gramos pasados por parámetro (grams_usuario)
+    3. Para alimentos con CH: escala por carbs_usuario
+    4. Para alimentos sin CH: unidades × porción estándar ("4 huevos")
+    5. Fallback: 100 g
     """
     found = buscar_nutricion(nombre)
     if found is None:
         return None
 
     db_key, carbs_100, prot_100, fat_100, kcal_100 = found
+    cantidad_nombre, es_gramos, _ = _parsear_nombre(nombre)
 
-    # ── Alimento CON carbohidratos: escalar por CH ingresados ──────────────
-    if carbs_100 >= 2 and carbs_usuario > 0:
+    # ── Determinar total_g ────────────────────────────────────────────────
+    total_g   = 0
+    base      = "carbs"
+    nota_base = ""
+
+    if cantidad_nombre and es_gramos:
+        # Gramos escritos en el nombre: "250 g carne" o "carne 250g"
+        total_g   = cantidad_nombre
+        base      = "gramos"
+        nota_base = f"{total_g:.0f}g de {db_key}"
+
+    elif grams_usuario > 0:
+        total_g   = grams_usuario
+        base      = "gramos"
+        nota_base = f"{total_g:.0f}g de {db_key}"
+
+    elif carbs_100 >= 2 and carbs_usuario > 0:
+        # Alimento con carbohidratos: escalar por CH
         factor = carbs_usuario / carbs_100
         return {
             "protein_g": round(prot_100 * factor, 1),
@@ -215,23 +267,30 @@ def estimar(nombre: str, carbs_usuario: float = 0, grams_usuario: float = 0):
             "carbs_g":   round(carbs_100 * factor, 1),
             "base":      "carbs",
             "key":       db_key,
+            "nota":      "",
         }
 
-    # ── Alimento SIN carbohidratos: escalar por gramos o unidades ──────────
-    # a) El usuario pasó gramos explícitamente
-    total_g = grams_usuario
-
-    # b) Detectar cantidad en el nombre ("4 huevos") × porción estándar
-    if total_g <= 0:
+    elif cantidad_nombre and not es_gramos:
+        # Unidades: "4 huevos"
         porcion = PORCIONES_ESTANDAR.get(db_key)
         if porcion:
-            cantidad = _extraer_cantidad(nombre) or 1
-            total_g  = cantidad * porcion[0]
-            unidad   = porcion[1]
+            total_g   = cantidad_nombre * porcion[0]
+            nota_base = f"{cantidad_nombre:.0f} {porcion[1]}(s) = {total_g:.0f}g"
         else:
-            # Sin porción estándar: asumir 100g
-            total_g = 100
-            unidad  = "g"
+            total_g   = cantidad_nombre * 100
+            nota_base = f"{cantidad_nombre:.0f} porciones ≈ {total_g:.0f}g"
+        base = "gramos"
+
+    else:
+        # Fallback: porción estándar × 1, o 100g
+        porcion = PORCIONES_ESTANDAR.get(db_key)
+        if porcion:
+            total_g   = porcion[0]
+            nota_base = f"1 {porcion[1]} = {total_g}g"
+        else:
+            total_g   = 100
+            nota_base = "100g"
+        base = "gramos"
 
     factor = total_g / 100.0
     return {
@@ -239,9 +298,10 @@ def estimar(nombre: str, carbs_usuario: float = 0, grams_usuario: float = 0):
         "fat_g":     round(fat_100  * factor, 1),
         "calories":  round(kcal_100 * factor, 1),
         "carbs_g":   round(carbs_100 * factor, 1),
-        "base":      "gramos",
+        "base":      base,
         "grams":     total_g,
         "key":       db_key,
+        "nota":      nota_base,
     }
 
 
