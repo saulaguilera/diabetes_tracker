@@ -601,6 +601,8 @@
       .chart-box > table { overflow-x: auto; display: block; }
     }
 
+    @keyframes spin { to { transform: rotate(360deg); } }
+
     /* ── Submit button breathing room on mobile ── */
     /* El padding-bottom de main-content (7rem) garantiza que siempre se puede
        hacer scroll para ver el botón completo por encima de la bottom-nav */
@@ -634,9 +636,9 @@
   <button class="btn btn-sm btn-dark" id="sidebar-toggle" style="border-color:#334155;">
     <i class="bi bi-list fs-5"></i>
   </button>
-  <span class="brand-text flex-grow-1">
+  <a href="{{ url_for('dashboard') }}" class="brand-text flex-grow-1" style="text-decoration:none; color:inherit;">
     <i class="bi bi-heart-pulse-fill text-danger me-1"></i>DiabetesTracker
-  </span>
+  </a>
   <!-- Toggle dark mode visible en mobile -->
   <button id="btn-darkmode-mobile"
           style="background:transparent; border:1px solid #334155; color:#94a3b8;
@@ -885,6 +887,62 @@
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/static/sw.js');
   }
+
+  // ── Pull-to-refresh en móvil ─────────────────────────────────────────────
+  (function() {
+    if (window.innerWidth > 768) return;   // solo móvil
+
+    const THRESHOLD = 75;   // px mínimos para disparar el reload
+
+    // Indicador visual
+    const ptr = document.createElement('div');
+    ptr.id = 'ptr-indicator';
+    ptr.innerHTML = '<i class="bi bi-arrow-clockwise" id="ptr-icon"></i>';
+    ptr.style.cssText = [
+      'position:fixed', 'top:env(safe-area-inset-top,0px)', 'left:0', 'right:0',
+      'display:flex', 'align-items:center', 'justify-content:center',
+      'height:52px', 'background:#1e293b', 'color:#94a3b8',
+      'font-size:1.4rem', 'z-index:9999',
+      'transform:translateY(-100%)',
+      'transition:transform .18s ease',
+      'pointer-events:none'
+    ].join(';');
+    document.body.appendChild(ptr);
+
+    let startY = 0, pulling = false, triggered = false;
+    const icon = () => document.getElementById('ptr-icon');
+
+    document.addEventListener('touchstart', function(e) {
+      if (window.scrollY === 0 && !triggered) {
+        startY  = e.touches[0].clientY;
+        pulling = true;
+      }
+    }, { passive: true });
+
+    document.addEventListener('touchmove', function(e) {
+      if (!pulling) return;
+      const delta = e.touches[0].clientY - startY;
+      if (delta <= 0) { pulling = false; ptr.style.transform = 'translateY(-100%)'; return; }
+      const pct = Math.min(delta / THRESHOLD, 1);
+      ptr.style.transform = `translateY(${(-1 + pct) * 100}%)`;
+      icon().style.transform = `rotate(${pct * 300}deg)`;
+    }, { passive: true });
+
+    document.addEventListener('touchend', function(e) {
+      if (!pulling) return;
+      pulling = false;
+      const delta = e.changedTouches[0].clientY - startY;
+      if (delta >= THRESHOLD) {
+        triggered = true;
+        ptr.style.transform = 'translateY(0)';
+        icon().style.animation = 'spin .5s linear infinite';
+        setTimeout(() => location.reload(), 400);
+      } else {
+        ptr.style.transform = 'translateY(-100%)';
+      }
+    });
+  })();
+
 
   // ── Mini widget glucosa en sidebar ──────────────────────────────────────────
   (async function() {
