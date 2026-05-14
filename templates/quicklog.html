@@ -408,6 +408,13 @@
 }
 .ql-estimar-btn:hover { background: rgba(99,102,241,.18); border-color: #6366f1; }
 .ql-estimar-btn:disabled { opacity: .55; cursor: wait; }
+
+.qli-fibra-msg {
+  font-size: .67rem; color: #0369a1;
+  background: rgba(14,165,233,.1); border: 1px solid rgba(14,165,233,.25);
+  border-radius: 8px; padding: .2rem .5rem; margin-top: .2rem;
+  display: flex; align-items: center; gap: .25rem; flex-wrap: wrap;
+}
 @media (max-width: 768px) {
   .ql-submit-btn {
     margin-bottom: 2rem;
@@ -651,10 +658,22 @@ async function qlEstimar(btn) {
     if (!parseFloat(pField.value)) pField.value = data.protein_g;
     if (!parseFloat(fField.value)) fField.value = data.fat_g;
     if (!parseFloat(cField.value)) cField.value = data.calories;
-    if (carbs === 0 && data.carbs_g > 0) {
-      const carbField = row.querySelector('.qli-carbs');
-      if (!parseFloat(carbField.value)) carbField.value = data.carbs_g;
-    }
+    const carbField = row.querySelector('.qli-carbs');
+    if (carbs === 0 && data.carbs_g > 0 && !parseFloat(carbField.value))
+      carbField.value = data.carbs_g;
+
+    // Badge fibra
+    let fibraMsg = row.querySelector('.qli-fibra-msg');
+    if (data.alta_fibra && data.fibra_g > 0) {
+      if (!fibraMsg) {
+        fibraMsg = document.createElement('div');
+        fibraMsg.className = 'qli-fibra-msg';
+        row.appendChild(fibraMsg);
+      }
+      fibraMsg.innerHTML =
+        `<i class="bi bi-info-circle-fill"></i> ` +
+        `CH totales ${data.carbs_total}g · Fibra ${data.fibra_g}g · <b>CH netos ${data.carbs_g}g</b>`;
+    } else if (fibraMsg) fibraMsg.remove();
 
     qlRecalc();
     btn.innerHTML = '<i class="bi bi-check-circle-fill"></i>';

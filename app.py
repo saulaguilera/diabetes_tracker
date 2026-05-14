@@ -1253,17 +1253,17 @@ def api_estimar_macros():
     # 1. Base nutricional interna (80+ alimentos comunes, siempre disponible)
     estimado = estimar(nombre, carbs_usuario=carbs, grams_usuario=grams)
     if estimado:
-        nota = ""
-        if estimado["base"] == "gramos":
-            nota = f"basado en {estimado['grams']:.0f}g de {estimado['key']}"
         return jsonify({
-            "protein_g": estimado["protein_g"],
-            "fat_g":     estimado["fat_g"],
-            "calories":  estimado["calories"],
-            "carbs_g":   estimado.get("carbs_g", carbs),
-            "source":    nombre,
-            "origin":    "interno",
-            "nota":      nota,
+            "protein_g":   estimado["protein_g"],
+            "fat_g":       estimado["fat_g"],
+            "calories":    estimado["calories"],
+            "carbs_g":     estimado["carbs_g"],       # CH netos
+            "carbs_total": estimado["carbs_total"],
+            "fibra_g":     estimado["fibra_g"],
+            "alta_fibra":  estimado["alta_fibra"],
+            "source":      nombre,
+            "origin":      "interno",
+            "nota":        estimado["nota"],
         })
 
     # 2. Base de alimentos del usuario (FoodItem)
