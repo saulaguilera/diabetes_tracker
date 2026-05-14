@@ -226,17 +226,17 @@ function addComponent(data = {}) {
       <div class="comp-macro-field">
         <label class="comp-macro-lbl-sm">CH (g) <span class="text-danger">*</span></label>
         <input type="number" name="comp_carbs[]"   class="form-control ci-carbs"
-               step="0.5" min="0" placeholder="0" value="${data.carbs ?? ''}">
+               step="0.1" min="0" placeholder="0" value="${data.carbs ?? ''}">
       </div>
       <div class="comp-macro-field">
         <label class="comp-macro-lbl-sm">Prot. (g)</label>
         <input type="number" name="comp_protein[]" class="form-control ci-protein"
-               step="0.5" min="0" placeholder="0" value="${data.protein ?? ''}">
+               step="0.1" min="0" placeholder="0" value="${data.protein ?? ''}">
       </div>
       <div class="comp-macro-field">
         <label class="comp-macro-lbl-sm">Grasas (g)</label>
         <input type="number" name="comp_fat[]"     class="form-control ci-fat"
-               step="0.5" min="0" placeholder="0" value="${data.fat ?? ''}">
+               step="0.1" min="0" placeholder="0" value="${data.fat ?? ''}">
       </div>
       <div class="comp-macro-field">
         <label class="comp-macro-lbl-sm">kcal</label>

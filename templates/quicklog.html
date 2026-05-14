@@ -583,17 +583,17 @@ function qlAddIngrediente(data = {}) {
     <div class="ql-ing-macros">
       <div class="ql-ing-field">
         <input type="number" name="comp_carbs[]"    class="form-control form-control-sm qli-carbs"
-               placeholder="0" step="0.5" min="0" value="${data.carbs??''}">
+               placeholder="0" step="0.1" min="0" value="${data.carbs??''}">
         <span class="qli-unit">g CH</span>
       </div>
       <div class="ql-ing-field ql-ing-opt">
         <input type="number" name="comp_protein[]"  class="form-control form-control-sm qli-protein"
-               placeholder="0" step="0.5" min="0" value="${data.protein??''}">
+               placeholder="0" step="0.1" min="0" value="${data.protein??''}">
         <span class="qli-unit">P</span>
       </div>
       <div class="ql-ing-field ql-ing-opt">
         <input type="number" name="comp_fat[]"      class="form-control form-control-sm qli-fat"
-               placeholder="0" step="0.5" min="0" value="${data.fat??''}">
+               placeholder="0" step="0.1" min="0" value="${data.fat??''}">
         <span class="qli-unit">G</span>
       </div>
       <input type="hidden" name="comp_calories[]" class="qli-cal" value="${data.calories??''}">
