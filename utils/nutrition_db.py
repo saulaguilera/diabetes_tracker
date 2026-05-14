@@ -339,29 +339,76 @@ NUTRITION_DB = {
 }
 
 
+def _parse_cantidad(s: str):
+    """
+    Convierte un string numérico a float, soportando:
+      "250"   → 250.0
+      "0.5"   → 0.5
+      "1/2"   → 0.5
+      "3/4"   → 0.75
+      "1 1/2" → 1.5
+      "2,5"   → 2.5
+    Devuelve None si no reconoce el formato.
+    """
+    s = s.strip().replace(',', '.')
+
+    # Número entero + fracción: "1 1/2"
+    m = re.match(r'^(\d+)\s+(\d+)/(\d+)$', s)
+    if m:
+        return int(m.group(1)) + int(m.group(2)) / int(m.group(3))
+
+    # Fracción sola: "1/2", "3/4"
+    m = re.match(r'^(\d+)/(\d+)$', s)
+    if m:
+        denom = int(m.group(2))
+        return int(m.group(1)) / denom if denom else None
+
+    # Decimal o entero: "250", "0.5"
+    m = re.match(r'^\d+(?:\.\d+)?$', s)
+    if m:
+        return float(s)
+
+    return None
+
+
 def _parsear_nombre(nombre: str):
     """
-    Extrae gramos/unidades y nombre limpio de un string libre.
-    Soporta: "250 g Carne", "Carne 250 g", "250g pollo", "4 huevos", etc.
+    Extrae cantidad y nombre limpio de un string libre.
+    Soporta:
+      "250 g Carne"   → (250, True,  "carne")
+      "Carne 250 g"   → (250, True,  "carne")
+      "4 huevos"      → (4,   False, "huevos")
+      "1/2 cebolla"   → (0.5, False, "cebolla")
+      "1/2 taza arroz"→ (0.5, False, "arroz")   [taza = unidad ignorada]
+      "3/4 de palta"  → (0.75,False, "palta")
+      "1 1/2 banana"  → (1.5, False, "banana")
     Devuelve: (cantidad_o_None, es_gramos: bool, nombre_limpio: str)
     """
     s = nombre.strip()
-    NUM  = r'(\d+(?:[.,]\d+)?)'
-    UNIG = r'\s*(gr?(?:amos?)?)'   # g / gr / gram / gramos (opcional)
 
-    # "NNN [g] texto" al inicio
-    m = re.match(r'^' + NUM + UNIG + r'?\s+(.+)$', s, re.IGNORECASE)
+    # Patrón numérico: entero, decimal, fracción o entero+fracción
+    NUM_PAT  = r'(\d+(?:[.,]\d+)?|\d+\s+\d+/\d+|\d+/\d+)'
+    UNIG_PAT = r'(gr?(?:amos?)?)'   # g / gr / gramos
+
+    # ── "CANTIDAD [g] texto" al inicio ─────────────────────────────────
+    m = re.match(r'^' + NUM_PAT + r'\s*' + UNIG_PAT + r'?\s+(.+)$', s, re.IGNORECASE)
     if m:
-        cantidad      = float(m.group(1).replace(',', '.'))
+        cantidad      = _parse_cantidad(m.group(1))
         unidad_str    = (m.group(2) or '').strip()
         nombre_limpio = m.group(3).strip()
+        # Quitar palabras de unidad/medida que no son el alimento
+        nombre_limpio = re.sub(
+            r'\b(taza|cucharada|cucharadita|porcion|porción|trozo|pedazo|'
+            r'rodaja|rebanada|feta|sobre|paquete|lata|vaso|copa|de)\b',
+            '', nombre_limpio, flags=re.IGNORECASE
+        ).strip()
         return cantidad, bool(unidad_str), nombre_limpio.lower()
 
-    # "texto NNN [g]" al final
-    m = re.match(r'^(.+?)\s+' + NUM + UNIG + r'?\s*$', s, re.IGNORECASE)
+    # ── "texto CANTIDAD [g]" al final ──────────────────────────────────
+    m = re.match(r'^(.+?)\s+' + NUM_PAT + r'\s*' + UNIG_PAT + r'?\s*$', s, re.IGNORECASE)
     if m:
         nombre_limpio = m.group(1).strip()
-        cantidad      = float(m.group(2).replace(',', '.'))
+        cantidad      = _parse_cantidad(m.group(2))
         unidad_str    = (m.group(3) or '').strip()
         return cantidad, bool(unidad_str), nombre_limpio.lower()
 
