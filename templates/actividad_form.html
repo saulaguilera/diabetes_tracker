@@ -11,13 +11,16 @@
 <div class="form-card">
   <form method="post">
     <div class="row g-3 mb-3">
-      <div class="col-6">
+      <div class="col-5">
         <label class="form-label fw-semibold">Fecha</label>
-        <input type="date" name="fecha" class="form-control" value="{{ fecha }}" required>
+        <input type="date" id="act-fecha" name="fecha" class="form-control" value="{{ fecha }}" required>
       </div>
-      <div class="col-6">
+      <div class="col-4">
         <label class="form-label fw-semibold">Hora</label>
-        <input type="time" name="hora" class="form-control" value="{{ hora }}" required>
+        <input type="time" id="act-hora" name="hora" class="form-control" value="{{ hora }}" required>
+      </div>
+      <div class="col-3 d-flex align-items-end">
+        <button type="button" class="btn btn-outline-secondary w-100" onclick="setActNow()">Ahora</button>
       </div>
     </div>
 
@@ -112,6 +115,13 @@
 {% endblock %}
 
 {% block scripts %}
+<script>
+  function setActNow() {
+    const n = new Date();
+    document.getElementById('act-fecha').value = n.toLocaleDateString('sv');
+    document.getElementById('act-hora').value  = n.toTimeString().slice(0, 5);
+  }
+</script>
 {% if not editar %}
 <script>
   function selectActivity(name) {
