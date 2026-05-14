@@ -957,8 +957,21 @@
       const trEl   = document.getElementById('sg-trend');
       valEl.textContent = d.value;
       trEl.textContent  = d.trend || '';
-      tsEl.textContent  = d.time_ago || '';
-      valEl.className   = 'sg-val ' + (d.value < 70 ? 'sg-hipo' : d.value > 180 ? 'sg-hiper' : 'sg-rango');
+      // Calcular time_ago en el cliente a partir del timestamp UTC del servidor
+      if (d.timestamp) {
+        // El servidor guarda FactoryTimestamp (UTC) como datetime naive.
+        // Al agregar 'Z' lo forzamos a UTC para que Date lo interprete correctamente.
+        const ts   = new Date(d.timestamp + 'Z');
+        const mins = Math.max(0, Math.floor((Date.now() - ts.getTime()) / 60000));
+        let time_ago;
+        if (mins < 2)       time_ago = 'ahora';
+        else if (mins < 60) time_ago = `hace ${mins}min`;
+        else                time_ago = `hace ${Math.floor(mins/60)}h`;
+        tsEl.textContent = time_ago;
+      } else {
+        tsEl.textContent = d.time_ago || '';
+      }
+      valEl.className = 'sg-val ' + (d.value < 70 ? 'sg-hipo' : d.value > 180 ? 'sg-hiper' : 'sg-rango');
       widget.style.display = 'block';
     } catch(e) {}
   })();
