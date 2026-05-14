@@ -1243,28 +1243,40 @@ def api_alimentos_buscar():
 @login_required
 def api_estimar_macros():
     """Estima proteínas, grasas y calorías dado un nombre de ingrediente y gramos de CH."""
+    from utils.nutrition_db import estimar_desde_carbs, buscar_nutricion
     nombre = request.args.get("nombre", "").strip()
     carbs  = request.args.get("carbs", 0, type=float)
-    if not nombre or carbs <= 0:
-        return jsonify({"error": "Faltan datos"}), 400
+    if not nombre:
+        return jsonify({"error": "Falta el nombre"}), 400
 
-    # 1. Buscar en base de datos local (FoodItem)
+    # 1. Base nutricional interna (80+ alimentos comunes, siempre disponible)
+    estimado = estimar_desde_carbs(nombre, carbs) if carbs > 0 else None
+    if estimado:
+        return jsonify({
+            "protein_g": estimado["protein_g"],
+            "fat_g":     estimado["fat_g"],
+            "calories":  estimado["calories"],
+            "source":    nombre,
+            "origin":    "interno",
+        })
+
+    # 2. Base de alimentos del usuario (FoodItem)
     items = (FoodItem.query
              .filter(FoodItem.name.ilike(f"%{nombre}%"))
              .order_by(FoodItem.times_used.desc())
              .limit(5).all())
     for item in items:
-        if item.carbs_per_serving and item.carbs_per_serving > 0:
+        if item.carbs_per_serving and item.carbs_per_serving > 0 and carbs > 0:
             factor = carbs / item.carbs_per_serving
             return jsonify({
                 "protein_g": round((item.protein_per_serving or 0) * factor, 1),
                 "fat_g":     round((item.fat_per_serving     or 0) * factor, 1),
                 "calories":  round((item.calories_per_serving or 0) * factor, 1),
                 "source":    item.name,
-                "origin":    "local",
+                "origin":    "mis_alimentos",
             })
 
-    # 2. Fallback: Open Food Facts (no requiere API key)
+    # 3. Fallback: Open Food Facts
     try:
         import requests as _req
         resp = _req.get(
@@ -1273,27 +1285,27 @@ def api_estimar_macros():
                 "search_terms": nombre, "search_simple": 1,
                 "action": "process", "json": 1,
                 "fields": "product_name,nutriments", "page_size": 5,
-                "lc": "es",
             },
-            timeout=6,
+            timeout=5,
         )
-        data = resp.json()
-        for product in data.get("products", []):
-            n = product.get("nutriments", {})
-            carbs_100 = n.get("carbohydrates_100g") or n.get("carbohydrates")
-            if carbs_100 and float(carbs_100) > 0:
-                factor = carbs / float(carbs_100)
-                return jsonify({
-                    "protein_g": round(float(n.get("proteins_100g",  n.get("proteins",  0)) or 0) * factor, 1),
-                    "fat_g":     round(float(n.get("fat_100g",       n.get("fat",       0)) or 0) * factor, 1),
-                    "calories":  round(float(n.get("energy-kcal_100g", n.get("energy-kcal", 0)) or 0) * factor, 1),
-                    "source":    product.get("product_name", nombre),
-                    "origin":    "openfoodfacts",
-                })
+        if resp.status_code == 200:
+            data = resp.json()
+            for product in data.get("products", []):
+                n = product.get("nutriments", {})
+                carbs_100 = n.get("carbohydrates_100g") or n.get("carbohydrates")
+                if carbs_100 and float(carbs_100) > 0 and carbs > 0:
+                    factor = carbs / float(carbs_100)
+                    return jsonify({
+                        "protein_g": round(float(n.get("proteins_100g",  0) or 0) * factor, 1),
+                        "fat_g":     round(float(n.get("fat_100g",       0) or 0) * factor, 1),
+                        "calories":  round(float(n.get("energy-kcal_100g", 0) or 0) * factor, 1),
+                        "source":    product.get("product_name", nombre),
+                        "origin":    "openfoodfacts",
+                    })
     except Exception:
         pass
 
-    return jsonify({"error": f"No se encontraron datos para «{nombre}»"}), 404
+    return jsonify({"error": f"No encontré datos para «{nombre}». Intentá con otro nombre."}), 404
 
 
 @app.route("/api/alimentos/<int:id>/usar", methods=["POST"])
