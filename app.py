@@ -899,10 +899,11 @@ def comidas():
     solo_incompletas = request.args.get("incompletas", "0") == "1"
     desde = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=dias)
 
-    q = Meal.query.filter(Meal.timestamp >= desde)
     if solo_incompletas:
-        # Solo comidas SIN componentes registrados
-        q = q.filter(~Meal.components.any())
+        # Modo backfill: mostrar TODAS las comidas sin ingredientes (sin filtro de fecha)
+        q = Meal.query.filter(~Meal.components.any())
+    else:
+        q = Meal.query.filter(Meal.timestamp >= desde)
     comidas_list = q.order_by(Meal.timestamp.desc()).paginate(page=page, per_page=30, error_out=False)
 
     # Contador global de comidas sin ingredientes (para el banner)
