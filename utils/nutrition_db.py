@@ -314,6 +314,28 @@ NUTRITION_DB = {
     "tostada":         (65.0, 3.0,  8.0,  5.0, 330),
     "cracker":         (65.0, 2.5,  9.0,  9.0, 380),
     "hummus":          (14.3, 6.0,  7.9,  9.6, 177),
+
+    # ── Mezclas / combos típicos ──────────────────────────────────────────
+    # (valores promedio ponderados de sus componentes habituales)
+    "mix frutos secos":   (18.0,10.0, 15.0, 52.0, 580),
+    "mezcla frutos secos":(18.0,10.0, 15.0, 52.0, 580),
+    "frutos secos":       (18.0,10.0, 15.0, 52.0, 580),
+    "trail mix":          (38.0, 6.5, 10.0, 35.0, 490),  # con frutas secas
+    "mix nueces":         (14.0, 7.5, 15.0, 60.0, 620),
+    "granola con leche":  (40.0, 3.5,  6.0,  5.5, 225),
+    "avena con leche":    (20.0, 1.8,  5.0,  2.5, 120),
+    "avena con fruta":    (28.0, 3.5,  5.0,  2.0, 140),
+    "yogur con granola":  (35.0, 2.5,  8.0,  5.0, 215),
+    "yogur con fruta":    (14.0, 1.0,  4.5,  1.5,  85),
+    "ensalada de frutas": (14.0, 1.8,  0.8,  0.2,  58),
+    "fruta mixta":        (13.0, 1.8,  0.7,  0.2,  54),
+    "verduras mixtas":    ( 6.0, 2.5,  1.5,  0.2,  30),
+    "ensalada verde":     ( 3.5, 1.5,  1.5,  0.2,  20),
+    "ensalada cesar":     ( 6.0, 1.5,  5.0, 12.0, 150),
+    "mix proteico":       ( 5.0, 1.0, 20.0,  5.0, 145),
+    "batido proteico":    ( 8.0, 1.0, 25.0,  3.0, 160),
+    "smoothie":           (14.0, 1.5,  2.0,  0.5,  68),
+    "bowl de açaí":       (28.0, 4.5,  3.5,  6.0, 175),
 }
 
 
@@ -346,28 +368,75 @@ def _parsear_nombre(nombre: str):
     return None, False, s.lower()
 
 
+# Palabras a ignorar en la búsqueda (conectores, preposiciones, artículos)
+_STOP_WORDS = {
+    "de", "del", "la", "el", "los", "las", "con", "sin", "y", "o",
+    "en", "a", "al", "un", "una", "mix", "mezcla", "combo", "tipo",
+    "estilo", "casero", "casera", "light", "diet", "natural",
+}
+
+def _palabras_clave(texto: str) -> list:
+    """Devuelve palabras significativas (≥3 letras, sin stop words)."""
+    return [w for w in texto.lower().split()
+            if len(w) >= 3 and w not in _STOP_WORDS]
+
+
 def buscar_nutricion(nombre: str):
     """
-    Busca el alimento en la DB.
+    Busca el alimento en la DB con múltiples estrategias.
     Devuelve (key, carbs_total, fibra, protein, fat, kcal) o None.
     """
     _, _, nombre_limpio = _parsear_nombre(nombre)
+    variantes = list(dict.fromkeys([nombre_limpio, nombre.lower().strip()]))
 
-    for buscar in [nombre_limpio, nombre.lower().strip()]:
+    # Claves ordenadas de más larga a más corta → match específico primero
+    keys_sorted = sorted(NUTRITION_DB.keys(), key=len, reverse=True)
+
+    for buscar in variantes:
         buscar = buscar.strip()
         if not buscar:
             continue
+
+        # 1. Coincidencia exacta
         if buscar in NUTRITION_DB:
             return (buscar,) + NUTRITION_DB[buscar]
-        for key, vals in NUTRITION_DB.items():
+
+        # 2. La clave está contenida en el texto buscado (más larga primero)
+        for key in keys_sorted:
             if key in buscar:
+                return (key,) + NUTRITION_DB[key]
+
+        # 3. El texto buscado está contenido en la clave
+        for key in keys_sorted:
+            if buscar in key:
+                return (key,) + NUTRITION_DB[key]
+
+    # 4. Palabras clave: todas las palabras significativas del nombre
+    #    deben aparecer en la clave (en cualquier orden)
+    palabras = _palabras_clave(nombre_limpio)
+    if palabras:
+        for key, vals in NUTRITION_DB.items():
+            if all(p in key for p in palabras):
                 return (key,) + vals
-        for word in buscar.split():
-            if len(word) < 3:
-                continue
-            for key, vals in NUTRITION_DB.items():
-                if word in key:
-                    return (key,) + vals
+
+    # 5. Al menos una palabra significativa coincide con parte de la clave
+    #    (ordenado por cantidad de palabras que coinciden → mejor match primero)
+    if palabras:
+        candidatos = []
+        for key, vals in NUTRITION_DB.items():
+            score = sum(1 for p in palabras if p in key)
+            if score > 0:
+                candidatos.append((score, key, vals))
+        if candidatos:
+            candidatos.sort(reverse=True)
+            _, key, vals = candidatos[0]
+            return (key,) + vals
+
+    # 6. Cualquier palabra de la clave aparece en el nombre
+    for key, vals in NUTRITION_DB.items():
+        for kword in _palabras_clave(key):
+            if kword in nombre_limpio:
+                return (key,) + vals
 
     return None
 
