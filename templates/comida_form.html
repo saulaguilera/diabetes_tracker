@@ -245,6 +245,10 @@ function addComponent(data = {}) {
       </div>
       <input type="hidden" name="comp_grams[]" class="ci-grams" value="${data.grams || ''}">
     </div>
+
+    <button type="button" class="comp-estimar-btn" onclick="estimarMacros(this)" title="Estimar proteínas y grasas automáticamente">
+      <i class="bi bi-stars"></i> Estimar macros
+    </button>
   `;
   list.appendChild(row);
 
@@ -274,6 +278,63 @@ function removeComponent(btn) {
   recalcTotals();
   if (document.querySelectorAll('.comp-row').length === 0) {
     document.getElementById('macro-summary').style.display = 'none';
+  }
+}
+
+/* ── Estimar macros via API ──────────────────────────────────────────── */
+async function estimarMacros(btn) {
+  const row     = btn.closest('.comp-row');
+  const nombre  = row.querySelector('.ci-name').value.trim();
+  const carbs   = parseFloat(row.querySelector('.ci-carbs').value) || 0;
+
+  if (!nombre) { alert('Escribí primero el nombre del ingrediente.'); return; }
+  if (carbs <= 0) { alert('Ingresá los gramos de CH primero.'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Estimando…';
+
+  try {
+    const res  = await fetch(`/api/estimar-macros?nombre=${encodeURIComponent(nombre)}&carbs=${carbs}`);
+    const data = await res.json();
+
+    if (data.error) {
+      btn.innerHTML = '<i class="bi bi-exclamation-circle"></i> Sin datos';
+      btn.style.color = '#ef4444';
+      setTimeout(() => {
+        btn.innerHTML = '<i class="bi bi-stars"></i> Estimar macros';
+        btn.style.color = '';
+        btn.disabled = false;
+      }, 2500);
+      return;
+    }
+
+    // Llenar campos solo si están vacíos o con 0
+    const protField = row.querySelector('.ci-protein');
+    const fatField  = row.querySelector('.ci-fat');
+    const calField  = row.querySelector('.ci-calories');
+
+    if (!parseFloat(protField.value)) protField.value = data.protein_g;
+    if (!parseFloat(fatField.value))  fatField.value  = data.fat_g;
+    if (!parseFloat(calField.value))  calField.value  = data.calories;
+
+    recalcTotals();
+
+    const origin = data.origin === 'local' ? 'base local' : 'Open Food Facts';
+    btn.innerHTML = `<i class="bi bi-check-circle-fill"></i> Estimado (${origin})`;
+    btn.style.color = '#22c55e';
+    setTimeout(() => {
+      btn.innerHTML = '<i class="bi bi-stars"></i> Estimar macros';
+      btn.style.color = '';
+      btn.disabled = false;
+    }, 3000);
+  } catch (e) {
+    btn.innerHTML = '<i class="bi bi-wifi-off"></i> Sin conexión';
+    btn.style.color = '#ef4444';
+    setTimeout(() => {
+      btn.innerHTML = '<i class="bi bi-stars"></i> Estimar macros';
+      btn.style.color = '';
+      btn.disabled = false;
+    }, 2500);
   }
 }
 
@@ -387,6 +448,16 @@ document.addEventListener('DOMContentLoaded', () => {
 }
 .comp-add-btn:hover { border-color: #22c55e; color: #22c55e; background: rgba(34,197,94,.05); }
 .comp-add-btn i { font-size: 1rem; }
+
+.comp-estimar-btn {
+  display: inline-flex; align-items: center; gap: .3rem;
+  padding: .22rem .65rem; border-radius: 20px; margin-top: .35rem;
+  background: rgba(99,102,241,.08); border: 1px solid rgba(99,102,241,.25);
+  color: #6366f1; font-size: .72rem; font-weight: 600; cursor: pointer;
+  transition: all .15s;
+}
+.comp-estimar-btn:hover { background: rgba(99,102,241,.15); border-color: #6366f1; }
+.comp-estimar-btn:disabled { opacity: .6; cursor: wait; }
 
 .comp-total-badge {
   background: rgba(34,197,94,.12); color: #16a34a;

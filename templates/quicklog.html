@@ -398,6 +398,16 @@
   gap: .5rem; transition: background .15s; margin-bottom: 1rem;
 }
 .ql-submit-btn:hover { background: #4f46e5; }
+
+.ql-estimar-btn {
+  display: inline-flex; align-items: center; gap: .25rem;
+  padding: .18rem .5rem; border-radius: 20px; margin-top: .2rem;
+  background: rgba(99,102,241,.08); border: 1px solid rgba(99,102,241,.25);
+  color: #6366f1; font-size: .68rem; font-weight: 600; cursor: pointer;
+  transition: all .15s; white-space: nowrap;
+}
+.ql-estimar-btn:hover { background: rgba(99,102,241,.18); border-color: #6366f1; }
+.ql-estimar-btn:disabled { opacity: .55; cursor: wait; }
 @media (max-width: 768px) {
   .ql-submit-btn {
     margin-bottom: 2rem;
@@ -584,6 +594,9 @@ function qlAddIngrediente(data = {}) {
     </div>
     <button type="button" class="ql-ing-remove" onclick="qlRemoveIng(this)" title="Eliminar">
       <i class="bi bi-x"></i>
+    </button>
+    <button type="button" class="ql-estimar-btn" onclick="qlEstimar(this)" title="Estimar macros">
+      <i class="bi bi-stars"></i> Estimar
     </button>`;
 
   list.appendChild(row);
@@ -609,6 +622,45 @@ function qlAddIngrediente(data = {}) {
 function qlRemoveIng(btn) {
   btn.closest('.ql-ing-row').remove();
   qlRecalc();
+}
+
+async function qlEstimar(btn) {
+  const row    = btn.closest('.ql-ing-row');
+  const nombre = row.querySelector('.qli-name').value.trim();
+  const carbs  = parseFloat(row.querySelector('.qli-carbs').value) || 0;
+
+  if (!nombre) { alert('Escribí el nombre del ingrediente primero.'); return; }
+  if (carbs <= 0) { alert('Ingresá los gramos de CH primero.'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+  try {
+    const res  = await fetch(`/api/estimar-macros?nombre=${encodeURIComponent(nombre)}&carbs=${carbs}`);
+    const data = await res.json();
+
+    if (data.error) {
+      btn.innerHTML = '<i class="bi bi-x-circle"></i>';
+      setTimeout(() => { btn.innerHTML = '<i class="bi bi-stars"></i> Estimar'; btn.disabled = false; }, 2000);
+      return;
+    }
+
+    const pField = row.querySelector('.qli-protein');
+    const fField = row.querySelector('.qli-fat');
+    const cField = row.querySelector('.qli-cal');
+
+    if (!parseFloat(pField.value)) pField.value = data.protein_g;
+    if (!parseFloat(fField.value)) fField.value = data.fat_g;
+    if (!parseFloat(cField.value)) cField.value = data.calories;
+
+    qlRecalc();
+    btn.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
+    btn.style.color = '#22c55e';
+    setTimeout(() => { btn.innerHTML = '<i class="bi bi-stars"></i> Estimar'; btn.style.color = ''; btn.disabled = false; }, 2500);
+  } catch (e) {
+    btn.innerHTML = '<i class="bi bi-wifi-off"></i>';
+    setTimeout(() => { btn.innerHTML = '<i class="bi bi-stars"></i> Estimar'; btn.disabled = false; }, 2000);
+  }
 }
 
 async function qlFetchFood(q, drop, row) {

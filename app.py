@@ -1239,6 +1239,63 @@ def api_alimentos_buscar():
     } for i in items])
 
 
+@app.route("/api/estimar-macros")
+@login_required
+def api_estimar_macros():
+    """Estima proteínas, grasas y calorías dado un nombre de ingrediente y gramos de CH."""
+    nombre = request.args.get("nombre", "").strip()
+    carbs  = request.args.get("carbs", 0, type=float)
+    if not nombre or carbs <= 0:
+        return jsonify({"error": "Faltan datos"}), 400
+
+    # 1. Buscar en base de datos local (FoodItem)
+    items = (FoodItem.query
+             .filter(FoodItem.name.ilike(f"%{nombre}%"))
+             .order_by(FoodItem.times_used.desc())
+             .limit(5).all())
+    for item in items:
+        if item.carbs_per_serving and item.carbs_per_serving > 0:
+            factor = carbs / item.carbs_per_serving
+            return jsonify({
+                "protein_g": round((item.protein_per_serving or 0) * factor, 1),
+                "fat_g":     round((item.fat_per_serving     or 0) * factor, 1),
+                "calories":  round((item.calories_per_serving or 0) * factor, 1),
+                "source":    item.name,
+                "origin":    "local",
+            })
+
+    # 2. Fallback: Open Food Facts (no requiere API key)
+    try:
+        import requests as _req
+        resp = _req.get(
+            "https://world.openfoodfacts.org/cgi/search.pl",
+            params={
+                "search_terms": nombre, "search_simple": 1,
+                "action": "process", "json": 1,
+                "fields": "product_name,nutriments", "page_size": 5,
+                "lc": "es",
+            },
+            timeout=6,
+        )
+        data = resp.json()
+        for product in data.get("products", []):
+            n = product.get("nutriments", {})
+            carbs_100 = n.get("carbohydrates_100g") or n.get("carbohydrates")
+            if carbs_100 and float(carbs_100) > 0:
+                factor = carbs / float(carbs_100)
+                return jsonify({
+                    "protein_g": round(float(n.get("proteins_100g",  n.get("proteins",  0)) or 0) * factor, 1),
+                    "fat_g":     round(float(n.get("fat_100g",       n.get("fat",       0)) or 0) * factor, 1),
+                    "calories":  round(float(n.get("energy-kcal_100g", n.get("energy-kcal", 0)) or 0) * factor, 1),
+                    "source":    product.get("product_name", nombre),
+                    "origin":    "openfoodfacts",
+                })
+    except Exception:
+        pass
+
+    return jsonify({"error": f"No se encontraron datos para «{nombre}»"}), 404
+
+
 @app.route("/api/alimentos/<int:id>/usar", methods=["POST"])
 def api_alimento_usar(id):
     item = FoodItem.query.get_or_404(id)
