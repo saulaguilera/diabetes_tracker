@@ -47,7 +47,7 @@
           {% endif %}
         </div>
         <div class="list-row-meta">
-          <span class="list-ts">{{ d.timestamp.strftime('%d/%m %H:%M') }}</span>
+          <span class="list-ts">{{ d.timestamp | local_ts }}</span>
           {% if d.notes %}
             <span class="list-sep">·</span>
             <span style="font-size:.78rem; color:var(--text-muted);">{{ d.notes }}</span>

@@ -102,6 +102,7 @@ function setNow() {
   document.querySelector('[name=fecha]').value = n.toLocaleDateString('sv');
   document.querySelector('[name=hora]').value  = n.toTimeString().slice(0,5);
 }
+{% if not editar %}document.addEventListener('DOMContentLoaded', setNow);{% endif %}
 function setVal(v) {
   document.getElementById('valor').value = v;
   updateBadge(v);

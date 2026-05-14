@@ -121,6 +121,7 @@
     document.getElementById('act-fecha').value = n.toLocaleDateString('sv');
     document.getElementById('act-hora').value  = n.toTimeString().slice(0, 5);
   }
+  {% if not editar %}document.addEventListener('DOMContentLoaded', setActNow);{% endif %}
 </script>
 {% if not editar %}
 <script>

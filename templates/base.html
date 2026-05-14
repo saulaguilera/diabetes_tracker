@@ -975,6 +975,29 @@
       widget.style.display = 'block';
     } catch(e) {}
   })();
+
+  // ── Convertir timestamps UTC → hora local del usuario ────────────────────────
+  // El servidor guarda todo en UTC. El filtro Jinja local_ts genera:
+  // <time class="local-ts" data-utc="2026-05-14T15:10:00" data-fmt="dmhm">14/05 15:10</time>
+  // Este JS los reemplaza con la hora local del browser.
+  (function() {
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function fmtDate(d) { return pad(d.getDate()) + '/' + pad(d.getMonth()+1); }
+    function fmtTime(d) { return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+    function fmtYear(d) { return d.getFullYear(); }
+
+    document.querySelectorAll('time.local-ts[data-utc]').forEach(function(el) {
+      try {
+        const d   = new Date(el.dataset.utc + 'Z'); // 'Z' fuerza interpretación UTC
+        if (isNaN(d)) return;
+        const fmt = el.dataset.fmt || 'dmhm';
+        if      (fmt === 'hm')   el.textContent = fmtTime(d);
+        else if (fmt === 'dm')   el.textContent = fmtDate(d);
+        else if (fmt === 'full') el.textContent = fmtDate(d) + '/' + fmtYear(d) + ' ' + fmtTime(d);
+        else                     el.textContent = fmtDate(d) + ' ' + fmtTime(d); // dmhm
+      } catch(e) {}
+    });
+  })();
 </script>
 </body>
 </html>

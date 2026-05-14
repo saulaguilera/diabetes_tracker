@@ -69,7 +69,7 @@
           {% endif %}
         </span>
         <span class="list-sep">·</span>
-        <span class="list-ts">{{ r.timestamp.strftime('%d/%m %H:%M') }}</span>
+        <span class="list-ts">{{ r.timestamp | local_ts }}</span>
       </div>
 
       <!-- Acciones -->

@@ -170,6 +170,7 @@ function setNow() {
   document.querySelector('[name=fecha]').value = n.toLocaleDateString('sv');
   document.querySelector('[name=hora]').value  = n.toTimeString().slice(0,5);
 }
+{% if not editar %}document.addEventListener('DOMContentLoaded', setNow);{% endif %}
 
 let compIndex = 0;
 let activeDropdown = null;

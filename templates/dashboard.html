@@ -51,7 +51,7 @@
 
         <div class="hero-meta mt-2">
           <i class="bi bi-clock me-1"></i>
-          {{ stats.ultima_lectura.timestamp.strftime('%H:%M') }}
+          {{ stats.ultima_lectura.timestamp | local_ts('hm') }}
           {% if ultima_sync %}
             · <span id="sync-status">{{ ultima_sync }}</span>
           {% endif %}
@@ -205,7 +205,7 @@
             {{ v }} mg/dL
           </div>
           <div class="event-meta">
-            {{ stats.ultima_lectura.timestamp.strftime('%d/%m/%Y %H:%M') }}
+            {{ stats.ultima_lectura.timestamp | local_ts('full') }}
             · {{ stats.ultima_lectura.source }}
           </div>
         {% else %}
@@ -229,7 +229,7 @@
           <div class="event-value">{{ stats.ultima_comida.name }}</div>
           <div class="event-meta">
             {{ stats.ultima_comida.carbs_g }}g CH
-            · {{ stats.ultima_comida.timestamp.strftime('%d/%m/%Y %H:%M') }}
+            · {{ stats.ultima_comida.timestamp | local_ts('full') }}
           </div>
         {% else %}
           <div class="event-empty">Sin registros</div>
@@ -254,7 +254,7 @@
           </div>
           <div class="event-meta">
             {% if stats.ultima_insulina.brand %}{{ stats.ultima_insulina.brand }} · {% endif %}
-            {{ stats.ultima_insulina.timestamp.strftime('%d/%m/%Y %H:%M') }}
+            {{ stats.ultima_insulina.timestamp | local_ts('full') }}
           </div>
         {% else %}
           <div class="event-empty">Sin registros</div>

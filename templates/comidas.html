@@ -95,7 +95,7 @@
             {% endif %}
           </span>
           <span class="list-sep">·</span>
-          <span class="list-ts">{{ c.timestamp.strftime('%d/%m %H:%M') }}</span>
+          <span class="list-ts">{{ c.timestamp | local_ts }}</span>
         </div>
       </div>
 

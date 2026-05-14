@@ -55,7 +55,7 @@
         <div class="ql-card-title">Glucemia</div>
         <div class="ql-card-sub" id="glucemia-preview">
           {% if ultima_glucemia %}
-            Última: {{ ultima_glucemia.value_mgdl|int }} mg/dL · {{ ultima_glucemia.timestamp.strftime('%H:%M') }}
+            Última: {{ ultima_glucemia.value_mgdl|int }} mg/dL · {{ ultima_glucemia.timestamp | local_ts('hm') }}
           {% else %}Sin registros{% endif %}
         </div>
       </div>
@@ -428,6 +428,8 @@ function setNow() {
   document.getElementById('fecha').value = n.toLocaleDateString('sv');
   document.getElementById('hora').value  = n.toTimeString().slice(0,5);
 }
+// Siempre inicializar con hora local del browser (no la UTC del servidor)
+document.addEventListener('DOMContentLoaded', setNow);
 
 function toggleSection(section, force) {
   const card   = document.getElementById('card-' + section);

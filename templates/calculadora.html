@@ -127,7 +127,7 @@
         {% if ultima %}
         <div class="form-text">
           Última lectura: <strong>{{ ultima.value_mgdl | int }} mg/dL</strong>
-          ({{ ultima.timestamp.strftime('%d/%m %H:%M') }})
+          ({{ ultima.timestamp | local_ts }})
         </div>
         {% endif %}
       </div>

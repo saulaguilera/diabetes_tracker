@@ -253,6 +253,32 @@ def categoria_color_filter(cat):
     return CATEGORIA_COLORES.get(cat, "secondary")
 
 
+# ── Filtro Jinja para timestamps en hora local del usuario ─────────────────────
+# Uso: {{ obj.timestamp | local_ts }}          → "14/05 11:10"
+#      {{ obj.timestamp | local_ts('hm') }}    → "11:10"
+#      {{ obj.timestamp | local_ts('full') }}  → "14/05/2026 11:10"
+#      {{ obj.timestamp | local_ts('dm') }}    → "14/05"
+# El servidor devuelve el tiempo en UTC (naive). El filtro lo envuelve en un
+# <time> con data-utc="ISO" y el JS en base.html lo convierte a hora local.
+from markupsafe import Markup
+
+@app.template_filter("local_ts")
+def local_ts_filter(dt, fmt="dmhm"):
+    if dt is None:
+        return ""
+    iso = dt.strftime("%Y-%m-%dT%H:%M:%S")
+    # Texto de fallback (UTC, se reemplaza por JS)
+    if fmt == "hm":
+        fallback = dt.strftime("%H:%M")
+    elif fmt == "dm":
+        fallback = dt.strftime("%d/%m")
+    elif fmt == "full":
+        fallback = dt.strftime("%d/%m/%Y %H:%M")
+    else:  # dmhm por defecto
+        fallback = dt.strftime("%d/%m %H:%M")
+    return Markup(f'<time class="local-ts" data-utc="{iso}" data-fmt="{fmt}">{fallback}</time>')
+
+
 # ─── Detección de patrones peligrosos ─────────────────────────────────────────
 
 def _detectar_patrones(days=30):

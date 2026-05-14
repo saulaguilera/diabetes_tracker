@@ -72,7 +72,7 @@
     <tbody>
       {% for a in actividades.items %}
       <tr>
-        <td>{{ a.timestamp.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td>{{ a.timestamp | local_ts('full') }}</td>
         <td>
           <span class="fw-semibold">
             {% if 'camina' in a.activity_type.lower() %}<i class="bi bi-person-walking text-success me-1"></i>
