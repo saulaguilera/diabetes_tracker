@@ -2262,6 +2262,9 @@ def comida_editar(id):
 
         db.session.commit()
         flash(f'Comida "{comida.name}" actualizada.', "success")
+        next_page = request.form.get("next", "")
+        if next_page == "incompletas":
+            return redirect(url_for("comidas", incompletas="1"))
         return redirect(url_for("comidas"))
 
     return render_template("comida_form.html",

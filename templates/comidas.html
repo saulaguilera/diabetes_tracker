@@ -128,11 +128,13 @@
       <!-- Acciones -->
       <div class="list-row-actions">
         {% if not c.components %}
-        <a href="{{ url_for('comida_editar', id=c.id) }}" class="list-btn-split" title="Agregar ingredientes">
+        <a href="{{ url_for('comida_editar', id=c.id) }}{{ '?next=incompletas' if solo_incompletas else '' }}"
+           class="list-btn-split" title="Agregar ingredientes">
           <i class="bi bi-layout-split"></i>
         </a>
         {% endif %}
-        <a href="{{ url_for('comida_editar', id=c.id) }}" class="list-btn-edit" title="Editar">
+        <a href="{{ url_for('comida_editar', id=c.id) }}{{ '?next=incompletas' if solo_incompletas else '' }}"
+           class="list-btn-edit" title="Editar">
           <i class="bi bi-pencil"></i>
         </a>
         <form method="post" action="{{ url_for('comida_eliminar', id=c.id) }}"
