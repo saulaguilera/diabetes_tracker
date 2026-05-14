@@ -630,7 +630,6 @@ async function qlEstimar(btn) {
   const carbs  = parseFloat(row.querySelector('.qli-carbs').value) || 0;
 
   if (!nombre) { alert('Escribí el nombre del ingrediente primero.'); return; }
-  if (carbs <= 0) { alert('Ingresá los gramos de CH primero.'); return; }
 
   btn.disabled = true;
   btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
@@ -641,6 +640,7 @@ async function qlEstimar(btn) {
 
     if (data.error) {
       btn.innerHTML = '<i class="bi bi-x-circle"></i>';
+      btn.title = data.error;
       setTimeout(() => { btn.innerHTML = '<i class="bi bi-stars"></i> Estimar'; btn.disabled = false; }, 2000);
       return;
     }
@@ -648,15 +648,19 @@ async function qlEstimar(btn) {
     const pField = row.querySelector('.qli-protein');
     const fField = row.querySelector('.qli-fat');
     const cField = row.querySelector('.qli-cal');
-
     if (!parseFloat(pField.value)) pField.value = data.protein_g;
     if (!parseFloat(fField.value)) fField.value = data.fat_g;
     if (!parseFloat(cField.value)) cField.value = data.calories;
+    if (carbs === 0 && data.carbs_g > 0) {
+      const carbField = row.querySelector('.qli-carbs');
+      if (!parseFloat(carbField.value)) carbField.value = data.carbs_g;
+    }
 
     qlRecalc();
     btn.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
+    btn.title = data.nota || 'estimado';
     btn.style.color = '#22c55e';
-    setTimeout(() => { btn.innerHTML = '<i class="bi bi-stars"></i> Estimar'; btn.style.color = ''; btn.disabled = false; }, 2500);
+    setTimeout(() => { btn.innerHTML = '<i class="bi bi-stars"></i> Estimar'; btn.style.color = ''; btn.title = 'Estimar macros'; btn.disabled = false; }, 2500);
   } catch (e) {
     btn.innerHTML = '<i class="bi bi-wifi-off"></i>';
     setTimeout(() => { btn.innerHTML = '<i class="bi bi-stars"></i> Estimar'; btn.disabled = false; }, 2000);

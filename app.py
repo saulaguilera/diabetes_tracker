@@ -1243,21 +1243,27 @@ def api_alimentos_buscar():
 @login_required
 def api_estimar_macros():
     """Estima proteínas, grasas y calorías dado un nombre de ingrediente y gramos de CH."""
-    from utils.nutrition_db import estimar_desde_carbs, buscar_nutricion
+    from utils.nutrition_db import estimar, buscar_nutricion
     nombre = request.args.get("nombre", "").strip()
-    carbs  = request.args.get("carbs", 0, type=float)
+    carbs  = request.args.get("carbs",  0, type=float)
+    grams  = request.args.get("grams",  0, type=float)
     if not nombre:
         return jsonify({"error": "Falta el nombre"}), 400
 
     # 1. Base nutricional interna (80+ alimentos comunes, siempre disponible)
-    estimado = estimar_desde_carbs(nombre, carbs) if carbs > 0 else None
+    estimado = estimar(nombre, carbs_usuario=carbs, grams_usuario=grams)
     if estimado:
+        nota = ""
+        if estimado["base"] == "gramos":
+            nota = f"basado en {estimado['grams']:.0f}g de {estimado['key']}"
         return jsonify({
             "protein_g": estimado["protein_g"],
             "fat_g":     estimado["fat_g"],
             "calories":  estimado["calories"],
+            "carbs_g":   estimado.get("carbs_g", carbs),
             "source":    nombre,
             "origin":    "interno",
+            "nota":      nota,
         })
 
     # 2. Base de alimentos del usuario (FoodItem)

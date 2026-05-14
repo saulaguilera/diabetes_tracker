@@ -4,6 +4,20 @@ Fuente: USDA FoodData Central + tablas nutricionales LATINFOODS.
 Campos: carbs, protein, fat, calories (todos en g por 100g, kcal por 100g).
 """
 
+import re
+
+# Porción estándar para alimentos que se cuentan por unidad.
+# Clave: misma que NUTRITION_DB. Valor: (gramos_por_unidad, nombre_unidad)
+PORCIONES_ESTANDAR = {
+    "huevo":     (55,  "huevo"),
+    "pan blanco":(30,  "rebanada"),
+    "pan integral":(30,"rebanada"),
+    "pan":       (30,  "rebanada"),
+    "tortilla":  (30,  "tortilla"),
+    "arepa":     (80,  "arepa"),
+    "arepas":    (80,  "arepa"),
+}
+
 # Clave: texto en minúsculas (se busca por substring)
 # Valor: (carbs_100g, protein_100g, fat_100g, kcal_100g)
 NUTRITION_DB = {
@@ -141,60 +155,96 @@ NUTRITION_DB = {
 }
 
 
+def _extraer_cantidad(nombre: str):
+    """Extrae un número del inicio del nombre. Ej: '4 huevos' → 4, 'huevos' → None."""
+    m = re.match(r'^(\d+(?:[.,]\d+)?)\s*', nombre.strip())
+    if m:
+        return float(m.group(1).replace(',', '.'))
+    return None
+
+
 def buscar_nutricion(nombre: str):
     """
     Busca el alimento en la DB interna.
-    Devuelve (carbs_100g, protein_100g, fat_100g, kcal_100g) o None.
-    Primero busca coincidencia exacta, luego substring.
+    Devuelve (key_encontrada, carbs_100g, protein_100g, fat_100g, kcal_100g) o None.
     """
     nombre_lower = nombre.lower().strip()
+    # Quitar número inicial para buscar ("4 huevos" → "huevos")
+    nombre_sin_num = re.sub(r'^\d+(?:[.,]\d+)?\s*', '', nombre_lower).strip()
 
-    # 1. Coincidencia exacta
-    if nombre_lower in NUTRITION_DB:
-        return NUTRITION_DB[nombre_lower]
-
-    # 2. Nombre contiene la clave
-    for key, vals in NUTRITION_DB.items():
-        if key in nombre_lower:
-            return vals
-
-    # 3. Alguna palabra del nombre está en la clave
-    words = nombre_lower.split()
-    for word in words:
-        if len(word) < 3:
-            continue
+    for buscar in [nombre_lower, nombre_sin_num]:
+        # 1. Coincidencia exacta
+        if buscar in NUTRITION_DB:
+            return (buscar,) + NUTRITION_DB[buscar]
+        # 2. La clave está contenida en el nombre
         for key, vals in NUTRITION_DB.items():
-            if word in key:
-                return vals
+            if key in buscar:
+                return (key,) + vals
+        # 3. Palabra del nombre dentro de la clave
+        for word in buscar.split():
+            if len(word) < 3:
+                continue
+            for key, vals in NUTRITION_DB.items():
+                if word in key:
+                    return (key,) + vals
 
     return None
 
 
-def estimar_desde_carbs(nombre: str, carbs_usuario: float):
+def estimar(nombre: str, carbs_usuario: float = 0, grams_usuario: float = 0):
     """
-    Dado un nombre de alimento y los gramos de CH que el usuario ingresó,
-    devuelve un dict con protein_g, fat_g, calories estimados.
-    Retorna None si no se encuentra el alimento.
+    Estima macros dado un nombre de alimento.
+    - Si tiene CH (arroz, garbanzos…): escala por carbs_usuario.
+    - Si no tiene CH (huevos, carnes…): escala por grams_usuario
+      o por la porción estándar × cantidad detectada en el nombre.
+    Retorna dict o None.
     """
-    result = buscar_nutricion(nombre)
-    if result is None:
+    found = buscar_nutricion(nombre)
+    if found is None:
         return None
 
-    carbs_100, prot_100, fat_100, kcal_100 = result
-    if carbs_100 <= 0:
-        # Alimento sin carbohidratos (carnes, etc.) — no se puede escalar por CH
-        # Retornamos valores por 100g directamente
+    db_key, carbs_100, prot_100, fat_100, kcal_100 = found
+
+    # ── Alimento CON carbohidratos: escalar por CH ingresados ──────────────
+    if carbs_100 >= 2 and carbs_usuario > 0:
+        factor = carbs_usuario / carbs_100
         return {
-            "protein_g": round(prot_100, 1),
-            "fat_g":     round(fat_100,  1),
-            "calories":  round(kcal_100, 1),
-            "note":      "sin_carbs",
+            "protein_g": round(prot_100 * factor, 1),
+            "fat_g":     round(fat_100  * factor, 1),
+            "calories":  round(kcal_100 * factor, 1),
+            "carbs_g":   round(carbs_100 * factor, 1),
+            "base":      "carbs",
+            "key":       db_key,
         }
 
-    factor = carbs_usuario / carbs_100
+    # ── Alimento SIN carbohidratos: escalar por gramos o unidades ──────────
+    # a) El usuario pasó gramos explícitamente
+    total_g = grams_usuario
+
+    # b) Detectar cantidad en el nombre ("4 huevos") × porción estándar
+    if total_g <= 0:
+        porcion = PORCIONES_ESTANDAR.get(db_key)
+        if porcion:
+            cantidad = _extraer_cantidad(nombre) or 1
+            total_g  = cantidad * porcion[0]
+            unidad   = porcion[1]
+        else:
+            # Sin porción estándar: asumir 100g
+            total_g = 100
+            unidad  = "g"
+
+    factor = total_g / 100.0
     return {
         "protein_g": round(prot_100 * factor, 1),
         "fat_g":     round(fat_100  * factor, 1),
         "calories":  round(kcal_100 * factor, 1),
-        "note":      None,
+        "carbs_g":   round(carbs_100 * factor, 1),
+        "base":      "gramos",
+        "grams":     total_g,
+        "key":       db_key,
     }
+
+
+# Mantener compatibilidad con código anterior
+def estimar_desde_carbs(nombre: str, carbs_usuario: float):
+    return estimar(nombre, carbs_usuario=carbs_usuario)

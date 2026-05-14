@@ -283,58 +283,51 @@ function removeComponent(btn) {
 
 /* ── Estimar macros via API ──────────────────────────────────────────── */
 async function estimarMacros(btn) {
-  const row     = btn.closest('.comp-row');
-  const nombre  = row.querySelector('.ci-name').value.trim();
-  const carbs   = parseFloat(row.querySelector('.ci-carbs').value) || 0;
+  const row    = btn.closest('.comp-row');
+  const nombre = row.querySelector('.ci-name').value.trim();
+  const carbs  = parseFloat(row.querySelector('.ci-carbs').value) || 0;
 
   if (!nombre) { alert('Escribí primero el nombre del ingrediente.'); return; }
-  if (carbs <= 0) { alert('Ingresá los gramos de CH primero.'); return; }
 
   btn.disabled = true;
   btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Estimando…';
 
   try {
-    const res  = await fetch(`/api/estimar-macros?nombre=${encodeURIComponent(nombre)}&carbs=${carbs}`);
+    const url = `/api/estimar-macros?nombre=${encodeURIComponent(nombre)}&carbs=${carbs}`;
+    const res  = await fetch(url);
     const data = await res.json();
 
     if (data.error) {
-      btn.innerHTML = '<i class="bi bi-exclamation-circle"></i> Sin datos';
+      btn.innerHTML = '<i class="bi bi-exclamation-circle"></i> No encontrado';
       btn.style.color = '#ef4444';
-      setTimeout(() => {
-        btn.innerHTML = '<i class="bi bi-stars"></i> Estimar macros';
-        btn.style.color = '';
-        btn.disabled = false;
-      }, 2500);
+      setTimeout(() => { btn.innerHTML = '<i class="bi bi-stars"></i> Estimar macros'; btn.style.color = ''; btn.disabled = false; }, 2500);
       return;
     }
 
-    // Llenar campos solo si están vacíos o con 0
+    // Llenar campos (solo si están vacíos o 0)
     const protField = row.querySelector('.ci-protein');
     const fatField  = row.querySelector('.ci-fat');
     const calField  = row.querySelector('.ci-calories');
-
     if (!parseFloat(protField.value)) protField.value = data.protein_g;
     if (!parseFloat(fatField.value))  fatField.value  = data.fat_g;
     if (!parseFloat(calField.value))  calField.value  = data.calories;
+    // Si la estimación calculó los CH (alimento sin carbs), llenar también
+    if (carbs === 0 && data.carbs_g > 0) {
+      const carbField = row.querySelector('.ci-carbs');
+      if (!parseFloat(carbField.value)) carbField.value = data.carbs_g;
+    }
 
     recalcTotals();
 
-    const origin = data.origin === 'local' ? 'base local' : 'Open Food Facts';
-    btn.innerHTML = `<i class="bi bi-check-circle-fill"></i> Estimado (${origin})`;
+    const label = data.nota || 'base interna';
+    btn.innerHTML = `<i class="bi bi-check-circle-fill"></i> Listo`;
+    btn.title = label;
     btn.style.color = '#22c55e';
-    setTimeout(() => {
-      btn.innerHTML = '<i class="bi bi-stars"></i> Estimar macros';
-      btn.style.color = '';
-      btn.disabled = false;
-    }, 3000);
+    setTimeout(() => { btn.innerHTML = '<i class="bi bi-stars"></i> Estimar macros'; btn.style.color = ''; btn.title = 'Estimar proteínas y grasas automáticamente'; btn.disabled = false; }, 3500);
   } catch (e) {
-    btn.innerHTML = '<i class="bi bi-wifi-off"></i> Sin conexión';
+    btn.innerHTML = '<i class="bi bi-wifi-off"></i> Error';
     btn.style.color = '#ef4444';
-    setTimeout(() => {
-      btn.innerHTML = '<i class="bi bi-stars"></i> Estimar macros';
-      btn.style.color = '';
-      btn.disabled = false;
-    }, 2500);
+    setTimeout(() => { btn.innerHTML = '<i class="bi bi-stars"></i> Estimar macros'; btn.style.color = ''; btn.disabled = false; }, 2500);
   }
 }
 
