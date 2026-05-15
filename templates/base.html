@@ -998,6 +998,22 @@
       } catch(e) {}
     });
   })();
+
+  // ── Agregar tz_offset a todos los formularios automáticamente ─────────────────
+  // getTimezoneOffset() devuelve minutos positivos para zonas UTC- (ej. Chile UTC-4 → 240)
+  // El servidor los suma a la hora local para obtener UTC antes de guardar.
+  (function() {
+    const offset = new Date().getTimezoneOffset();
+    document.querySelectorAll('form[method="post"], form[method="POST"]').forEach(function(form) {
+      if (!form.querySelector('[name="tz_offset"]')) {
+        const inp = document.createElement('input');
+        inp.type  = 'hidden';
+        inp.name  = 'tz_offset';
+        inp.value = offset;
+        form.appendChild(inp);
+      }
+    });
+  })();
 </script>
 </body>
 </html>
