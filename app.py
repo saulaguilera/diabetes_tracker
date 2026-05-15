@@ -2440,13 +2440,17 @@ def _analisis_ratio_insulina(days=30):
 
 def _analisis_ingredientes(days=60):
     """
-    Por ingrediente (MealComponent): promedio de Δ glucémico
-    en comidas que lo contienen (mínimo 2 ocurrencias).
+    Impacto glucémico por ingrediente con atribución proporcional a CH.
+
+    Principio: si una comida subió 60 mg/dL y el arroz aporta el 80% de los
+    carbohidratos totales de esa comida, al arroz se le atribuyen 48 mg/dL
+    y al pollo (0g CH) se le atribuyen 0 mg/dL.
+
+    Métrica adicional: Δ por 10g CH (índice glucémico relativo), útil para
+    comparar alimentos con mismos carbohidratos pero distinto impacto.
     """
     desde = datetime.now() - timedelta(days=days)
-    comidas = (Meal.query
-               .filter(Meal.timestamp >= desde)
-               .all())
+    comidas = Meal.query.filter(Meal.timestamp >= desde).all()
 
     from collections import defaultdict
     por_ingrediente = defaultdict(list)
@@ -2457,29 +2461,58 @@ def _analisis_ingredientes(days=60):
         imp = _glucosa_impacto(c)
         if imp is None:
             continue
+
+        # Carbohidratos totales de la comida (suma de componentes)
+        total_ch = sum(comp.carbs_g or 0 for comp in c.components)
+
         for comp in c.components:
             nombre = comp.name.strip().lower()
             if not nombre:
                 continue
+            ch = comp.carbs_g or 0
+
+            # Fracción de CH que aporta este ingrediente al total de la comida
+            fraccion = ch / total_ch if total_ch > 0 else 0
+            # Delta atribuido proporcionalmente
+            delta_atrib = round(imp["delta"] * fraccion, 1)
+
             por_ingrediente[nombre].append({
-                "delta":  imp["delta"],
-                "carbs":  comp.carbs_g or 0,
-                "meal":   c.name,
+                "delta_atrib": delta_atrib,
+                "carbs":       ch,
+                "fraccion":    fraccion,
             })
 
     resultado = []
     for nombre, items in por_ingrediente.items():
-        n = len(items)
-        avg_delta = round(sum(i["delta"] for i in items) / n, 0)
-        avg_carbs = round(sum(i["carbs"] for i in items) / n, 1)
+        n          = len(items)
+        avg_carbs  = round(sum(i["carbs"]       for i in items) / n, 1)
+        avg_delta  = round(sum(i["delta_atrib"] for i in items) / n, 0)
+
+        # Δ por 10g CH: normaliza por porción → comparable entre alimentos
+        items_con_ch = [i for i in items if i["carbs"] > 0]
+        if items_con_ch:
+            delta_por_10g = round(
+                sum(i["delta_atrib"] / i["carbs"] * 10 for i in items_con_ch)
+                / len(items_con_ch), 0
+            )
+        else:
+            delta_por_10g = 0
+
         resultado.append({
-            "nombre":    nombre.title(),
-            "avg_delta": avg_delta,
-            "avg_carbs": avg_carbs,
-            "n":         n,
+            "nombre":       nombre.title(),
+            "avg_delta":    avg_delta,      # Δ absoluto atribuido (varía con la porción)
+            "delta_por_10g": delta_por_10g, # Δ por 10g CH (normalizado, comparable)
+            "avg_carbs":    avg_carbs,
+            "n":            n,
+            "tiene_ch":     avg_carbs > 1,
         })
 
-    return sorted(resultado, key=lambda x: x["avg_delta"], reverse=True)
+    # Ordenar: primero los que tienen CH (por delta_por_10g), luego los sin CH
+    con_ch  = sorted([r for r in resultado if r["tiene_ch"]],
+                     key=lambda x: x["delta_por_10g"], reverse=True)
+    sin_ch  = sorted([r for r in resultado if not r["tiene_ch"]],
+                     key=lambda x: x["nombre"])
+    return con_ch + sin_ch
 
 
 def _sensibilidad_horaria(days=60):

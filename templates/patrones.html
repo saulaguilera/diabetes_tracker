@@ -147,6 +147,8 @@
 <!-- ══════════════════════════════════════════════════════
      SECCIÓN 2: IMPACTO POR INGREDIENTE
 ══════════════════════════════════════════════════════ -->
+{% set ing_con_ch  = ingredientes | selectattr('tiene_ch') | list %}
+{% set ing_sin_ch  = ingredientes | rejectattr('tiene_ch') | list %}
 <section class="pat-section">
   <div class="pat-section-header">
     <div class="pat-section-icon" style="background:rgba(34,197,94,.12);color:#16a34a;">
@@ -154,7 +156,9 @@
     </div>
     <div>
       <h2 class="pat-section-title">Impacto por Ingrediente</h2>
-      <p class="pat-section-sub">Δ glucemia promedio 2h tras comidas que contienen cada ingrediente</p>
+      <p class="pat-section-sub">
+        Δ glucemia <strong>atribuido proporcionalmente a los carbohidratos</strong> de cada ingrediente
+      </p>
     </div>
   </div>
 
@@ -162,23 +166,49 @@
   <p class="pat-no-data">Agregá ingredientes a tus comidas para ver este análisis.</p>
   {% else %}
 
-  <div id="chart-ingredientes" style="height:{{ [ingredientes|length * 34 + 60, 220] | max }}px;max-height:520px;"></div>
+  <!-- Explicación de la métrica -->
+  <div class="pat-insight pat-insight-info" style="margin-bottom:1rem;">
+    <i class="bi bi-info-circle"></i>
+    <div>
+      El <strong>Δ por 10g CH</strong> normaliza el impacto por porción: permite comparar
+      "arroz integral vs arroz blanco" aunque comas cantidades distintas.
+      Ingredientes sin carbohidratos (pollo, carne, verduras) siempre muestran 0 — correcto.
+    </div>
+  </div>
 
+  {% if ing_con_ch %}
+  <!-- Gráfica solo con ingredientes que tienen CH -->
+  <div id="chart-ingredientes"
+       style="height:{{ [ing_con_ch|length * 36 + 60, 180] | max }}px;max-height:500px;">
+  </div>
+  {% endif %}
+
+  <!-- Tabla con CH -->
+  {% if ing_con_ch %}
   <details class="pat-details" style="margin-top:.5rem;">
-    <summary>Ver tabla completa ({{ ingredientes | length }} ingredientes)</summary>
+    <summary>Ver tabla — con carbohidratos ({{ ing_con_ch | length }})</summary>
     <div style="overflow-x:auto;margin-top:.75rem;">
       <table class="pat-table">
         <thead>
-          <tr><th>Ingrediente</th><th>Δ prom. (mg/dL)</th><th>CH prom. (g)</th><th>Veces</th></tr>
+          <tr>
+            <th>Ingrediente</th>
+            <th title="Δ por cada 10g de carbohidratos — comparable entre alimentos">Δ / 10g CH ↕</th>
+            <th>CH prom.</th>
+            <th>Δ total atrib.</th>
+            <th>Veces</th>
+          </tr>
         </thead>
         <tbody>
-          {% for ing in ingredientes %}
+          {% for ing in ing_con_ch %}
           <tr>
-            <td>{{ ing.nombre }}</td>
-            <td class="{{ 'td-pos' if ing.avg_delta > 30 else ('td-mid' if ing.avg_delta > 10 else 'td-neg') }}">
-              <strong>{{ '+' if ing.avg_delta > 0 else '' }}{{ ing.avg_delta | int }}</strong>
+            <td><strong>{{ ing.nombre }}</strong></td>
+            <td class="{{ 'td-pos' if ing.delta_por_10g > 20 else ('td-mid' if ing.delta_por_10g > 8 else 'td-neg') }}">
+              <strong>+{{ ing.delta_por_10g | int }}</strong>
             </td>
             <td>{{ ing.avg_carbs }}g</td>
+            <td style="color:var(--text-muted)">
+              +{{ ing.avg_delta | int }} mg/dL
+            </td>
             <td style="color:var(--text-muted)">{{ ing.n }}x</td>
           </tr>
           {% endfor %}
@@ -186,6 +216,33 @@
       </table>
     </div>
   </details>
+  {% endif %}
+
+  <!-- Tabla sin CH (colapsada) -->
+  {% if ing_sin_ch %}
+  <details class="pat-details" style="margin-top:.4rem;">
+    <summary style="color:var(--text-muted)">
+      Proteínas y grasas sin impacto glucémico directo ({{ ing_sin_ch | length }})
+    </summary>
+    <div style="overflow-x:auto;margin-top:.5rem;">
+      <table class="pat-table">
+        <thead>
+          <tr><th>Ingrediente</th><th>CH</th><th>Veces</th></tr>
+        </thead>
+        <tbody>
+          {% for ing in ing_sin_ch %}
+          <tr>
+            <td>{{ ing.nombre }}</td>
+            <td style="color:var(--text-muted)">0g</td>
+            <td style="color:var(--text-muted)">{{ ing.n }}x</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {% endif %}
+
   {% endif %}
 </section>
 
@@ -405,28 +462,42 @@ if (RATIO_DATOS.length && document.getElementById('chart-ratio')) {
   Plotly.newPlot('chart-ratio', traces, layout, {responsive:true, displayModeBar:false});
 }
 
-// ── Gráfica ingredientes (horizontal bar) ────────────────────────────
-if (INGREDIENTES.length && document.getElementById('chart-ingredientes')) {
-  const top = INGREDIENTES.slice(0, 20);  // máx 20
-  const colores = top.map(i => i.avg_delta > 40 ? '#ef4444' : i.avg_delta > 20 ? '#f59e0b' : '#22c55e');
+// ── Gráfica ingredientes — solo los que tienen CH ────────────────────
+const ING_CON_CH = INGREDIENTES.filter(i => i.tiene_ch);
+if (ING_CON_CH.length && document.getElementById('chart-ingredientes')) {
+  const top = ING_CON_CH.slice(0, 20);
+  const colores = top.map(i =>
+    i.delta_por_10g > 20 ? '#ef4444' : i.delta_por_10g > 8 ? '#f59e0b' : '#22c55e'
+  );
   const trace = {
-    type: 'bar',
-    orientation: 'h',
+    type: 'bar', orientation: 'h',
     y: top.map(i => i.nombre),
-    x: top.map(i => i.avg_delta),
-    text: top.map(i => `+${i.avg_delta} mg/dL (${i.n}x)`),
+    x: top.map(i => i.delta_por_10g),
+    text: top.map(i => `+${i.delta_por_10g} mg/dL`),
     textposition: 'outside',
     marker: { color: colores },
-    hovertemplate: '<b>%{y}</b><br>Δ prom: +%{x} mg/dL<br>CH prom: ' +
-      top.map(i => i.avg_carbs+'g').join('|').split('|')[0] +
-      'g<extra></extra>',
+    hovertemplate:
+      '<b>%{y}</b><br>' +
+      'Δ / 10g CH: +%{x} mg/dL<br>' +
+      'CH prom: ' + top.map(i=>`${i.avg_carbs}g`).join('||').split('||')[0] +
+      '<extra></extra>',
+    customdata: top.map(i => [i.avg_carbs, i.n, i.avg_delta]),
+    hovertemplate:
+      '<b>%{y}</b><br>Δ por 10g CH: <b>+%{x} mg/dL</b>' +
+      '<br>CH prom: %{customdata[0]}g' +
+      '<br>Δ total atrib.: +%{customdata[2]} mg/dL' +
+      '<br>Registros: %{customdata[1]}x<extra></extra>',
   };
   const layout = {
-    margin: {t:10, b:35, l:130, r:60},
+    margin: {t:10, b:50, l:140, r:65},
     paper_bgcolor:'transparent', plot_bgcolor:'transparent',
     font: { color: getComputedStyle(document.body).getPropertyValue('--text') || '#fff', size: 11 },
-    xaxis: { title:'Δ glucemia promedio (mg/dL)', gridcolor:'rgba(255,255,255,.07)' },
+    xaxis: { title:'Δ glucemia por 10g de CH (mg/dL)', gridcolor:'rgba(255,255,255,.07)', rangemode:'tozero' },
     yaxis: { autorange:'reversed' },
+    shapes: [{type:'line', x0:10, x1:10, y0:0, y1:1, yref:'paper',
+              line:{color:'rgba(255,255,255,.25)', dash:'dot', width:1}}],
+    annotations: [{x:10, y:1.02, yref:'paper', xanchor:'center', yanchor:'bottom',
+                   text:'moderado', font:{size:9, color:'rgba(255,255,255,.4)'}, showarrow:false}],
   };
   Plotly.newPlot('chart-ingredientes', [trace], layout, {responsive:true, displayModeBar:false});
 }
