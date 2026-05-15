@@ -432,11 +432,12 @@ def _do_libre_sync(email: str, password: str) -> dict:
     for r in readings:
         if not r["value_mgdl"] or r["value_mgdl"] < 20:
             continue
-        # Verificar si ya existe (ventana ±2 min para evitar duplicados)
+        # Verificar si ya existe (ventana ±6 min para evitar duplicados,
+        # incluye desfases por cambios de timezone anteriores)
         ts = r["timestamp"]
         existe = GlucoseReading.query.filter(
-            GlucoseReading.timestamp >= ts - timedelta(minutes=2),
-            GlucoseReading.timestamp <= ts + timedelta(minutes=2),
+            GlucoseReading.timestamp >= ts - timedelta(minutes=6),
+            GlucoseReading.timestamp <= ts + timedelta(minutes=6),
         ).first()
         if not existe:
             db.session.add(GlucoseReading(
@@ -513,23 +514,33 @@ def api_debug_time():
 def api_fix_utc_timestamps():
     """
     Migración one-shot: corrige lecturas de LibreLink que quedaron guardadas
-    en UTC en lugar de hora local (defecto de 4h hacia adelante).
-    Identifica registros cgm_libre cuyo timestamp > ahora + 3h (imposible si
-    fuera hora local) y les resta 4 horas.
+    en UTC durante la ventana en que se usó FactoryTimestamp (commit 5931baa
+    → 5cab76e): entre 2026-05-14 04:55 y 2026-05-15 01:20 UTC.
+    Esas lecturas tienen timestamp 4h adelantado respecto a la hora local.
     """
-    now = datetime.now()
-    umbral = now + timedelta(hours=3)   # si está >3h en el futuro → es UTC
+    # Ventana exacta del bug (datetime strings, sin tzinfo)
+    ventana_ini = datetime(2026, 5, 14,  4, 55)
+    ventana_fin = datetime(2026, 5, 15,  1, 20)
+
     afectadas = GlucoseReading.query.filter(
         GlucoseReading.source == "cgm_libre",
-        GlucoseReading.timestamp > umbral,
+        GlucoseReading.timestamp >= ventana_ini,
+        GlucoseReading.timestamp <= ventana_fin,
     ).all()
+
     count = 0
     for r in afectadas:
         r.timestamp = r.timestamp - timedelta(hours=4)
         count += 1
+
     if count:
         db.session.commit()
-    return jsonify({"corregidas": count, "now_servidor": now.isoformat()})
+
+    return jsonify({
+        "corregidas": count,
+        "ventana": f"{ventana_ini} → {ventana_fin}",
+        "now_servidor": datetime.now().isoformat(),
+    })
 
 
 @app.route("/api/sync/libre/debug")
