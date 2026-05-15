@@ -491,6 +491,24 @@ def api_sync_libre_reset():
     return jsonify({"ok": True, "mensaje": "Caché borrado. Apretá ↺ para hacer login fresco."})
 
 
+@app.route("/api/debug/time")
+def api_debug_time():
+    """Debug: muestra timestamps del servidor y de la DB."""
+    import time as _time
+    now_utc   = datetime.now(timezone.utc)
+    now_naive = datetime.now()
+    meals     = Meal.query.order_by(Meal.timestamp.desc()).limit(3).all()
+    glucose   = GlucoseReading.query.order_by(GlucoseReading.timestamp.desc()).limit(3).all()
+    return jsonify({
+        "server_utc":       now_utc.isoformat(),
+        "server_naive_now": now_naive.isoformat(),
+        "server_tz_name":   _time.tzname,
+        "meals_raw": [{"id": m.id, "ts": m.timestamp.isoformat(), "name": m.name} for m in meals],
+        "glucose_raw": [{"id": r.id, "ts": r.timestamp.isoformat(), "val": r.value_mgdl} for r in glucose],
+        "tz_offset_received": request.args.get("tz_offset", "not_sent"),
+    })
+
+
 @app.route("/api/sync/libre/debug")
 def api_sync_libre_debug():
     """
