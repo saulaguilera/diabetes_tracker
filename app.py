@@ -2378,6 +2378,183 @@ def recomendaciones():
     return render_template("recomendaciones.html", recs=recs, dias=dias)
 
 
+# ─── Patrones Alimenticios ────────────────────────────────────────────────────
+
+def _analisis_ratio_insulina(days=30):
+    """
+    Para cada comida con bolus cercano y glucosa pre/post:
+    calcula ratio CH:Insulina, delta glucémico y outcome.
+    """
+    desde = datetime.now() - timedelta(days=days)
+    comidas = Meal.query.filter(
+        Meal.timestamp >= desde,
+        Meal.carbs_g > 5,
+    ).all()
+
+    datos = []
+    for c in comidas:
+        pre = (GlucoseReading.query
+               .filter(GlucoseReading.timestamp >= c.timestamp - timedelta(minutes=30),
+                       GlucoseReading.timestamp <= c.timestamp)
+               .order_by(GlucoseReading.timestamp.desc()).first())
+        posts = (GlucoseReading.query
+                 .filter(GlucoseReading.timestamp > c.timestamp + timedelta(minutes=60),
+                         GlucoseReading.timestamp <= c.timestamp + timedelta(hours=3))
+                 .all())
+        bolus = (InsulinDose.query
+                 .filter(InsulinDose.type == "bolus",
+                         InsulinDose.timestamp >= c.timestamp - timedelta(hours=1),
+                         InsulinDose.timestamp <= c.timestamp + timedelta(minutes=30))
+                 .all())
+
+        if not pre or not posts or not bolus:
+            continue
+
+        total_bolus = sum(d.units for d in bolus)
+        if total_bolus == 0:
+            continue
+
+        # Glucosa más cercana a las 2h post-comida
+        post = min(posts, key=lambda r: abs((r.timestamp - c.timestamp).total_seconds() - 7200))
+        delta   = round(post.value_mgdl - pre.value_mgdl, 0)
+        ratio   = round(c.carbs_g / total_bolus, 1)
+        hora    = c.timestamp.hour
+
+        if post.value_mgdl < 70:    outcome = "hipo"
+        elif post.value_mgdl > 180: outcome = "hiper"
+        else:                        outcome = "rango"
+
+        datos.append({
+            "name":    c.name,
+            "carbs":   round(c.carbs_g, 1),
+            "bolus":   round(total_bolus, 1),
+            "ratio":   ratio,
+            "pre":     int(pre.value_mgdl),
+            "post":    int(post.value_mgdl),
+            "delta":   delta,
+            "outcome": outcome,
+            "hora":    hora,
+        })
+    return datos
+
+
+def _analisis_ingredientes(days=60):
+    """
+    Por ingrediente (MealComponent): promedio de Δ glucémico
+    en comidas que lo contienen (mínimo 2 ocurrencias).
+    """
+    desde = datetime.now() - timedelta(days=days)
+    comidas = (Meal.query
+               .filter(Meal.timestamp >= desde)
+               .all())
+
+    from collections import defaultdict
+    por_ingrediente = defaultdict(list)
+
+    for c in comidas:
+        if not c.components:
+            continue
+        imp = _glucosa_impacto(c)
+        if imp is None:
+            continue
+        for comp in c.components:
+            nombre = comp.name.strip().lower()
+            if not nombre:
+                continue
+            por_ingrediente[nombre].append({
+                "delta":  imp["delta"],
+                "carbs":  comp.carbs_g or 0,
+                "meal":   c.name,
+            })
+
+    resultado = []
+    for nombre, items in por_ingrediente.items():
+        n = len(items)
+        avg_delta = round(sum(i["delta"] for i in items) / n, 0)
+        avg_carbs = round(sum(i["carbs"] for i in items) / n, 1)
+        resultado.append({
+            "nombre":    nombre.title(),
+            "avg_delta": avg_delta,
+            "avg_carbs": avg_carbs,
+            "n":         n,
+        })
+
+    return sorted(resultado, key=lambda x: x["avg_delta"], reverse=True)
+
+
+def _sensibilidad_horaria(days=60):
+    """
+    Promedio de Δ glucémico por hora del día (6 bloques de 4h).
+    """
+    desde = datetime.now() - timedelta(days=days)
+    comidas = Meal.query.filter(Meal.timestamp >= desde, Meal.carbs_g > 5).all()
+
+    from collections import defaultdict
+    por_bloque: dict = defaultdict(list)
+
+    for c in comidas:
+        imp = _glucosa_impacto(c)
+        if imp is None:
+            continue
+        bloque = c.timestamp.hour // 4   # 0–3h, 4–7h, 8–11h, 12–15h, 16–19h, 20–23h
+        por_bloque[bloque].append(imp["delta"])
+
+    labels = ["00–04h","04–08h","08–12h","12–16h","16–20h","20–24h"]
+    return [
+        {
+            "label":     labels[b],
+            "avg_delta": round(sum(por_bloque[b])/len(por_bloque[b]), 0) if por_bloque[b] else None,
+            "n":         len(por_bloque[b]),
+        }
+        for b in range(6)
+    ]
+
+
+@app.route("/patrones")
+@login_required
+def patrones():
+    days = request.args.get("dias", 30, type=int)
+
+    ratio_datos  = _analisis_ratio_insulina(days=days)
+    ingredientes = _analisis_ingredientes(days=max(days, 60))
+    horario      = _sensibilidad_horaria(days=max(days, 60))
+
+    # ── Resumen ratio ─────────────────────────────────────────────────────
+    ratio_resumen = {}
+    if ratio_datos:
+        from collections import Counter
+        ratios = [d["ratio"] for d in ratio_datos]
+        outcomes = [d["outcome"] for d in ratio_datos]
+        n_total  = len(ratio_datos)
+        ratio_resumen = {
+            "n":           n_total,
+            "mediana":     round(sorted(ratios)[n_total // 2], 1),
+            "pct_rango":   round(100 * outcomes.count("rango")  / n_total),
+            "pct_hiper":   round(100 * outcomes.count("hiper")  / n_total),
+            "pct_hipo":    round(100 * outcomes.count("hipo")   / n_total),
+            "avg_delta":   round(sum(d["delta"] for d in ratio_datos) / n_total, 0),
+        }
+        # Ratio con mayor % en rango (bucket de 2g)
+        from collections import defaultdict as _dd
+        buckets: dict = _dd(list)
+        for d in ratio_datos:
+            b = round(d["ratio"] / 2) * 2   # bucket de 2 en 2
+            buckets[b].append(d["outcome"])
+        mejor_ratio = max(
+            buckets.items(),
+            key=lambda kv: kv[1].count("rango") / len(kv[1]) if kv[1] else 0,
+        )
+        ratio_resumen["mejor_ratio"]  = mejor_ratio[0]
+        ratio_resumen["mejor_pct"]    = round(100 * mejor_ratio[1].count("rango") / len(mejor_ratio[1]))
+
+    return render_template("patrones.html",
+                           ratio_datos=ratio_datos,
+                           ratio_resumen=ratio_resumen,
+                           ingredientes=ingredientes,
+                           horario=horario,
+                           dias=days)
+
+
 # ─── Edición de registros ─────────────────────────────────────────────────────
 
 @app.route("/glucemia/<int:id>/editar", methods=["GET", "POST"])

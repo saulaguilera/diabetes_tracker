@@ -1,0 +1,434 @@
+{% extends "base.html" %}
+{% block title %}Patrones Alimenticios — DiabetesTracker{% endblock %}
+
+{% block content %}
+<div class="list-page-header">
+  <div>
+    <h1 class="list-page-title">
+      <span class="list-icon-wrap" style="background:rgba(99,102,241,.15)">
+        <i class="bi bi-graph-up-arrow" style="color:#6366f1"></i>
+      </span>
+      Patrones Alimenticios
+    </h1>
+    <p class="list-page-sub">Ratio insulina · Impacto por ingrediente · Sensibilidad horaria</p>
+  </div>
+  <div class="range-selector">
+    {% for d, lbl in [(14,'14d'),(30,'30d'),(60,'60d'),(90,'90d')] %}
+      <a href="{{ url_for('patrones', dias=d) }}"
+         class="range-pill {{ 'range-pill-active' if dias==d else '' }}"
+         style="{{ 'background:#6366f1;color:#fff;border-color:#6366f1' if dias==d else '' }}">
+        {{ lbl }}
+      </a>
+    {% endfor %}
+  </div>
+</div>
+
+{% if not ratio_datos and not ingredientes %}
+<div class="list-empty" style="margin-top:3rem;">
+  <i class="bi bi-graph-up-arrow" style="color:#6366f1;font-size:2.5rem;"></i>
+  <div class="list-empty-title">Sin datos suficientes</div>
+  <p style="color:var(--text-muted);font-size:.9rem;max-width:400px;text-align:center;">
+    Para ver patrones necesitás comidas con ingredientes registrados, una dosis de bolus cercana
+    y lecturas de glucosa antes y después de comer.
+  </p>
+</div>
+{% else %}
+
+<!-- ══════════════════════════════════════════════════════
+     SECCIÓN 1: RATIO CH:INSULINA
+══════════════════════════════════════════════════════ -->
+<section class="pat-section">
+  <div class="pat-section-header">
+    <div class="pat-section-icon" style="background:rgba(245,158,11,.12);color:#d97706;">
+      <i class="bi bi-calculator"></i>
+    </div>
+    <div>
+      <h2 class="pat-section-title">Ratio CH : Insulina</h2>
+      <p class="pat-section-sub">¿Tu dosis de bolus es precisa?</p>
+    </div>
+  </div>
+
+  {% if not ratio_datos %}
+  <p class="pat-no-data">Sin suficientes comidas con bolus y glucosa registrados.</p>
+  {% else %}
+
+  <!-- KPIs -->
+  <div class="pat-kpi-row">
+    <div class="pat-kpi">
+      <div class="pat-kpi-val">1 : {{ ratio_resumen.mediana }}</div>
+      <div class="pat-kpi-lbl">Ratio mediano<br><small>1U cada {{ ratio_resumen.mediana }}g CH</small></div>
+    </div>
+    <div class="pat-kpi pat-kpi-green">
+      <div class="pat-kpi-val">{{ ratio_resumen.pct_rango }}%</div>
+      <div class="pat-kpi-lbl">En rango 2h post</div>
+    </div>
+    <div class="pat-kpi pat-kpi-red">
+      <div class="pat-kpi-val">{{ ratio_resumen.pct_hiper }}%</div>
+      <div class="pat-kpi-lbl">Hiperglucemia</div>
+    </div>
+    <div class="pat-kpi pat-kpi-orange">
+      <div class="pat-kpi-val">{{ ratio_resumen.pct_hipo }}%</div>
+      <div class="pat-kpi-lbl">Hipoglucemia</div>
+    </div>
+    <div class="pat-kpi">
+      <div class="pat-kpi-val" style="color:{{ '#ef4444' if ratio_resumen.avg_delta > 0 else '#22c55e' }}">
+        {{ '+' if ratio_resumen.avg_delta > 0 else '' }}{{ ratio_resumen.avg_delta | int }} mg/dL
+      </div>
+      <div class="pat-kpi-lbl">Δ promedio 2h</div>
+    </div>
+  </div>
+
+  <!-- Insight -->
+  {% if ratio_resumen.mejor_ratio %}
+  <div class="pat-insight {{ 'pat-insight-warn' if ratio_resumen.pct_rango < 60 else 'pat-insight-ok' }}">
+    <i class="bi bi-{{ 'exclamation-triangle' if ratio_resumen.pct_rango < 60 else 'check-circle' }}"></i>
+    <div>
+      {% if ratio_resumen.pct_rango >= 70 %}
+        Tu ratio actual funciona bien — <strong>{{ ratio_resumen.pct_rango }}% en rango</strong>.
+        El ratio con mejor resultado histórico es <strong>1:{{ ratio_resumen.mejor_ratio }}g</strong>
+        ({{ ratio_resumen.mejor_pct }}% en rango).
+      {% elif ratio_resumen.pct_hiper > ratio_resumen.pct_hipo %}
+        Estás terminando <strong>en hiper el {{ ratio_resumen.pct_hiper }}%</strong> de las veces.
+        Tu ratio puede ser muy permisivo — considerá ajustarlo a <strong>1:{{ ratio_resumen.mejor_ratio }}g</strong>
+        ({{ ratio_resumen.mejor_pct }}% en rango histórico). Consultá con tu médico.
+      {% else %}
+        Estás terminando <strong>en hipo el {{ ratio_resumen.pct_hipo }}%</strong> de las veces.
+        Tu ratio puede ser muy agresivo — el histórico sugiere <strong>1:{{ ratio_resumen.mejor_ratio }}g</strong>
+        ({{ ratio_resumen.mejor_pct }}% en rango). Consultá con tu médico antes de ajustar.
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Gráfica ratio vs outcome -->
+  <div id="chart-ratio" style="height:260px;margin-top:1rem;"></div>
+
+  <!-- Tabla detalle -->
+  <details class="pat-details">
+    <summary>Ver detalle por comida ({{ ratio_datos | length }} registros)</summary>
+    <div style="overflow-x:auto;margin-top:.75rem;">
+      <table class="pat-table">
+        <thead>
+          <tr>
+            <th>Comida</th>
+            <th>CH</th>
+            <th>Bolus</th>
+            <th>Ratio</th>
+            <th>Pre</th>
+            <th>Post 2h</th>
+            <th>Δ</th>
+            <th>Resultado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in ratio_datos | sort(attribute='ratio') %}
+          <tr>
+            <td>{{ d.name }}</td>
+            <td>{{ d.carbs }}g</td>
+            <td>{{ d.bolus }}U</td>
+            <td><strong>1:{{ d.ratio }}</strong></td>
+            <td>{{ d.pre }}</td>
+            <td>{{ d.post }}</td>
+            <td class="{{ 'td-pos' if d.delta > 20 else ('td-neg' if d.delta < -10 else '') }}">
+              {{ '+' if d.delta > 0 else '' }}{{ d.delta | int }}
+            </td>
+            <td>
+              <span class="outcome-badge outcome-{{ d.outcome }}">{{ d.outcome }}</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {% endif %}
+</section>
+
+<!-- ══════════════════════════════════════════════════════
+     SECCIÓN 2: IMPACTO POR INGREDIENTE
+══════════════════════════════════════════════════════ -->
+<section class="pat-section">
+  <div class="pat-section-header">
+    <div class="pat-section-icon" style="background:rgba(34,197,94,.12);color:#16a34a;">
+      <i class="bi bi-egg-fried"></i>
+    </div>
+    <div>
+      <h2 class="pat-section-title">Impacto por Ingrediente</h2>
+      <p class="pat-section-sub">Δ glucemia promedio 2h tras comidas que contienen cada ingrediente</p>
+    </div>
+  </div>
+
+  {% if not ingredientes %}
+  <p class="pat-no-data">Agregá ingredientes a tus comidas para ver este análisis.</p>
+  {% else %}
+
+  <div id="chart-ingredientes" style="height:{{ [ingredientes|length * 34 + 60, 220] | max }}px;max-height:520px;"></div>
+
+  <details class="pat-details" style="margin-top:.5rem;">
+    <summary>Ver tabla completa ({{ ingredientes | length }} ingredientes)</summary>
+    <div style="overflow-x:auto;margin-top:.75rem;">
+      <table class="pat-table">
+        <thead>
+          <tr><th>Ingrediente</th><th>Δ prom. (mg/dL)</th><th>CH prom. (g)</th><th>Veces</th></tr>
+        </thead>
+        <tbody>
+          {% for ing in ingredientes %}
+          <tr>
+            <td>{{ ing.nombre }}</td>
+            <td class="{{ 'td-pos' if ing.avg_delta > 30 else ('td-mid' if ing.avg_delta > 10 else 'td-neg') }}">
+              <strong>{{ '+' if ing.avg_delta > 0 else '' }}{{ ing.avg_delta | int }}</strong>
+            </td>
+            <td>{{ ing.avg_carbs }}g</td>
+            <td style="color:var(--text-muted)">{{ ing.n }}x</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {% endif %}
+</section>
+
+<!-- ══════════════════════════════════════════════════════
+     SECCIÓN 3: SENSIBILIDAD HORARIA
+══════════════════════════════════════════════════════ -->
+<section class="pat-section">
+  <div class="pat-section-header">
+    <div class="pat-section-icon" style="background:rgba(139,92,246,.12);color:#7c3aed;">
+      <i class="bi bi-clock-history"></i>
+    </div>
+    <div>
+      <h2 class="pat-section-title">Sensibilidad por Hora</h2>
+      <p class="pat-section-sub">¿A qué hora los carbohidratos te afectan más?</p>
+    </div>
+  </div>
+
+  {% set bloques_con_datos = horario | selectattr('avg_delta', 'ne', None) | list %}
+  {% if not bloques_con_datos %}
+  <p class="pat-no-data">Sin datos suficientes para el análisis horario.</p>
+  {% else %}
+
+  <!-- Bloques visuales -->
+  <div class="hora-grid">
+    {% set max_delta = bloques_con_datos | map(attribute='avg_delta') | max %}
+    {% for bloque in horario %}
+    <div class="hora-bloque {{ 'hora-bloque-vacio' if bloque.avg_delta is none else '' }}">
+      <div class="hora-label">{{ bloque.label }}</div>
+      {% if bloque.avg_delta is not none %}
+        {% set intensidad = [(bloque.avg_delta / max_delta * 100) | int, 10] | max %}
+        <div class="hora-bar-wrap">
+          <div class="hora-bar"
+               style="height:{{ intensidad }}%;background:{{ '#ef4444' if bloque.avg_delta > 40 else ('#f59e0b' if bloque.avg_delta > 20 else '#22c55e') }};">
+          </div>
+        </div>
+        <div class="hora-delta {{ 'hora-alto' if bloque.avg_delta > 40 else ('hora-med' if bloque.avg_delta > 20 else 'hora-bajo') }}">
+          +{{ bloque.avg_delta | int }}
+        </div>
+        <div class="hora-n">{{ bloque.n }} datos</div>
+      {% else %}
+        <div class="hora-bar-wrap"><div class="hora-bar hora-bar-empty"></div></div>
+        <div class="hora-delta" style="color:var(--text-muted)">—</div>
+        <div class="hora-n">sin datos</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  {% set max_bloque = bloques_con_datos | max(attribute='avg_delta') %}
+  {% set min_bloque = bloques_con_datos | min(attribute='avg_delta') %}
+  <div class="pat-insight pat-insight-info" style="margin-top:1rem;">
+    <i class="bi bi-info-circle"></i>
+    <div>
+      Mayor sensibilidad en <strong>{{ max_bloque.label }}</strong>
+      (+{{ max_bloque.avg_delta | int }} mg/dL promedio) —
+      menor en <strong>{{ min_bloque.label }}</strong>
+      (+{{ min_bloque.avg_delta | int }} mg/dL).
+      {% if max_bloque.avg_delta - min_bloque.avg_delta > 20 %}
+        La diferencia es relevante: considerá ajustar el ratio según la hora del día.
+      {% else %}
+        La sensibilidad es bastante uniforme durante el día.
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</section>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{{ list_styles() }}
+<style>
+/* ── Layout ── */
+.pat-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+.pat-section-header {
+  display: flex; align-items: center; gap: .85rem; margin-bottom: 1rem;
+}
+.pat-section-icon {
+  width: 40px; height: 40px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem; flex-shrink: 0;
+}
+.pat-section-title { font-size: 1rem; font-weight: 700; margin: 0; }
+.pat-section-sub   { font-size: .78rem; color: var(--text-muted); margin: 0; }
+.pat-no-data       { color: var(--text-muted); font-size: .88rem; padding: .5rem 0; }
+
+/* ── KPIs ── */
+.pat-kpi-row {
+  display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: .85rem;
+}
+.pat-kpi {
+  flex: 1; min-width: 90px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 14px; padding: .65rem .85rem; text-align: center;
+}
+.pat-kpi-val { font-size: 1.35rem; font-weight: 800; line-height: 1.1; color: var(--text); }
+.pat-kpi-lbl { font-size: .68rem; color: var(--text-muted); margin-top: .2rem; line-height: 1.3; }
+.pat-kpi-green .pat-kpi-val { color: #22c55e; }
+.pat-kpi-red   .pat-kpi-val { color: #ef4444; }
+.pat-kpi-orange .pat-kpi-val { color: #f59e0b; }
+
+/* ── Insights ── */
+.pat-insight {
+  display: flex; align-items: flex-start; gap: .65rem;
+  padding: .75rem 1rem; border-radius: 12px;
+  font-size: .84rem; line-height: 1.5;
+}
+.pat-insight i { font-size: 1rem; flex-shrink: 0; margin-top: .05rem; }
+.pat-insight-ok   { background: rgba(34,197,94,.1);   border: 1px solid rgba(34,197,94,.25);  color: #16a34a; }
+.pat-insight-warn { background: rgba(245,158,11,.1);  border: 1px solid rgba(245,158,11,.3);  color: #b45309; }
+.pat-insight-info { background: rgba(99,102,241,.08); border: 1px solid rgba(99,102,241,.2);  color: #6366f1; }
+.pat-insight strong { font-weight: 700; }
+
+/* ── Tabla ── */
+.pat-details { margin-top: .75rem; }
+.pat-details summary {
+  cursor: pointer; font-size: .82rem; color: var(--text-muted);
+  padding: .4rem 0; user-select: none;
+}
+.pat-table {
+  width: 100%; border-collapse: collapse; font-size: .82rem;
+}
+.pat-table th {
+  text-align: left; padding: .4rem .6rem;
+  color: var(--text-muted); font-weight: 600; font-size: .72rem;
+  text-transform: uppercase; letter-spacing: .04em;
+  border-bottom: 1px solid var(--border);
+}
+.pat-table td {
+  padding: .38rem .6rem; border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+.td-pos  { color: #ef4444; font-weight: 700; }
+.td-mid  { color: #f59e0b; font-weight: 700; }
+.td-neg  { color: #22c55e; font-weight: 700; }
+
+/* ── Outcome badges ── */
+.outcome-badge {
+  font-size: .7rem; font-weight: 700; padding: .15em .55em;
+  border-radius: 20px; text-transform: uppercase;
+}
+.outcome-rango { background: rgba(34,197,94,.15); color: #16a34a; }
+.outcome-hiper { background: rgba(239,68,68,.15);  color: #dc2626; }
+.outcome-hipo  { background: rgba(245,158,11,.15); color: #d97706; }
+
+/* ── Sensibilidad horaria ── */
+.hora-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: .5rem; margin-top: .5rem;
+}
+@media (max-width: 576px) {
+  .hora-grid { grid-template-columns: repeat(3, 1fr); }
+}
+.hora-bloque {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px; padding: .65rem .5rem;
+  text-align: center; display: flex; flex-direction: column; align-items: center;
+}
+.hora-label  { font-size: .68rem; color: var(--text-muted); font-weight: 600; margin-bottom: .4rem; }
+.hora-bar-wrap {
+  height: 60px; width: 28px;
+  display: flex; align-items: flex-end; justify-content: center;
+  margin-bottom: .3rem;
+}
+.hora-bar {
+  width: 20px; border-radius: 6px 6px 0 0;
+  transition: height .3s;
+}
+.hora-bar-empty { height: 4px; background: var(--border); }
+.hora-delta  { font-size: .88rem; font-weight: 800; }
+.hora-alto   { color: #ef4444; }
+.hora-med    { color: #f59e0b; }
+.hora-bajo   { color: #22c55e; }
+.hora-n      { font-size: .65rem; color: var(--text-muted); margin-top: .15rem; }
+
+/* Range pills override */
+.range-pill { border-color: rgba(99,102,241,.3); color: #6366f1; background: rgba(99,102,241,.06); }
+.range-pill:hover { background: rgba(99,102,241,.15); }
+</style>
+
+<script>
+const RATIO_DATOS    = {{ ratio_datos | tojson }};
+const INGREDIENTES   = {{ ingredientes | tojson }};
+
+// ── Gráfica ratio vs outcome ─────────────────────────────────────────
+if (RATIO_DATOS.length && document.getElementById('chart-ratio')) {
+  const colores = {rango:'#22c55e', hiper:'#ef4444', hipo:'#f59e0b'};
+  const grupos  = ['rango','hiper','hipo'];
+  const traces  = grupos.map(g => ({
+    x: RATIO_DATOS.filter(d => d.outcome===g).map(d => d.ratio),
+    y: RATIO_DATOS.filter(d => d.outcome===g).map(d => d.delta),
+    text: RATIO_DATOS.filter(d => d.outcome===g).map(d => d.name),
+    mode: 'markers',
+    name: g,
+    marker: { color: colores[g], size: 9, opacity: .85, line:{color:'#fff',width:1} },
+    hovertemplate: '<b>%{text}</b><br>Ratio 1:%{x}g<br>Δ %{y} mg/dL<extra></extra>',
+  }));
+  const layout = {
+    margin: {t:10, b:45, l:45, r:10},
+    paper_bgcolor:'transparent', plot_bgcolor:'transparent',
+    font: { color: getComputedStyle(document.body).getPropertyValue('--text') || '#fff', size: 11 },
+    xaxis: { title: 'Ratio (g CH por 1U insulina)', gridcolor:'rgba(255,255,255,.07)', zeroline:false },
+    yaxis: { title: 'Δ glucosa 2h (mg/dL)', gridcolor:'rgba(255,255,255,.07)', zeroline:true, zerolinecolor:'rgba(255,255,255,.15)' },
+    legend: { orientation:'h', y:-0.25 },
+    shapes: [
+      {type:'line', x0:0, x1:30, y0:0, y1:0, line:{color:'rgba(255,255,255,.2)', dash:'dot'}},
+    ],
+  };
+  Plotly.newPlot('chart-ratio', traces, layout, {responsive:true, displayModeBar:false});
+}
+
+// ── Gráfica ingredientes (horizontal bar) ────────────────────────────
+if (INGREDIENTES.length && document.getElementById('chart-ingredientes')) {
+  const top = INGREDIENTES.slice(0, 20);  // máx 20
+  const colores = top.map(i => i.avg_delta > 40 ? '#ef4444' : i.avg_delta > 20 ? '#f59e0b' : '#22c55e');
+  const trace = {
+    type: 'bar',
+    orientation: 'h',
+    y: top.map(i => i.nombre),
+    x: top.map(i => i.avg_delta),
+    text: top.map(i => `+${i.avg_delta} mg/dL (${i.n}x)`),
+    textposition: 'outside',
+    marker: { color: colores },
+    hovertemplate: '<b>%{y}</b><br>Δ prom: +%{x} mg/dL<br>CH prom: ' +
+      top.map(i => i.avg_carbs+'g').join('|').split('|')[0] +
+      'g<extra></extra>',
+  };
+  const layout = {
+    margin: {t:10, b:35, l:130, r:60},
+    paper_bgcolor:'transparent', plot_bgcolor:'transparent',
+    font: { color: getComputedStyle(document.body).getPropertyValue('--text') || '#fff', size: 11 },
+    xaxis: { title:'Δ glucemia promedio (mg/dL)', gridcolor:'rgba(255,255,255,.07)' },
+    yaxis: { autorange:'reversed' },
+  };
+  Plotly.newPlot('chart-ingredientes', [trace], layout, {responsive:true, displayModeBar:false});
+}
+</script>
+{% endblock %}
