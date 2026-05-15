@@ -145,108 +145,77 @@
 </section>
 
 <!-- ══════════════════════════════════════════════════════
-     SECCIÓN 2: IMPACTO POR INGREDIENTE
+     SECCIÓN 2: MACROS VS GLUCOSA
 ══════════════════════════════════════════════════════ -->
-{% set ing_con_ch  = ingredientes | selectattr('tiene_ch') | list %}
-{% set ing_sin_ch  = ingredientes | rejectattr('tiene_ch') | list %}
 <section class="pat-section">
   <div class="pat-section-header">
     <div class="pat-section-icon" style="background:rgba(34,197,94,.12);color:#16a34a;">
-      <i class="bi bi-egg-fried"></i>
+      <i class="bi bi-pie-chart-fill"></i>
     </div>
     <div>
-      <h2 class="pat-section-title">Impacto por Ingrediente</h2>
-      <p class="pat-section-sub">
-        Δ glucemia <strong>atribuido proporcionalmente a los carbohidratos</strong> de cada ingrediente
-      </p>
+      <h2 class="pat-section-title">Macros vs Glucosa</h2>
+      <p class="pat-section-sub">Respuesta glucémica según el perfil de macronutrientes de la comida completa</p>
     </div>
   </div>
 
-  {% if not ingredientes %}
-  <p class="pat-no-data">Agregá ingredientes a tus comidas para ver este análisis.</p>
+  {% if not macros.datos %}
+  <p class="pat-no-data">Sin suficientes comidas con glucosa pre y post registrada.</p>
   {% else %}
 
-  <!-- Explicación de la métrica -->
-  <div class="pat-insight pat-insight-info" style="margin-bottom:1rem;">
-    <i class="bi bi-info-circle"></i>
+  <!-- Insight principal: umbral de CH -->
+  {% if macros.umbral_ch %}
+  <div class="pat-insight pat-insight-warn" style="margin-bottom:1rem;">
+    <i class="bi bi-exclamation-triangle"></i>
     <div>
-      El <strong>Δ por 10g CH</strong> es el impacto glucémico atribuido proporcionalmente
-      a los carbohidratos del ingrediente, normalizado para poder comparar porciones distintas.
-      Se necesitan <strong>≥ 3 registros</strong> para que el dato sea confiable —
-      los que tienen menos aparecen marcados con <span class="conf-baja-badge">pocos datos</span>.
+      A partir de <strong>~{{ macros.umbral_ch }}g de CH</strong> por comida,
+      el porcentaje en rango cae por debajo del 60%.
+      Las comidas con menos CH muestran mejor control.
     </div>
-  </div>
-
-  {% if ing_con_ch %}
-  <!-- Gráfica solo con ingredientes que tienen CH -->
-  <div id="chart-ingredientes"
-       style="height:{{ [ing_con_ch|length * 36 + 60, 180] | max }}px;max-height:500px;">
   </div>
   {% endif %}
 
-  <!-- Tabla con CH -->
-  {% if ing_con_ch %}
-  <details class="pat-details" style="margin-top:.5rem;">
-    <summary>Ver tabla — con carbohidratos ({{ ing_con_ch | length }})</summary>
-    <div style="overflow-x:auto;margin-top:.75rem;">
-      <table class="pat-table">
-        <thead>
-          <tr>
-            <th>Ingrediente</th>
-            <th title="Δ por cada 10g de carbohidratos — comparable entre alimentos">Δ / 10g CH ↕</th>
-            <th>CH prom.</th>
-            <th>Δ total atrib.</th>
-            <th>Veces</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for ing in ing_con_ch %}
-          <tr class="{{ 'tr-baja-conf' if ing.confianza == 'baja' else '' }}">
-            <td>
-              <strong>{{ ing.nombre }}</strong>
-              {% if ing.confianza == 'baja' %}
-                <span class="conf-baja-badge">pocos datos</span>
-              {% endif %}
-            </td>
-            <td class="{{ 'td-pos' if ing.delta_por_10g > 20 else ('td-mid' if ing.delta_por_10g > 8 else 'td-neg') }}">
-              {% if ing.confianza == 'baja' %}
-                <span style="opacity:.5">~</span>
-              {% endif %}
-              <strong>+{{ ing.delta_por_10g | int }}</strong>
-            </td>
-            <td>{{ ing.avg_carbs }}g</td>
-            <td style="color:var(--text-muted)">+{{ ing.avg_delta | int }} mg/dL</td>
-            <td style="color:var(--text-muted)">{{ ing.n }}x</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+  <!-- KPIs por rango de CH -->
+  {% if macros.rangos_ch %}
+  <div style="margin-bottom:1rem;">
+    <div style="font-size:.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem;">
+      % En rango según carbohidratos de la comida
     </div>
-  </details>
+    <div class="ch-rangos-grid">
+      {% for r in macros.rangos_ch %}
+      <div class="ch-rango-card">
+        <div class="ch-rango-label">{{ r.label }}</div>
+        <div class="ch-rango-pct" style="color:{{ '#22c55e' if r.pct_rango >= 70 else ('#f59e0b' if r.pct_rango >= 50 else '#ef4444') }}">
+          {{ r.pct_rango }}%
+        </div>
+        <div class="ch-rango-sub">en rango</div>
+        <div class="ch-rango-bar-bg">
+          <div class="ch-rango-bar-fill"
+               style="width:{{ r.pct_rango }}%;background:{{ '#22c55e' if r.pct_rango >= 70 else ('#f59e0b' if r.pct_rango >= 50 else '#ef4444') }};">
+          </div>
+        </div>
+        <div class="ch-rango-n">{{ r.n }} comidas · Δ prom {{ '+' if r.avg_delta > 0 else '' }}{{ r.avg_delta | int }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
   {% endif %}
 
-  <!-- Tabla sin CH (colapsada) -->
-  {% if ing_sin_ch %}
-  <details class="pat-details" style="margin-top:.4rem;">
-    <summary style="color:var(--text-muted)">
-      Proteínas y grasas sin impacto glucémico directo ({{ ing_sin_ch | length }})
-    </summary>
-    <div style="overflow-x:auto;margin-top:.5rem;">
-      <table class="pat-table">
-        <thead>
-          <tr><th>Ingrediente</th><th>CH</th><th>Veces</th></tr>
-        </thead>
-        <tbody>
-          {% for ing in ing_sin_ch %}
-          <tr>
-            <td>{{ ing.nombre }}</td>
-            <td style="color:var(--text-muted)">0g</td>
-            <td style="color:var(--text-muted)">{{ ing.n }}x</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+  <!-- Scatter CH vs Δ glucosa -->
+  <div style="font-size:.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin:.75rem 0 .3rem;">
+    Carbohidratos vs variación glucémica por comida
+  </div>
+  <div id="chart-ch-delta" style="height:280px;"></div>
+
+  <!-- Scatter Proteína + Grasa como moduladores -->
+  {% set datos_con_prot = macros.datos | selectattr('protein', 'gt', 1) | list %}
+  {% if datos_con_prot | length >= 5 %}
+  <details class="pat-details" style="margin-top:.75rem;">
+    <summary>Ver efecto de proteína y grasa sobre el spike</summary>
+    <div id="chart-prot-delta" style="height:260px;margin-top:.5rem;"></div>
+    <p style="font-size:.75rem;color:var(--text-muted);margin-top:.4rem;">
+      Cada punto es una comida. Si los puntos con más proteína (tamaño mayor) tienden a estar
+      más abajo, la proteína está modulando el spike glucémico.
+    </p>
   </details>
   {% endif %}
 
@@ -433,14 +402,21 @@
 .hora-bajo   { color: #22c55e; }
 .hora-n      { font-size: .65rem; color: var(--text-muted); margin-top: .15rem; }
 
-/* Confianza baja */
-.conf-baja-badge {
-  font-size: .65rem; font-weight: 600; padding: .1em .45em;
-  border-radius: 20px; background: rgba(148,163,184,.15);
-  color: var(--text-muted); border: 1px solid rgba(148,163,184,.25);
-  margin-left: .3rem; vertical-align: middle;
+/* Rangos de CH */
+.ch-rangos-grid {
+  display: grid; grid-template-columns: repeat(4,1fr); gap:.6rem;
 }
-.tr-baja-conf { opacity: .65; }
+@media(max-width:576px){ .ch-rangos-grid{grid-template-columns:repeat(2,1fr);} }
+.ch-rango-card {
+  background:var(--surface2); border:1px solid var(--border);
+  border-radius:14px; padding:.75rem .65rem; text-align:center;
+}
+.ch-rango-label { font-size:.72rem; font-weight:700; color:var(--text-muted); margin-bottom:.2rem; }
+.ch-rango-pct   { font-size:1.6rem; font-weight:800; line-height:1; }
+.ch-rango-sub   { font-size:.65rem; color:var(--text-muted); margin-bottom:.4rem; }
+.ch-rango-bar-bg  { height:5px; background:var(--border); border-radius:3px; margin:.4rem 0 .3rem; }
+.ch-rango-bar-fill{ height:100%; border-radius:3px; transition:width .4s; }
+.ch-rango-n { font-size:.65rem; color:var(--text-muted); }
 
 /* Range pills override */
 .range-pill { border-color: rgba(99,102,241,.3); color: #6366f1; background: rgba(99,102,241,.06); }
@@ -448,8 +424,8 @@
 </style>
 
 <script>
-const RATIO_DATOS    = {{ ratio_datos | tojson }};
-const INGREDIENTES   = {{ ingredientes | tojson }};
+const RATIO_DATOS  = {{ ratio_datos | tojson }};
+const MACROS_DATOS = {{ macros.datos | tojson }};
 
 // ── Gráfica ratio vs outcome ─────────────────────────────────────────
 if (RATIO_DATOS.length && document.getElementById('chart-ratio')) {
@@ -478,45 +454,57 @@ if (RATIO_DATOS.length && document.getElementById('chart-ratio')) {
   Plotly.newPlot('chart-ratio', traces, layout, {responsive:true, displayModeBar:false});
 }
 
-// ── Gráfica ingredientes — solo los que tienen CH ────────────────────
-const ING_CON_CH = INGREDIENTES.filter(i => i.tiene_ch);
-if (ING_CON_CH.length && document.getElementById('chart-ingredientes')) {
-  // Solo graficar ingredientes con confianza "ok" (≥3 obs)
-  const top = ING_CON_CH.filter(i => i.confianza === 'ok').slice(0, 20);
-  const colores = top.map(i =>
-    i.delta_por_10g > 20 ? '#ef4444' : i.delta_por_10g > 8 ? '#f59e0b' : '#22c55e'
-  );
-  const trace = {
-    type: 'bar', orientation: 'h',
-    y: top.map(i => i.nombre),
-    x: top.map(i => i.delta_por_10g),
-    text: top.map(i => `+${i.delta_por_10g} mg/dL`),
-    textposition: 'outside',
-    marker: { color: colores },
-    hovertemplate:
-      '<b>%{y}</b><br>' +
-      'Δ / 10g CH: +%{x} mg/dL<br>' +
-      'CH prom: ' + top.map(i=>`${i.avg_carbs}g`).join('||').split('||')[0] +
-      '<extra></extra>',
-    customdata: top.map(i => [i.avg_carbs, i.n, i.avg_delta]),
-    hovertemplate:
-      '<b>%{y}</b><br>Δ por 10g CH: <b>+%{x} mg/dL</b>' +
-      '<br>CH prom: %{customdata[0]}g' +
-      '<br>Δ total atrib.: +%{customdata[2]} mg/dL' +
-      '<br>Registros: %{customdata[1]}x<extra></extra>',
-  };
-  const layout = {
-    margin: {t:10, b:50, l:140, r:65},
-    paper_bgcolor:'transparent', plot_bgcolor:'transparent',
-    font: { color: getComputedStyle(document.body).getPropertyValue('--text') || '#fff', size: 11 },
-    xaxis: { title:'Δ glucemia por 10g de CH (mg/dL)', gridcolor:'rgba(255,255,255,.07)', rangemode:'tozero' },
-    yaxis: { autorange:'reversed' },
-    shapes: [{type:'line', x0:10, x1:10, y0:0, y1:1, yref:'paper',
-              line:{color:'rgba(255,255,255,.25)', dash:'dot', width:1}}],
-    annotations: [{x:10, y:1.02, yref:'paper', xanchor:'center', yanchor:'bottom',
-                   text:'moderado', font:{size:9, color:'rgba(255,255,255,.4)'}, showarrow:false}],
-  };
-  Plotly.newPlot('chart-ingredientes', [trace], layout, {responsive:true, displayModeBar:false});
+// ── Scatter CH vs Δ glucosa ──────────────────────────────────────────
+if (MACROS_DATOS.length && document.getElementById('chart-ch-delta')) {
+  const colores = {rango:'#22c55e', hiper:'#ef4444', hipo:'#f59e0b'};
+  const labels  = {rango:'En rango', hiper:'Hiperglucemia', hipo:'Hipoglucemia'};
+  const traces  = ['rango','hiper','hipo'].map(g => {
+    const pts = MACROS_DATOS.filter(d => d.outcome === g);
+    return {
+      x: pts.map(d => d.carbs),
+      y: pts.map(d => d.delta),
+      text: pts.map(d => d.name),
+      mode: 'markers', name: labels[g],
+      marker:{color:colores[g], size:10, opacity:.8, line:{color:'#1e293b',width:1}},
+      hovertemplate:'<b>%{text}</b><br>CH: %{x}g · Δ: %{y} mg/dL<extra></extra>',
+    };
+  });
+  // Línea de tendencia
+  const xs = MACROS_DATOS.map(d=>d.carbs), ys = MACROS_DATOS.map(d=>d.delta);
+  const n=xs.length, mx=xs.reduce((a,b)=>a+b,0)/n, my=ys.reduce((a,b)=>a+b,0)/n;
+  const slope = xs.reduce((s,x,i)=>s+(x-mx)*(ys[i]-my),0)/xs.reduce((s,x)=>s+(x-mx)**2,0.001);
+  const xmin=Math.min(...xs), xmax=Math.max(...xs);
+  traces.push({x:[xmin,xmax],y:[slope*xmin+my-slope*mx,slope*xmax+my-slope*mx],
+    mode:'lines',name:'Tendencia',line:{color:'rgba(255,255,255,.25)',dash:'dot',width:2},hoverinfo:'skip'});
+  Plotly.newPlot('chart-ch-delta', traces, {
+    margin:{t:10,b:50,l:55,r:10}, paper_bgcolor:'transparent', plot_bgcolor:'transparent',
+    font:{color:'#94a3b8',size:11},
+    xaxis:{title:'Carbohidratos (g)',gridcolor:'rgba(255,255,255,.07)',zeroline:false},
+    yaxis:{title:'Δ glucosa 2h (mg/dL)',gridcolor:'rgba(255,255,255,.07)',zeroline:true,zerolinecolor:'rgba(255,255,255,.15)'},
+    legend:{orientation:'h',y:-0.28},
+  },{responsive:true,displayModeBar:false});
+}
+
+// ── Scatter proteína vs Δ (tamaño = grasa) ───────────────────────────
+if (MACROS_DATOS.length && document.getElementById('chart-prot-delta')) {
+  const colores={rango:'#22c55e',hiper:'#ef4444',hipo:'#f59e0b'};
+  const maxFat=Math.max(...MACROS_DATOS.map(d=>d.fat||1));
+  const traces=['rango','hiper','hipo'].map(g=>{
+    const pts=MACROS_DATOS.filter(d=>d.outcome===g&&d.protein>1);
+    return {
+      x:pts.map(d=>d.protein), y:pts.map(d=>d.delta), text:pts.map(d=>d.name),
+      customdata:pts.map(d=>d.fat), mode:'markers', name:g,
+      marker:{color:colores[g],size:pts.map(d=>8+(d.fat/maxFat)*18),opacity:.75,line:{color:'#1e293b',width:1}},
+      hovertemplate:'<b>%{text}</b><br>Prot: %{x}g · Grasa: %{customdata}g<br>Δ: %{y} mg/dL<extra></extra>',
+    };
+  });
+  Plotly.newPlot('chart-prot-delta',traces,{
+    margin:{t:10,b:50,l:55,r:10},paper_bgcolor:'transparent',plot_bgcolor:'transparent',
+    font:{color:'#94a3b8',size:11},
+    xaxis:{title:'Proteína (g)',gridcolor:'rgba(255,255,255,.07)',zeroline:false},
+    yaxis:{title:'Δ glucosa 2h (mg/dL)',gridcolor:'rgba(255,255,255,.07)',zeroline:true,zerolinecolor:'rgba(255,255,255,.15)'},
+    legend:{orientation:'h',y:-0.28},
+  },{responsive:true,displayModeBar:false});
 }
 </script>
 {% endblock %}

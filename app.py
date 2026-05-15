@@ -2438,6 +2438,79 @@ def _analisis_ratio_insulina(days=30):
     return datos
 
 
+def _analisis_macros(days=60):
+    """
+    Analiza la relación entre el perfil de macros de cada comida
+    (CH, proteína, grasa) y la respuesta glucémica observada.
+    No atribuye el spike a ingredientes individuales — analiza
+    la comida como sistema completo.
+    """
+    desde = datetime.now() - timedelta(days=days)
+    comidas = Meal.query.filter(Meal.timestamp >= desde, Meal.carbs_g > 0).all()
+
+    datos = []
+    for c in comidas:
+        imp = _glucosa_impacto(c)
+        if not imp:
+            continue
+        if not (60 <= imp["pre"] <= 260):
+            continue
+
+        ch      = round(c.carbs_g   or 0, 1)
+        prot    = round(c.protein_g or 0, 1)
+        grasa   = round(c.fat_g     or 0, 1)
+        delta   = imp["delta"]
+        pico    = imp["pico"]
+        outcome = "hipo" if pico < 70 else ("hiper" if pico > 180 else "rango")
+
+        datos.append({
+            "name":    c.name,
+            "carbs":   ch,
+            "protein": prot,
+            "fat":     grasa,
+            "pre":     imp["pre"],
+            "pico":    pico,
+            "delta":   delta,
+            "outcome": outcome,
+            "hora":    c.timestamp.hour,
+        })
+
+    if not datos:
+        return {"datos": [], "rangos_ch": [], "umbral_ch": None}
+
+    # ── Rangos de CH → % en rango ──────────────────────────────────────
+    buckets = [
+        {"label": "≤15g",   "min": 0,  "max": 15},
+        {"label": "16–30g", "min": 16, "max": 30},
+        {"label": "31–50g", "min": 31, "max": 50},
+        {"label": ">50g",   "min": 51, "max": 9999},
+    ]
+    rangos_ch = []
+    for b in buckets:
+        items = [d for d in datos if b["min"] <= d["carbs"] <= b["max"]]
+        if not items:
+            continue
+        n       = len(items)
+        pct_rango = round(100 * sum(1 for d in items if d["outcome"] == "rango") / n)
+        pct_hiper = round(100 * sum(1 for d in items if d["outcome"] == "hiper") / n)
+        avg_delta = round(sum(d["delta"] for d in items) / n, 0)
+        rangos_ch.append({
+            "label":      b["label"],
+            "n":          n,
+            "pct_rango":  pct_rango,
+            "pct_hiper":  pct_hiper,
+            "avg_delta":  avg_delta,
+        })
+
+    # ── Umbral de CH estimado (donde % en rango cae por debajo del 60%) ──
+    umbral_ch = None
+    for b, rc in zip(buckets, rangos_ch):
+        if rc["pct_rango"] < 60 and umbral_ch is None:
+            umbral_ch = b["min"]
+
+    return {"datos": datos, "rangos_ch": rangos_ch, "umbral_ch": umbral_ch}
+
+
 def _analisis_ingredientes(days=60):
     """
     Impacto glucémico por ingrediente con atribución proporcional a CH.
@@ -2562,7 +2635,7 @@ def patrones():
     days = request.args.get("dias", 30, type=int)
 
     ratio_datos  = _analisis_ratio_insulina(days=days)
-    ingredientes = _analisis_ingredientes(days=max(days, 60))
+    macros       = _analisis_macros(days=max(days, 60))
     horario      = _sensibilidad_horaria(days=max(days, 60))
 
     # ── Resumen ratio ─────────────────────────────────────────────────────
@@ -2596,7 +2669,7 @@ def patrones():
     return render_template("patrones.html",
                            ratio_datos=ratio_datos,
                            ratio_resumen=ratio_resumen,
-                           ingredientes=ingredientes,
+                           macros=macros,
                            horario=horario,
                            dias=days)
 
