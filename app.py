@@ -508,6 +508,30 @@ def api_debug_time():
     })
 
 
+@app.route("/api/fix-utc-timestamps", methods=["POST"])
+@login_required
+def api_fix_utc_timestamps():
+    """
+    Migración one-shot: corrige lecturas de LibreLink que quedaron guardadas
+    en UTC en lugar de hora local (defecto de 4h hacia adelante).
+    Identifica registros cgm_libre cuyo timestamp > ahora + 3h (imposible si
+    fuera hora local) y les resta 4 horas.
+    """
+    now = datetime.now()
+    umbral = now + timedelta(hours=3)   # si está >3h en el futuro → es UTC
+    afectadas = GlucoseReading.query.filter(
+        GlucoseReading.source == "cgm_libre",
+        GlucoseReading.timestamp > umbral,
+    ).all()
+    count = 0
+    for r in afectadas:
+        r.timestamp = r.timestamp - timedelta(hours=4)
+        count += 1
+    if count:
+        db.session.commit()
+    return jsonify({"corregidas": count, "now_servidor": now.isoformat()})
+
+
 @app.route("/api/sync/libre/debug")
 def api_sync_libre_debug():
     """
