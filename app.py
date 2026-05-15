@@ -2438,77 +2438,216 @@ def _analisis_ratio_insulina(days=30):
     return datos
 
 
-def _analisis_macros(days=60):
+def _clasificar_comida(ch, prot, grasa):
     """
-    Analiza la relación entre el perfil de macros de cada comida
-    (CH, proteína, grasa) y la respuesta glucémica observada.
-    No atribuye el spike a ingredientes individuales — analiza
-    la comida como sistema completo.
+    Clasifica una comida según su perfil de macronutrientes.
+
+    Umbrales basados en evidencia clínica T1D:
+    - Smart et al. (2013) Diabetes Care: la proteína >40g Y grasa >35g elevan
+      significativamente la glucosa de forma independiente y aditiva.
+    - Wolpert et al. (2013) Diabetes Care: 50g de grasa causan hiperglucemia
+      sostenida 3-5h post-comida ("efecto pizza").
+
+    Simple          → <20g grasa Y <30g proteína (efecto glucémico predecible, solo CH)
+    Mixta           → 20-35g grasa O 30-50g proteína (efecto moderado grasa/proteína)
+    Alta grasa/prot → >35g grasa O >50g proteína (pico retardado, bolus extendido recomendado)
     """
-    desde = datetime.now() - timedelta(days=days)
+    if grasa > 35 or prot > 50:
+        return "Alta grasa/proteína"
+    elif grasa >= 20 or prot >= 30:
+        return "Mixta"
+    else:
+        return "Simple"
+
+
+def _iauc_trapezoidal(baseline, readings_timed):
+    """
+    Área incremental bajo la curva (iAUC) por el método trapezoidal.
+
+    readings_timed: lista de (minutos_desde_comida, value_mgdl) ordenada por tiempo.
+    baseline: glucosa pre-comida (mg/dL).
+
+    Retorna el área neta (mg/dL × hora) sobre la línea de base — positivo = exceso
+    sobre baseline (hiperglucemia), negativo = sobrebolus/hipoglucemia.
+
+    Ref: Brouns et al. (2005) Am J Clin Nutr; adaptado para análisis T1D.
+    """
+    if len(readings_timed) < 2:
+        return None
+    iauc = 0.0
+    for i in range(len(readings_timed) - 1):
+        t0, v0 = readings_timed[i]
+        t1, v1 = readings_timed[i + 1]
+        dt_h = (t1 - t0) / 60.0       # minutos → horas
+        d0 = v0 - baseline
+        d1 = v1 - baseline
+        iauc += (d0 + d1) / 2.0 * dt_h
+    return round(iauc, 1)
+
+
+def _impacto_v2(meal, horas=3):
+    """
+    Métricas postprandiales basadas en iAUC para una comida.
+
+    Requiere ≥3 lecturas de glucosa en la ventana postprandial.
+    La glucosa pre-comida sirve de referencia (baseline).
+
+    Retorna:
+    - pre          : glucosa pre-comida (mg/dL)
+    - pico         : glucosa máxima en la ventana (mg/dL)
+    - iauc         : área neta sobre baseline (mg/dL·h)
+    - tiempo_pico  : minutos hasta el pico
+    - tir_post     : % lecturas en rango 70-180 en la ventana
+    - n_readings   : nº lecturas postprandiales
+    - curva        : [(min, Δ_sobre_baseline), ...] para promedios inter-comidas
+    """
+    pre = (GlucoseReading.query
+           .filter(GlucoseReading.timestamp >= meal.timestamp - timedelta(minutes=30),
+                   GlucoseReading.timestamp <= meal.timestamp + timedelta(minutes=5))
+           .order_by(GlucoseReading.timestamp.desc()).first())
+    if not pre:
+        return None
+
+    posts = (GlucoseReading.query
+             .filter(GlucoseReading.timestamp > meal.timestamp,
+                     GlucoseReading.timestamp <= meal.timestamp + timedelta(hours=horas))
+             .order_by(GlucoseReading.timestamp).all())
+    if len(posts) < 3:
+        return None
+
+    baseline = pre.value_mgdl
+    readings_timed = [
+        ((r.timestamp - meal.timestamp).total_seconds() / 60, r.value_mgdl)
+        for r in posts
+    ]
+    iauc = _iauc_trapezoidal(baseline, readings_timed)
+
+    pico_reading = max(posts, key=lambda r: r.value_mgdl)
+    pico_val     = pico_reading.value_mgdl
+    tiempo_pico  = round((pico_reading.timestamp - meal.timestamp).total_seconds() / 60)
+
+    en_rango = sum(1 for r in posts if 70 <= r.value_mgdl <= 180)
+    tir_post = round(100 * en_rango / len(posts))
+
+    curva = [(round(min_t), round(val - baseline, 1)) for min_t, val in readings_timed]
+
+    return {
+        "pre":         int(baseline),
+        "pico":        int(pico_val),
+        "iauc":        iauc,
+        "tiempo_pico": tiempo_pico,
+        "tir_post":    tir_post,
+        "n_readings":  len(posts),
+        "curva":       curva,
+    }
+
+
+def _analisis_postprandial(days=60):
+    """
+    Análisis postprandial científico por tipo de comida.
+
+    Clasifica cada comida según Smart et al. (2013) y Wolpert et al. (2013)
+    y calcula iAUC trapezoidal en ventana de 3h post-comida.
+
+    Retorna:
+    - datos           : lista de dicts individuales (un item por comida)
+    - clusters        : estadísticas por tipo (Simple / Mixta / Alta grasa+prot)
+    - curvas_promedio : curva glucémica media por tipo (bins de 15 min)
+    """
+    desde   = datetime.now() - timedelta(days=days)
     comidas = Meal.query.filter(Meal.timestamp >= desde, Meal.carbs_g > 0).all()
 
     datos = []
     for c in comidas:
-        imp = _glucosa_impacto(c)
+        imp = _impacto_v2(c)
         if not imp:
             continue
-        if not (60 <= imp["pre"] <= 260):
+        if not (60 <= imp["pre"] <= 260):   # descartar hipoglucemia/crisis previas
             continue
 
-        ch      = round(c.carbs_g   or 0, 1)
-        prot    = round(c.protein_g or 0, 1)
-        grasa   = round(c.fat_g     or 0, 1)
-        delta   = imp["delta"]
-        pico    = imp["pico"]
-        outcome = "hipo" if pico < 70 else ("hiper" if pico > 180 else "rango")
+        ch    = round(c.carbs_g   or 0, 1)
+        prot  = round(c.protein_g or 0, 1)
+        grasa = round(c.fat_g     or 0, 1)
+        tipo  = _clasificar_comida(ch, prot, grasa)
 
         datos.append({
-            "name":    c.name,
-            "carbs":   ch,
-            "protein": prot,
-            "fat":     grasa,
-            "pre":     imp["pre"],
-            "pico":    pico,
-            "delta":   delta,
-            "outcome": outcome,
-            "hora":    c.timestamp.hour,
+            "name":        c.name,
+            "timestamp":   c.timestamp.strftime("%Y-%m-%d %H:%M"),
+            "ch":          ch,
+            "protein":     prot,
+            "fat":         grasa,
+            "pre":         imp["pre"],
+            "pico":        imp["pico"],
+            "iauc":        imp["iauc"],
+            "tiempo_pico": imp["tiempo_pico"],
+            "tir_post":    imp["tir_post"],
+            "tipo":        tipo,
+            "curva":       imp["curva"],
+            "alto_riesgo": (grasa > 35 or prot > 50),
         })
 
     if not datos:
-        return {"datos": [], "rangos_ch": [], "umbral_ch": None}
+        return {"datos": [], "clusters": {}, "curvas_promedio": {}}
 
-    # ── Rangos de CH → % en rango ──────────────────────────────────────
-    buckets = [
-        {"label": "≤15g",   "min": 0,  "max": 15},
-        {"label": "16–30g", "min": 16, "max": 30},
-        {"label": "31–50g", "min": 31, "max": 50},
-        {"label": ">50g",   "min": 51, "max": 9999},
-    ]
-    rangos_ch = []
-    for b in buckets:
-        items = [d for d in datos if b["min"] <= d["carbs"] <= b["max"]]
+    # ── Estadísticas por cluster ───────────────────────────────────────────
+    tipos = ["Simple", "Mixta", "Alta grasa/proteína"]
+    clusters = {}
+    for tipo in tipos:
+        items = [d for d in datos if d["tipo"] == tipo]
         if not items:
+            clusters[tipo] = None
             continue
-        n       = len(items)
-        pct_rango = round(100 * sum(1 for d in items if d["outcome"] == "rango") / n)
-        pct_hiper = round(100 * sum(1 for d in items if d["outcome"] == "hiper") / n)
-        avg_delta = round(sum(d["delta"] for d in items) / n, 0)
-        rangos_ch.append({
-            "label":      b["label"],
-            "n":          n,
-            "pct_rango":  pct_rango,
-            "pct_hiper":  pct_hiper,
-            "avg_delta":  avg_delta,
-        })
+        n     = len(items)
+        iaucs = [d["iauc"] for d in items]
+        avg_iauc = round(sum(iaucs) / n, 1)
+        if n >= 2:
+            mean_i   = avg_iauc
+            variance = sum((x - mean_i) ** 2 for x in iaucs) / (n - 1)
+            std      = variance ** 0.5
+            cv = round(100 * std / abs(mean_i), 0) if mean_i != 0 else None
+        else:
+            cv = None
+        clusters[tipo] = {
+            "n":               n,
+            "avg_iauc":        avg_iauc,
+            "cv":              cv,
+            "avg_tir":         round(sum(d["tir_post"]    for d in items) / n, 0),
+            "avg_pico":        round(sum(d["pico"]        for d in items) / n, 0),
+            "avg_tiempo_pico": round(sum(d["tiempo_pico"] for d in items) / n, 0),
+            "avg_ch":          round(sum(d["ch"]          for d in items) / n, 1),
+            "avg_fat":         round(sum(d["fat"]         for d in items) / n, 1),
+            "avg_protein":     round(sum(d["protein"]     for d in items) / n, 1),
+            "n_alto_riesgo":   sum(1 for d in items if d["alto_riesgo"]),
+        }
 
-    # ── Umbral de CH estimado (donde % en rango cae por debajo del 60%) ──
-    umbral_ch = None
-    for b, rc in zip(buckets, rangos_ch):
-        if rc["pct_rango"] < 60 and umbral_ch is None:
-            umbral_ch = b["min"]
+    # ── Curvas promedio por tipo (bins cada 15 min, ±7.5 min tolerancia) ──
+    bins_min = list(range(0, 181, 15))
+    curvas_promedio = {}
+    for tipo in tipos:
+        items = [d for d in datos if d["tipo"] == tipo]
+        if not items:
+            curvas_promedio[tipo] = None
+            continue
+        curva_tipo = []
+        for b in bins_min:
+            valores = [
+                delta
+                for d in items
+                for (min_t, delta) in d["curva"]
+                if abs(min_t - b) <= 7.5
+            ]
+            curva_tipo.append({
+                "min":       b,
+                "avg_delta": round(sum(valores) / len(valores), 1) if valores else None,
+                "n":         len(valores),
+            })
+        curvas_promedio[tipo] = curva_tipo
 
-    return {"datos": datos, "rangos_ch": rangos_ch, "umbral_ch": umbral_ch}
+    return {
+        "datos":           datos,
+        "clusters":        clusters,
+        "curvas_promedio": curvas_promedio,
+    }
 
 
 def _analisis_ingredientes(days=60):
@@ -2634,9 +2773,9 @@ def _sensibilidad_horaria(days=60):
 def patrones():
     days = request.args.get("dias", 30, type=int)
 
-    ratio_datos  = _analisis_ratio_insulina(days=days)
-    macros       = _analisis_macros(days=max(days, 60))
-    horario      = _sensibilidad_horaria(days=max(days, 60))
+    ratio_datos   = _analisis_ratio_insulina(days=days)
+    postprandial  = _analisis_postprandial(days=max(days, 60))
+    horario       = _sensibilidad_horaria(days=max(days, 60))
 
     # ── Resumen ratio ─────────────────────────────────────────────────────
     ratio_resumen = {}
@@ -2669,7 +2808,7 @@ def patrones():
     return render_template("patrones.html",
                            ratio_datos=ratio_datos,
                            ratio_resumen=ratio_resumen,
-                           macros=macros,
+                           postprandial=postprandial,
                            horario=horario,
                            dias=days)
 

@@ -10,7 +10,7 @@
       </span>
       Patrones Alimenticios
     </h1>
-    <p class="list-page-sub">Ratio insulina · Impacto por ingrediente · Sensibilidad horaria</p>
+    <p class="list-page-sub">Ratio insulina · Análisis postprandial (iAUC) · Sensibilidad horaria</p>
   </div>
   <div class="range-selector">
     {% for d, lbl in [(14,'14d'),(30,'30d'),(60,'60d'),(90,'90d')] %}
@@ -23,7 +23,7 @@
   </div>
 </div>
 
-{% if not ratio_datos and not ingredientes %}
+{% if not ratio_datos and not postprandial.datos %}
 <div class="list-empty" style="margin-top:3rem;">
   <i class="bi bi-graph-up-arrow" style="color:#6366f1;font-size:2.5rem;"></i>
   <div class="list-empty-title">Sin datos suficientes</div>
@@ -145,77 +145,163 @@
 </section>
 
 <!-- ══════════════════════════════════════════════════════
-     SECCIÓN 2: MACROS VS GLUCOSA
+     SECCIÓN 2: ANÁLISIS POSTPRANDIAL (iAUC)
 ══════════════════════════════════════════════════════ -->
 <section class="pat-section">
   <div class="pat-section-header">
     <div class="pat-section-icon" style="background:rgba(34,197,94,.12);color:#16a34a;">
-      <i class="bi bi-pie-chart-fill"></i>
+      <i class="bi bi-activity"></i>
     </div>
     <div>
-      <h2 class="pat-section-title">Macros vs Glucosa</h2>
-      <p class="pat-section-sub">Respuesta glucémica según el perfil de macronutrientes de la comida completa</p>
+      <h2 class="pat-section-title">Análisis Postprandial · iAUC</h2>
+      <p class="pat-section-sub">
+        Área incremental bajo la curva · Smart et al. (2013) · Wolpert et al. (2013)
+      </p>
     </div>
   </div>
 
-  {% if not macros.datos %}
-  <p class="pat-no-data">Sin suficientes comidas con glucosa pre y post registrada.</p>
+  {% if not postprandial.datos %}
+  <p class="pat-no-data">
+    Sin suficientes comidas con ≥3 lecturas de glucosa en las 3h post-comida.
+    Asegurate de que LibreLink esté sincronizando activamente.
+  </p>
   {% else %}
 
-  <!-- Insight principal: umbral de CH -->
-  {% if macros.umbral_ch %}
+  <!-- Alerta efecto pizza -->
+  {% set n_alto = postprandial.datos | selectattr('alto_riesgo') | list | length %}
+  {% if n_alto > 0 %}
   <div class="pat-insight pat-insight-warn" style="margin-bottom:1rem;">
-    <i class="bi bi-exclamation-triangle"></i>
+    <i class="bi bi-exclamation-triangle-fill"></i>
     <div>
-      A partir de <strong>~{{ macros.umbral_ch }}g de CH</strong> por comida,
-      el porcentaje en rango cae por debajo del 60%.
-      Las comidas con menos CH muestran mejor control.
+      <strong>{{ n_alto }} comida{{ 's' if n_alto > 1 else '' }}</strong> con >35g grasa
+      o >50g proteína detectada{{ 's' if n_alto > 1 else '' }}.
+      Según Wolpert et al. (2013), la grasa retrasa la absorción 3–5h
+      (<em>"efecto pizza"</em>). Considerá bolo extendido en estas comidas.
     </div>
   </div>
   {% endif %}
 
-  <!-- KPIs por rango de CH -->
-  {% if macros.rangos_ch %}
-  <div style="margin-bottom:1rem;">
-    <div style="font-size:.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem;">
-      % En rango según carbohidratos de la comida
-    </div>
-    <div class="ch-rangos-grid">
-      {% for r in macros.rangos_ch %}
-      <div class="ch-rango-card">
-        <div class="ch-rango-label">{{ r.label }}</div>
-        <div class="ch-rango-pct" style="color:{{ '#22c55e' if r.pct_rango >= 70 else ('#f59e0b' if r.pct_rango >= 50 else '#ef4444') }}">
-          {{ r.pct_rango }}%
-        </div>
-        <div class="ch-rango-sub">en rango</div>
-        <div class="ch-rango-bar-bg">
-          <div class="ch-rango-bar-fill"
-               style="width:{{ r.pct_rango }}%;background:{{ '#22c55e' if r.pct_rango >= 70 else ('#f59e0b' if r.pct_rango >= 50 else '#ef4444') }};">
-          </div>
-        </div>
-        <div class="ch-rango-n">{{ r.n }} comidas · Δ prom {{ '+' if r.avg_delta > 0 else '' }}{{ r.avg_delta | int }}</div>
+  <!-- Cards por tipo de comida -->
+  <div style="font-size:.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.6rem;">
+    Respuesta glucémica por tipo · iAUC promedio (mg/dL·h sobre glucosa basal)
+  </div>
+  <div class="tipo-grid">
+
+    {% for tipo_key, color, bg, icon, desc in [
+        ('Simple',              '#6366f1','rgba(99,102,241,.1)',  'bi-circle',       '<20g grasa · <30g prot'),
+        ('Mixta',               '#f59e0b','rgba(245,158,11,.1)',  'bi-circle-half',  '20–35g grasa o 30–50g prot'),
+        ('Alta grasa/proteína', '#ef4444','rgba(239,68,68,.1)',   'bi-circle-fill',  '>35g grasa o >50g prot')
+    ] %}
+    {% set cl = postprandial.clusters.get(tipo_key) %}
+    <div class="tipo-card" style="border-color:{{ color }}22;">
+      <div class="tipo-header">
+        <i class="bi {{ icon }}" style="color:{{ color }};font-size:.85rem;"></i>
+        <span class="tipo-nombre">{{ tipo_key }}</span>
+        {% if cl %}
+        <span class="tipo-n">{{ cl.n }} comidas</span>
+        {% endif %}
       </div>
-      {% endfor %}
+      <div style="font-size:.68rem;color:var(--text-muted);margin-bottom:.5rem;">{{ desc }}</div>
+
+      {% if cl %}
+      <div class="tipo-iauc" style="color:{{ color }};">
+        {{ cl.avg_iauc | round(1) }}
+        <span class="tipo-iauc-unit">mg/dL·h</span>
+      </div>
+      <div class="tipo-stats">
+        <div class="tipo-stat">
+          <div class="tipo-stat-val"
+               style="color:{{ '#22c55e' if cl.avg_tir >= 70 else ('#f59e0b' if cl.avg_tir >= 50 else '#ef4444') }}">
+            {{ cl.avg_tir | int }}%
+          </div>
+          <div class="tipo-stat-lbl">TIR 3h post</div>
+        </div>
+        <div class="tipo-stat">
+          <div class="tipo-stat-val">{{ cl.avg_tiempo_pico | int }}min</div>
+          <div class="tipo-stat-lbl">Tiempo al pico</div>
+        </div>
+        <div class="tipo-stat">
+          {% if cl.cv is not none %}
+          <div class="tipo-stat-val"
+               style="color:{{ '#22c55e' if cl.cv < 30 else ('#f59e0b' if cl.cv < 60 else '#ef4444') }}">
+            {{ cl.cv | int }}%
+          </div>
+          {% else %}
+          <div class="tipo-stat-val" style="color:var(--text-muted);">—</div>
+          {% endif %}
+          <div class="tipo-stat-lbl">CV (predictibilidad)</div>
+        </div>
+      </div>
+      <div class="tipo-macros">
+        Prom: {{ cl.avg_ch | round(0) | int }}g CH ·
+              {{ cl.avg_protein | round(0) | int }}g prot ·
+              {{ cl.avg_fat | round(0) | int }}g grasa
+      </div>
+      {% else %}
+      <div style="color:var(--text-muted);font-size:.8rem;padding:.6rem 0;">Sin comidas en este rango</div>
+      {% endif %}
     </div>
-  </div>
-  {% endif %}
+    {% endfor %}
 
-  <!-- Scatter CH vs Δ glucosa -->
-  <div style="font-size:.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin:.75rem 0 .3rem;">
-    Carbohidratos vs variación glucémica por comida
   </div>
-  <div id="chart-ch-delta" style="height:280px;"></div>
 
-  <!-- Scatter Proteína + Grasa como moduladores -->
-  {% set datos_con_prot = macros.datos | selectattr('protein', 'gt', 1) | list %}
-  {% if datos_con_prot | length >= 5 %}
-  <details class="pat-details" style="margin-top:.75rem;">
-    <summary>Ver efecto de proteína y grasa sobre el spike</summary>
-    <div id="chart-prot-delta" style="height:260px;margin-top:.5rem;"></div>
-    <p style="font-size:.75rem;color:var(--text-muted);margin-top:.4rem;">
-      Cada punto es una comida. Si los puntos con más proteína (tamaño mayor) tienden a estar
-      más abajo, la proteína está modulando el spike glucémico.
+  <!-- Curva glucémica promedio por tipo -->
+  <div style="font-size:.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin:1.2rem 0 .3rem;">
+    Curva glucémica promedio post-comida (Δ sobre glucosa basal)
+  </div>
+  <div id="chart-curva-promedio" style="height:290px;"></div>
+  <p style="font-size:.72rem;color:var(--text-muted);margin-top:.4rem;line-height:1.5;">
+    Área positiva = exceso sobre baseline (hiperglucemia postprandial).
+    Área negativa = glucosa bajo baseline (sobrebolus).
+    Basado en <em>Smart et al. (2013) Diabetes Care</em> y
+    <em>Wolpert et al. (2013) Diabetes Care</em>.
+  </p>
+
+  <!-- Scatter CH vs iAUC -->
+  <details class="pat-details" style="margin-top:.85rem;">
+    <summary>Ver scatter: carbohidratos vs iAUC por tipo de comida</summary>
+    <div id="chart-ch-iauc" style="height:270px;margin-top:.5rem;"></div>
+    <p style="font-size:.72rem;color:var(--text-muted);margin-top:.4rem;">
+      Cada punto es una comida coloreada por su tipo.
+      Si el iAUC sube con los CH en comidas "Simple", el ratio CH:Insulina puede necesitar ajuste.
+      En comidas "Alta grasa/proteína", el iAUC alto puede ser "efecto pizza" (pico retardado).
     </p>
+  </details>
+
+  <!-- Tabla alto riesgo -->
+  {% set alto_list = postprandial.datos | selectattr('alto_riesgo') | list %}
+  {% if alto_list %}
+  <details class="pat-details" style="margin-top:.5rem;">
+    <summary>⚠️ Comidas con alto contenido de grasa o proteína ({{ alto_list | length }})</summary>
+    <div class="pat-table-wrap" style="margin-top:.5rem;overflow-x:auto;">
+      <table class="pat-table">
+        <thead>
+          <tr>
+            <th>Comida</th>
+            <th>CH</th><th>Prot</th><th>Grasa</th>
+            <th>iAUC</th><th>TIR 3h</th><th>Pico</th><th>T. pico</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in alto_list | sort(attribute='iauc', reverse=True) %}
+          <tr>
+            <td style="white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis;">
+              {{ d.name }}
+            </td>
+            <td>{{ d.ch | int }}g</td>
+            <td class="{{ 'td-pos' if d.protein > 50 else '' }}">{{ d.protein | int }}g</td>
+            <td class="{{ 'td-pos' if d.fat > 35 else '' }}">{{ d.fat | int }}g</td>
+            <td class="{{ 'td-pos' if d.iauc > 50 else ('td-neg' if d.iauc < 0 else '') }}">
+              {{ d.iauc | round(1) }}
+            </td>
+            <td class="{{ 'td-neg' if d.tir_post >= 70 else 'td-pos' }}">{{ d.tir_post }}%</td>
+            <td>{{ d.pico }} mg/dL</td>
+            <td>{{ d.tiempo_pico }}min</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </details>
   {% endif %}
 
@@ -402,21 +488,47 @@
 .hora-bajo   { color: #22c55e; }
 .hora-n      { font-size: .65rem; color: var(--text-muted); margin-top: .15rem; }
 
-/* Rangos de CH */
-.ch-rangos-grid {
-  display: grid; grid-template-columns: repeat(4,1fr); gap:.6rem;
+/* ── Tarjetas tipo de comida ── */
+.tipo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: .65rem; margin-bottom: .5rem;
 }
-@media(max-width:576px){ .ch-rangos-grid{grid-template-columns:repeat(2,1fr);} }
-.ch-rango-card {
-  background:var(--surface2); border:1px solid var(--border);
-  border-radius:14px; padding:.75rem .65rem; text-align:center;
+@media(max-width: 620px) { .tipo-grid { grid-template-columns: 1fr; } }
+.tipo-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 16px; padding: .9rem 1rem;
 }
-.ch-rango-label { font-size:.72rem; font-weight:700; color:var(--text-muted); margin-bottom:.2rem; }
-.ch-rango-pct   { font-size:1.6rem; font-weight:800; line-height:1; }
-.ch-rango-sub   { font-size:.65rem; color:var(--text-muted); margin-bottom:.4rem; }
-.ch-rango-bar-bg  { height:5px; background:var(--border); border-radius:3px; margin:.4rem 0 .3rem; }
-.ch-rango-bar-fill{ height:100%; border-radius:3px; transition:width .4s; }
-.ch-rango-n { font-size:.65rem; color:var(--text-muted); }
+.tipo-header {
+  display: flex; align-items: center; gap: .5rem;
+  margin-bottom: .35rem;
+}
+.tipo-nombre {
+  font-size: .82rem; font-weight: 700; color: var(--text); flex: 1;
+}
+.tipo-n {
+  font-size: .68rem; color: var(--text-muted);
+  background: var(--border); border-radius: 20px;
+  padding: .1em .55em; white-space: nowrap;
+}
+.tipo-iauc {
+  font-size: 1.75rem; font-weight: 800; line-height: 1;
+  margin: .3rem 0 .5rem;
+}
+.tipo-iauc-unit {
+  font-size: .75rem; font-weight: 500; opacity: .75;
+}
+.tipo-stats {
+  display: flex; gap: .4rem; margin-bottom: .5rem;
+}
+.tipo-stat {
+  flex: 1; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: .4rem .3rem; text-align: center;
+}
+.tipo-stat-val { font-size: .92rem; font-weight: 800; color: var(--text); }
+.tipo-stat-lbl { font-size: .6rem; color: var(--text-muted); margin-top: .1rem; line-height: 1.2; }
+.tipo-macros   { font-size: .68rem; color: var(--text-muted); }
 
 /* Range pills override */
 .range-pill { border-color: rgba(99,102,241,.3); color: #6366f1; background: rgba(99,102,241,.06); }
@@ -424,87 +536,141 @@
 </style>
 
 <script>
-const RATIO_DATOS  = {{ ratio_datos | tojson }};
-const MACROS_DATOS = {{ macros.datos | tojson }};
+const RATIO_DATOS   = {{ ratio_datos | tojson }};
+const POSTPRANDIAL  = {{ postprandial | tojson }};
+
+const _BG   = 'transparent';
+const _FONT = { color: '#94a3b8', size: 11 };
+const _GRID = 'rgba(255,255,255,.07)';
+const _ZERO = 'rgba(255,255,255,.18)';
+const _cfg  = { responsive: true, displayModeBar: false };
 
 // ── Gráfica ratio vs outcome ─────────────────────────────────────────
 if (RATIO_DATOS.length && document.getElementById('chart-ratio')) {
-  const colores = {rango:'#22c55e', hiper:'#ef4444', hipo:'#f59e0b'};
-  const grupos  = ['rango','hiper','hipo'];
-  const traces  = grupos.map(g => ({
+  const colores = { rango:'#22c55e', hiper:'#ef4444', hipo:'#f59e0b' };
+  const labels  = { rango:'En rango', hiper:'Hiperglucemia', hipo:'Hipoglucemia' };
+  const traces  = ['rango','hiper','hipo'].map(g => ({
     x: RATIO_DATOS.filter(d => d.outcome===g).map(d => d.ratio),
     y: RATIO_DATOS.filter(d => d.outcome===g).map(d => d.delta),
     text: RATIO_DATOS.filter(d => d.outcome===g).map(d => d.name),
-    mode: 'markers',
-    name: g,
-    marker: { color: colores[g], size: 9, opacity: .85, line:{color:'#fff',width:1} },
+    mode: 'markers', name: labels[g],
+    marker: { color: colores[g], size: 9, opacity: .85, line:{color:'#1e293b',width:1} },
     hovertemplate: '<b>%{text}</b><br>Ratio 1:%{x}g<br>Δ %{y} mg/dL<extra></extra>',
   }));
-  const layout = {
-    margin: {t:10, b:45, l:45, r:10},
-    paper_bgcolor:'transparent', plot_bgcolor:'transparent',
-    font: { color: getComputedStyle(document.body).getPropertyValue('--text') || '#fff', size: 11 },
-    xaxis: { title: 'Ratio (g CH por 1U insulina)', gridcolor:'rgba(255,255,255,.07)', zeroline:false },
-    yaxis: { title: 'Δ glucosa 2h (mg/dL)', gridcolor:'rgba(255,255,255,.07)', zeroline:true, zerolinecolor:'rgba(255,255,255,.15)' },
-    legend: { orientation:'h', y:-0.25 },
-    shapes: [
-      {type:'line', x0:0, x1:30, y0:0, y1:0, line:{color:'rgba(255,255,255,.2)', dash:'dot'}},
+  Plotly.newPlot('chart-ratio', traces, {
+    margin:{t:10,b:45,l:45,r:10},
+    paper_bgcolor:_BG, plot_bgcolor:_BG, font:_FONT,
+    xaxis:{title:'Ratio (g CH por 1U insulina)',gridcolor:_GRID,zeroline:false},
+    yaxis:{title:'Δ glucosa 2h (mg/dL)',gridcolor:_GRID,zeroline:true,zerolinecolor:_ZERO},
+    legend:{orientation:'h',y:-0.28},
+    shapes:[{type:'line',x0:0,x1:30,y0:0,y1:0,line:{color:_ZERO,dash:'dot'}}],
+  }, _cfg);
+}
+
+// ── Curva glucémica promedio por tipo (iAUC) ──────────────────────────
+(function() {
+  const el = document.getElementById('chart-curva-promedio');
+  if (!el) return;
+  const curvas = POSTPRANDIAL.curvas_promedio;
+  if (!curvas) return;
+
+  const TIPOS = [
+    { key:'Simple',              color:'#6366f1', dash:'solid' },
+    { key:'Mixta',               color:'#f59e0b', dash:'solid' },
+    { key:'Alta grasa/proteína', color:'#ef4444', dash:'solid' },
+  ];
+
+  const traces = [];
+  for (const t of TIPOS) {
+    const data = curvas[t.key];
+    if (!data) continue;
+    const pts  = data.filter(p => p.avg_delta !== null);
+    if (!pts.length) continue;
+    traces.push({
+      x: pts.map(p => p.min),
+      y: pts.map(p => p.avg_delta),
+      customdata: pts.map(p => p.n),
+      mode: 'lines+markers',
+      name: t.key,
+      line: { color: t.color, width: 2.5 },
+      marker: { color: t.color, size: 5 },
+      hovertemplate: '<b>' + t.key + '</b><br>%{x}min: %{y:+.1f} mg/dL (n=%{customdata})<extra></extra>',
+    });
+  }
+  if (!traces.length) { el.style.display='none'; return; }
+
+  Plotly.newPlot(el, traces, {
+    margin:{t:15,b:50,l:55,r:15},
+    paper_bgcolor:_BG, plot_bgcolor:_BG, font:_FONT,
+    xaxis:{
+      title:'Minutos desde la comida',
+      gridcolor:_GRID, zeroline:false,
+      tickvals:[0,30,60,90,120,150,180],
+    },
+    yaxis:{
+      title:'Δ glucosa (mg/dL)',
+      gridcolor:_GRID, zeroline:true, zerolinecolor:_ZERO, zerolinewidth:2,
+    },
+    legend:{orientation:'h',y:-0.28},
+    shapes:[
+      // Banda de rango 70-180 relativa (sólo referencia visual a Δ=0)
+      {type:'line',x0:0,x1:180,y0:0,y1:0,
+       line:{color:_ZERO,dash:'dot',width:1.5}},
     ],
-  };
-  Plotly.newPlot('chart-ratio', traces, layout, {responsive:true, displayModeBar:false});
-}
+  }, _cfg);
+})();
 
-// ── Scatter CH vs Δ glucosa ──────────────────────────────────────────
-if (MACROS_DATOS.length && document.getElementById('chart-ch-delta')) {
-  const colores = {rango:'#22c55e', hiper:'#ef4444', hipo:'#f59e0b'};
-  const labels  = {rango:'En rango', hiper:'Hiperglucemia', hipo:'Hipoglucemia'};
-  const traces  = ['rango','hiper','hipo'].map(g => {
-    const pts = MACROS_DATOS.filter(d => d.outcome === g);
+// ── Scatter CH vs iAUC por tipo ───────────────────────────────────────
+(function() {
+  const el = document.getElementById('chart-ch-iauc');
+  if (!el) return;
+  const datos = POSTPRANDIAL.datos;
+  if (!datos || !datos.length) return;
+
+  const TIPOS = [
+    { key:'Simple',              color:'#6366f1' },
+    { key:'Mixta',               color:'#f59e0b' },
+    { key:'Alta grasa/proteína', color:'#ef4444' },
+  ];
+  const traces = TIPOS.map(t => {
+    const pts = datos.filter(d => d.tipo === t.key);
     return {
-      x: pts.map(d => d.carbs),
-      y: pts.map(d => d.delta),
+      x: pts.map(d => d.ch),
+      y: pts.map(d => d.iauc),
       text: pts.map(d => d.name),
-      mode: 'markers', name: labels[g],
-      marker:{color:colores[g], size:10, opacity:.8, line:{color:'#1e293b',width:1}},
-      hovertemplate:'<b>%{text}</b><br>CH: %{x}g · Δ: %{y} mg/dL<extra></extra>',
+      customdata: pts.map(d => [d.protein, d.fat, d.tir_post]),
+      mode: 'markers', name: t.key,
+      marker:{color:t.color, size:10, opacity:.8, line:{color:'#1e293b',width:1}},
+      hovertemplate:
+        '<b>%{text}</b><br>' +
+        'CH: %{x}g · iAUC: %{y:.1f} mg/dL·h<br>' +
+        'Prot: %{customdata[0]}g · Grasa: %{customdata[1]}g · TIR: %{customdata[2]}%' +
+        '<extra></extra>',
     };
   });
-  // Línea de tendencia
-  const xs = MACROS_DATOS.map(d=>d.carbs), ys = MACROS_DATOS.map(d=>d.delta);
+  // Línea de tendencia global
+  const xs = datos.map(d=>d.ch), ys = datos.map(d=>d.iauc);
   const n=xs.length, mx=xs.reduce((a,b)=>a+b,0)/n, my=ys.reduce((a,b)=>a+b,0)/n;
-  const slope = xs.reduce((s,x,i)=>s+(x-mx)*(ys[i]-my),0)/xs.reduce((s,x)=>s+(x-mx)**2,0.001);
+  const slope = xs.reduce((s,x,i)=>s+(x-mx)*(ys[i]-my),0)
+               / xs.reduce((s,x)=>s+(x-mx)**2, 0.001);
   const xmin=Math.min(...xs), xmax=Math.max(...xs);
-  traces.push({x:[xmin,xmax],y:[slope*xmin+my-slope*mx,slope*xmax+my-slope*mx],
-    mode:'lines',name:'Tendencia',line:{color:'rgba(255,255,255,.25)',dash:'dot',width:2},hoverinfo:'skip'});
-  Plotly.newPlot('chart-ch-delta', traces, {
-    margin:{t:10,b:50,l:55,r:10}, paper_bgcolor:'transparent', plot_bgcolor:'transparent',
-    font:{color:'#94a3b8',size:11},
-    xaxis:{title:'Carbohidratos (g)',gridcolor:'rgba(255,255,255,.07)',zeroline:false},
-    yaxis:{title:'Δ glucosa 2h (mg/dL)',gridcolor:'rgba(255,255,255,.07)',zeroline:true,zerolinecolor:'rgba(255,255,255,.15)'},
-    legend:{orientation:'h',y:-0.28},
-  },{responsive:true,displayModeBar:false});
-}
-
-// ── Scatter proteína vs Δ (tamaño = grasa) ───────────────────────────
-if (MACROS_DATOS.length && document.getElementById('chart-prot-delta')) {
-  const colores={rango:'#22c55e',hiper:'#ef4444',hipo:'#f59e0b'};
-  const maxFat=Math.max(...MACROS_DATOS.map(d=>d.fat||1));
-  const traces=['rango','hiper','hipo'].map(g=>{
-    const pts=MACROS_DATOS.filter(d=>d.outcome===g&&d.protein>1);
-    return {
-      x:pts.map(d=>d.protein), y:pts.map(d=>d.delta), text:pts.map(d=>d.name),
-      customdata:pts.map(d=>d.fat), mode:'markers', name:g,
-      marker:{color:colores[g],size:pts.map(d=>8+(d.fat/maxFat)*18),opacity:.75,line:{color:'#1e293b',width:1}},
-      hovertemplate:'<b>%{text}</b><br>Prot: %{x}g · Grasa: %{customdata}g<br>Δ: %{y} mg/dL<extra></extra>',
-    };
+  traces.push({
+    x:[xmin,xmax],
+    y:[slope*xmin + my - slope*mx, slope*xmax + my - slope*mx],
+    mode:'lines', name:'Tendencia',
+    line:{color:'rgba(255,255,255,.2)',dash:'dot',width:2},
+    hoverinfo:'skip',
   });
-  Plotly.newPlot('chart-prot-delta',traces,{
-    margin:{t:10,b:50,l:55,r:10},paper_bgcolor:'transparent',plot_bgcolor:'transparent',
-    font:{color:'#94a3b8',size:11},
-    xaxis:{title:'Proteína (g)',gridcolor:'rgba(255,255,255,.07)',zeroline:false},
-    yaxis:{title:'Δ glucosa 2h (mg/dL)',gridcolor:'rgba(255,255,255,.07)',zeroline:true,zerolinecolor:'rgba(255,255,255,.15)'},
-    legend:{orientation:'h',y:-0.28},
-  },{responsive:true,displayModeBar:false});
-}
+  Plotly.newPlot(el, traces, {
+    margin:{t:10,b:55,l:60,r:10},
+    paper_bgcolor:_BG, plot_bgcolor:_BG, font:_FONT,
+    xaxis:{title:'Carbohidratos (g)',gridcolor:_GRID,zeroline:false},
+    yaxis:{
+      title:'iAUC (mg/dL·h)',
+      gridcolor:_GRID, zeroline:true, zerolinecolor:_ZERO,
+    },
+    legend:{orientation:'h',y:-0.32},
+  }, _cfg);
+})();
 </script>
 {% endblock %}
