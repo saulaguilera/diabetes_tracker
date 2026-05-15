@@ -235,8 +235,19 @@
       <div class="tipo-macros">
         Prom: {{ cl.avg_ch | round(0) | int }}g CH ·
               {{ cl.avg_protein | round(0) | int }}g prot ·
-              {{ cl.avg_fat | round(0) | int }}g grasa
+              {{ cl.avg_fat | round(0) | int }}g grasa ·
+              {{ cl.avg_fiber | round(1) }}g fibra
       </div>
+      {% if cl.avg_gl is not none %}
+      <div class="tipo-gl" style="margin-top:.4rem;">
+        {% set gl = cl.avg_gl %}
+        {% set gl_color = '#22c55e' if gl <= 10 else ('#f59e0b' if gl <= 19 else '#ef4444') %}
+        {% set gl_cat   = 'GL bajo' if gl <= 10 else ('GL medio' if gl <= 19 else 'GL alto') %}
+        <span style="color:{{ gl_color }};font-weight:700;">{{ gl_cat }}</span>
+        <span style="color:var(--text-muted);"> · GL prom {{ gl | round(1) }}</span>
+        <span style="color:var(--text-muted);font-size:.62rem;"> ({{ cl.n_con_gl }} comidas con ÍG)</span>
+      </div>
+      {% endif %}
       {% else %}
       <div style="color:var(--text-muted);font-size:.8rem;padding:.6rem 0;">Sin comidas en este rango</div>
       {% endif %}
@@ -529,6 +540,7 @@
 .tipo-stat-val { font-size: .92rem; font-weight: 800; color: var(--text); }
 .tipo-stat-lbl { font-size: .6rem; color: var(--text-muted); margin-top: .1rem; line-height: 1.2; }
 .tipo-macros   { font-size: .68rem; color: var(--text-muted); }
+.tipo-gl       { font-size: .7rem; }
 
 /* Range pills override */
 .range-pill { border-color: rgba(99,102,241,.3); color: #6366f1; background: rgba(99,102,241,.06); }

@@ -59,11 +59,13 @@ class MealComponent(db.Model):
     meal_id      = db.Column(db.Integer, db.ForeignKey("meals.id", ondelete="CASCADE"), nullable=False)
     name         = db.Column(db.String(200), nullable=False)
     food_item_id = db.Column(db.Integer, db.ForeignKey("food_items.id"), nullable=True)
-    carbs_g      = db.Column(db.Float, default=0)
-    protein_g    = db.Column(db.Float, default=0)
-    fat_g        = db.Column(db.Float, default=0)
-    calories     = db.Column(db.Float, default=0)
-    grams        = db.Column(db.Float)   # porción en gramos (opcional)
+    carbs_g         = db.Column(db.Float, default=0)
+    protein_g       = db.Column(db.Float, default=0)
+    fat_g           = db.Column(db.Float, default=0)
+    calories        = db.Column(db.Float, default=0)
+    fiber_g         = db.Column(db.Float, default=0)      # fibra dietética (g)
+    glycemic_index  = db.Column(db.Integer)               # ÍG 0-100 (nullable)
+    grams           = db.Column(db.Float)   # porción en gramos (opcional)
 
     def __repr__(self):
         return f"<Componente {self.name} {self.carbs_g}g CH>"
@@ -114,6 +116,8 @@ class FoodItem(db.Model):
     fat_per_serving = db.Column(db.Float, default=0)
     protein_per_serving = db.Column(db.Float, default=0)
     calories_per_serving = db.Column(db.Float, default=0)
+    fiber_per_serving = db.Column(db.Float, default=0)    # fibra (g) por porción
+    glycemic_index = db.Column(db.Integer)                # ÍG 0-100 (nullable)
     category = db.Column(db.String(50))             # ej. cereal, fruta, proteína
     notes = db.Column(db.Text)
     times_used = db.Column(db.Integer, default=0)   # para ordenar por frecuencia

@@ -89,17 +89,36 @@ with app.app_context():
         if "meal_components" not in existing_tables:
             conn.execute(text("""
                 CREATE TABLE meal_components (
-                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                    meal_id      INTEGER NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
-                    name         VARCHAR(200) NOT NULL,
-                    food_item_id INTEGER REFERENCES food_items(id),
-                    carbs_g      REAL DEFAULT 0,
-                    protein_g    REAL DEFAULT 0,
-                    fat_g        REAL DEFAULT 0,
-                    calories     REAL DEFAULT 0,
-                    grams        REAL
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    meal_id         INTEGER NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
+                    name            VARCHAR(200) NOT NULL,
+                    food_item_id    INTEGER REFERENCES food_items(id),
+                    carbs_g         REAL DEFAULT 0,
+                    protein_g       REAL DEFAULT 0,
+                    fat_g           REAL DEFAULT 0,
+                    calories        REAL DEFAULT 0,
+                    fiber_g         REAL DEFAULT 0,
+                    glycemic_index  INTEGER,
+                    grams           REAL
                 )
             """))
+            conn.commit()
+        else:
+            # Migración: agregar fiber_g y glycemic_index si no existen
+            mc_cols = [c["name"] for c in inspector.get_columns("meal_components")]
+            if "fiber_g" not in mc_cols:
+                conn.execute(text("ALTER TABLE meal_components ADD COLUMN fiber_g REAL DEFAULT 0"))
+                conn.commit()
+            if "glycemic_index" not in mc_cols:
+                conn.execute(text("ALTER TABLE meal_components ADD COLUMN glycemic_index INTEGER"))
+                conn.commit()
+        # Migración: fiber_per_serving y glycemic_index en food_items
+        fi_cols = [c["name"] for c in inspector.get_columns("food_items")]
+        if "fiber_per_serving" not in fi_cols:
+            conn.execute(text("ALTER TABLE food_items ADD COLUMN fiber_per_serving REAL DEFAULT 0"))
+            conn.commit()
+        if "glycemic_index" not in fi_cols:
+            conn.execute(text("ALTER TABLE food_items ADD COLUMN glycemic_index INTEGER"))
             conn.commit()
 
 
@@ -1007,10 +1026,11 @@ def _save_meal_components(comida, form):
     comp_proteins = form.getlist("comp_protein[]")
     comp_fats     = form.getlist("comp_fat[]")
     comp_cals     = form.getlist("comp_calories[]")
+    comp_fibers   = form.getlist("comp_fiber[]")
+    comp_gis      = form.getlist("comp_gi[]")
     comp_grams    = form.getlist("comp_grams[]")
     comp_food_ids = form.getlist("comp_food_id[]")
 
-    # Limpiar componentes vacíos
     componentes = []
     for i, name in enumerate(comp_names):
         name = name.strip()
@@ -1019,14 +1039,20 @@ def _save_meal_components(comida, form):
         def _f(lst, idx, default=0.0):
             try: return float(lst[idx]) if lst[idx].strip() else default
             except (IndexError, ValueError): return default
+        def _i(lst, idx):
+            try: return int(float(lst[idx])) if lst[idx].strip() else None
+            except (IndexError, ValueError): return None
+
         componentes.append(MealComponent(
-            name         = name,
-            food_item_id = comp_food_ids[i].strip() or None if i < len(comp_food_ids) else None,
-            carbs_g      = _f(comp_carbs, i),
-            protein_g    = _f(comp_proteins, i),
-            fat_g        = _f(comp_fats, i),
-            calories     = _f(comp_cals, i),
-            grams        = _f(comp_grams, i) or None,
+            name           = name,
+            food_item_id   = comp_food_ids[i].strip() or None if i < len(comp_food_ids) else None,
+            carbs_g        = _f(comp_carbs, i),
+            protein_g      = _f(comp_proteins, i),
+            fat_g          = _f(comp_fats, i),
+            calories       = _f(comp_cals, i),
+            fiber_g        = _f(comp_fibers, i),
+            glycemic_index = _i(comp_gis, i),
+            grams          = _f(comp_grams, i) or None,
         ))
 
     # Actualizar totales en la comida padre
@@ -1314,13 +1340,15 @@ def api_alimentos_buscar():
         .limit(10).all()
     )
     return jsonify([{
-        "id": i.id,
-        "name": i.name,
+        "id":      i.id,
+        "name":    i.name,
         "serving_desc": i.serving_desc or "",
-        "carbs": i.carbs_per_serving,
-        "fat": i.fat_per_serving,
+        "carbs":   i.carbs_per_serving,
+        "fat":     i.fat_per_serving,
         "protein": i.protein_per_serving,
-        "calories": i.calories_per_serving,
+        "calories":i.calories_per_serving,
+        "fiber":   i.fiber_per_serving or 0,
+        "gi":      i.glycemic_index,
     } for i in items])
 
 
@@ -1336,19 +1364,22 @@ def api_estimar_macros():
         return jsonify({"error": "Falta el nombre"}), 400
 
     # 1. Base nutricional interna (80+ alimentos comunes, siempre disponible)
+    from utils.nutrition_db import get_gi, gl_from_gi
     estimado = estimar(nombre, carbs_usuario=carbs, grams_usuario=grams)
     if estimado:
+        gi = get_gi(nombre)
         return jsonify({
-            "protein_g":   estimado["protein_g"],
-            "fat_g":       estimado["fat_g"],
-            "calories":    estimado["calories"],
-            "carbs_g":     estimado["carbs_g"],       # CH netos
-            "carbs_total": estimado["carbs_total"],
-            "fibra_g":     estimado["fibra_g"],
-            "alta_fibra":  estimado["alta_fibra"],
-            "source":      nombre,
-            "origin":      "interno",
-            "nota":        estimado["nota"],
+            "protein_g":      estimado["protein_g"],
+            "fat_g":          estimado["fat_g"],
+            "calories":       estimado["calories"],
+            "carbs_g":        estimado["carbs_g"],       # CH netos
+            "carbs_total":    estimado["carbs_total"],
+            "fibra_g":        estimado["fibra_g"],
+            "alta_fibra":     estimado["alta_fibra"],
+            "glycemic_index": gi,
+            "source":         nombre,
+            "origin":         "interno",
+            "nota":           estimado["nota"],
         })
 
     # 2. Base de alimentos del usuario (FoodItem)
@@ -2554,6 +2585,7 @@ def _analisis_postprandial(days=60):
     - clusters        : estadísticas por tipo (Simple / Mixta / Alta grasa+prot)
     - curvas_promedio : curva glucémica media por tipo (bins de 15 min)
     """
+    from utils.nutrition_db import get_gi, gl_from_gi
     desde   = datetime.now() - timedelta(days=days)
     comidas = Meal.query.filter(Meal.timestamp >= desde, Meal.carbs_g > 0).all()
 
@@ -2570,12 +2602,31 @@ def _analisis_postprandial(days=60):
         grasa = round(c.fat_g     or 0, 1)
         tipo  = _clasificar_comida(ch, prot, grasa)
 
+        # ── Fibra y Carga Glucémica (GL) desde componentes ────────────────
+        fiber_total = 0.0
+        gl_total    = None
+        if c.components:
+            fiber_total = round(sum(comp.fiber_g or 0 for comp in c.components), 1)
+            # GL = Σ (ÍG_i × CH_i / 100) para componentes con ÍG conocido
+            gl_parts = []
+            for comp in c.components:
+                gi_comp = comp.glycemic_index
+                if gi_comp is None:
+                    gi_comp = get_gi(comp.name)   # fallback a base interna
+                gl_part = gl_from_gi(gi_comp, comp.carbs_g or 0)
+                if gl_part is not None:
+                    gl_parts.append(gl_part)
+            if gl_parts:
+                gl_total = round(sum(gl_parts), 1)
+
         datos.append({
             "name":        c.name,
             "timestamp":   c.timestamp.strftime("%Y-%m-%d %H:%M"),
             "ch":          ch,
             "protein":     prot,
             "fat":         grasa,
+            "fiber":       fiber_total,
+            "gl":          gl_total,
             "pre":         imp["pre"],
             "pico":        imp["pico"],
             "iauc":        imp["iauc"],
@@ -2607,6 +2658,10 @@ def _analisis_postprandial(days=60):
             cv = round(100 * std / abs(mean_i), 0) if mean_i != 0 else None
         else:
             cv = None
+        # GL promedio (solo comidas con GL calculable)
+        items_con_gl = [d for d in items if d["gl"] is not None]
+        avg_gl = round(sum(d["gl"] for d in items_con_gl) / len(items_con_gl), 1) if items_con_gl else None
+
         clusters[tipo] = {
             "n":               n,
             "avg_iauc":        avg_iauc,
@@ -2617,6 +2672,9 @@ def _analisis_postprandial(days=60):
             "avg_ch":          round(sum(d["ch"]          for d in items) / n, 1),
             "avg_fat":         round(sum(d["fat"]         for d in items) / n, 1),
             "avg_protein":     round(sum(d["protein"]     for d in items) / n, 1),
+            "avg_fiber":       round(sum(d["fiber"]       for d in items) / n, 1),
+            "avg_gl":          avg_gl,
+            "n_con_gl":        len(items_con_gl),
             "n_alto_riesgo":   sum(1 for d in items if d["alto_riesgo"]),
         }
 

@@ -85,6 +85,11 @@
           <span class="comp-macro-val" id="sum-kcal">0</span>
           <span class="comp-macro-lbl">kcal</span>
         </div>
+        <div class="comp-macro-sep"></div>
+        <div class="comp-macro-item">
+          <span class="comp-macro-val" id="sum-fiber" style="color:#0ea5e9;">0</span>
+          <span class="comp-macro-lbl">g Fibra</span>
+        </div>
       </div>
     </div>
 
@@ -149,6 +154,8 @@
       protein:  {{ c.protein_g| default(0) }},
       fat:      {{ c.fat_g    | default(0) }},
       calories: {{ c.calories | default(0) }},
+      fiber:    {{ c.fiber_g  | default(0) }},
+      gi:       {{ c.glycemic_index | tojson if c.glycemic_index else 'null' }},
       grams:    {{ c.grams    | tojson if c.grams else 'null' }},
       food_id:  {{ c.food_item_id | tojson if c.food_item_id else 'null' }}
     }{% if not loop.last %},{% endif %}
@@ -177,12 +184,15 @@ let activeDropdown = null;
 
 /* ── Recalcular totales ───────────────────────────────────────────────── */
 function recalcTotals() {
-  let ch = 0, pr = 0, fa = 0, kc = 0;
+  let ch = 0, pr = 0, fa = 0, kc = 0, fi = 0;
   document.querySelectorAll('.comp-row').forEach(row => {
     ch += parseFloat(row.querySelector('.ci-carbs').value)    || 0;
     pr += parseFloat(row.querySelector('.ci-protein').value)  || 0;
     fa += parseFloat(row.querySelector('.ci-fat').value)      || 0;
     kc += parseFloat(row.querySelector('.ci-calories').value) || 0;
+    fi += parseFloat(row.querySelector('.ci-fiber').value)    || 0;
+    // Actualizar badge ÍG de la fila
+    updateGiBadge(row);
   });
   document.getElementById('total-carbs').value   = ch.toFixed(1);
   document.getElementById('total-protein').value = pr.toFixed(1);
@@ -195,9 +205,29 @@ function recalcTotals() {
   document.getElementById('sum-kcal').textContent    = Math.round(kc);
   document.getElementById('total-badge').textContent = Math.round(ch) + 'g CH';
 
+  // Fibra total en el resumen
+  const sumFiber = document.getElementById('sum-fiber');
+  if (sumFiber) sumFiber.textContent = Math.round(fi);
+
   // Mostrar/ocultar resumen
   const rows = document.querySelectorAll('.comp-row').length;
   document.getElementById('macro-summary').style.display = rows > 0 ? '' : 'none';
+}
+
+function updateGiBadge(row) {
+  const gi  = parseInt(row.querySelector('.ci-gi')?.value) || null;
+  const ch  = parseFloat(row.querySelector('.ci-carbs')?.value) || 0;
+  const idx = row.dataset.idx;
+  const badge = document.getElementById('gi-badge-' + idx);
+  if (!badge) return;
+  if (gi === null || ch === 0) { badge.style.display = 'none'; return; }
+  const gl = Math.round((gi * ch) / 100 * 10) / 10;
+  const cat = gi <= 55 ? {label:'ÍG bajo', color:'#22c55e'} :
+              gi <= 69 ? {label:'ÍG medio', color:'#f59e0b'} :
+                         {label:'ÍG alto',  color:'#ef4444'};
+  badge.style.display = '';
+  badge.innerHTML = `<span style="color:${cat.color};font-weight:700;">${cat.label} (${gi})</span>
+    <span style="color:var(--text-muted);margin-left:.4rem;">· GL ${gl}</span>`;
 }
 
 /* ── Agregar fila de ingrediente ─────────────────────────────────────── */
@@ -244,6 +274,24 @@ function addComponent(data = {}) {
         <input type="number" name="comp_calories[]" class="form-control ci-calories"
                step="1" min="0" placeholder="0" value="${data.calories ?? ''}">
       </div>
+    </div>
+    <div class="comp-macros comp-macros-secondary">
+      <div class="comp-macro-field">
+        <label class="comp-macro-lbl-sm" style="color:#0ea5e9;">Fibra (g)</label>
+        <input type="number" name="comp_fiber[]" class="form-control ci-fiber"
+               step="0.1" min="0" placeholder="0" value="${data.fiber ?? ''}">
+      </div>
+      <div class="comp-macro-field">
+        <label class="comp-macro-lbl-sm" style="color:#8b5cf6;">
+          ÍG
+          <span class="comp-gi-hint" title="Índice Glucémico (0–100). Bajo ≤55, Medio 56–69, Alto ≥70">?</span>
+        </label>
+        <input type="number" name="comp_gi[]" class="form-control ci-gi"
+               step="1" min="0" max="100" placeholder="—" value="${data.gi ?? ''}">
+      </div>
+      <div class="comp-macro-field" style="grid-column: span 2; display:flex; align-items:flex-end;">
+        <div class="comp-gi-badge" id="gi-badge-${idx}" style="display:none;"></div>
+      </div>
       <input type="hidden" name="comp_grams[]" class="ci-grams" value="${data.grams || ''}">
     </div>
 
@@ -256,6 +304,8 @@ function addComponent(data = {}) {
   // Listeners de recálculo
   row.querySelectorAll('input[type=number]').forEach(inp =>
     inp.addEventListener('input', recalcTotals));
+  // Badge ÍG en tiempo real
+  row.querySelector('.ci-gi')?.addEventListener('input', () => updateGiBadge(row));
 
   // Listener de búsqueda en nombre
   const nameInput = row.querySelector('.ci-name');
@@ -317,6 +367,14 @@ async function estimarMacros(btn) {
     if (carbs === 0 && data.carbs_g > 0 && !parseFloat(carbField.value))
       carbField.value = data.carbs_g;
 
+    // Fibra e ÍG si vienen de la estimación
+    const fiberField = row.querySelector('.ci-fiber');
+    const giField    = row.querySelector('.ci-gi');
+    if (fiberField && !parseFloat(fiberField.value) && data.fibra_g > 0)
+      fiberField.value = data.fibra_g;
+    if (giField && !giField.value && data.glycemic_index != null)
+      giField.value = data.glycemic_index;
+
     recalcTotals();
 
     // Mostrar badge de fibra si aplica
@@ -371,6 +429,8 @@ function fillIngrediente(el, item) {
   row.querySelector('.ci-protein').value  = item.protein  || '';
   row.querySelector('.ci-fat').value      = item.fat      || '';
   row.querySelector('.ci-calories').value = item.calories || '';
+  if (row.querySelector('.ci-fiber')) row.querySelector('.ci-fiber').value = item.fiber || '';
+  if (row.querySelector('.ci-gi') && item.gi != null) row.querySelector('.ci-gi').value = item.gi;
   el.closest('.comp-search-dropdown').style.display = 'none';
   recalcTotals();
   // Registrar uso
@@ -401,6 +461,8 @@ document.addEventListener('DOMContentLoaded', () => {
       protein:  c.protein,
       fat:      c.fat,
       calories: c.calories,
+      fiber:    c.fiber,
+      gi:       c.gi,
       grams:    c.grams,
       food_id:  c.food_id,
     }));
@@ -439,6 +501,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
 .comp-macros {
   display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem;
+}
+.comp-macros-secondary {
+  grid-template-columns: repeat(4, 1fr);
+  margin-top: .3rem;
+}
+.comp-gi-hint {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: rgba(139,92,246,.2); color: #8b5cf6;
+  font-size: .6rem; font-weight: 800; cursor: help; margin-left: .2rem;
+}
+.comp-gi-badge {
+  font-size: .7rem; padding: .2rem .5rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; white-space: nowrap;
 }
 .comp-macro-field { display: flex; flex-direction: column; gap: .2rem; }
 .comp-macro-lbl-sm { font-size: .67rem; font-weight: 600; color: var(--text-muted);

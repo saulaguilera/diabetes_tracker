@@ -577,3 +577,201 @@ def estimar(nombre: str, carbs_usuario: float = 0, grams_usuario: float = 0):
 # Compatibilidad
 def estimar_desde_carbs(nombre: str, carbs_usuario: float):
     return estimar(nombre, carbs_usuario=carbs_usuario)
+
+
+# ── Índice Glucémico (ÍG) ──────────────────────────────────────────────────────
+# Fuente: Atkinson et al. (2008) International Tables of Glycemic Index and
+#         Glycemic Load Values. Diabetes Care 31(12):2281-2283.
+#         Foster-Powell et al. (2002) Am J Clin Nutr 76(1):5-56.
+#
+# ÍG bajo: ≤55  |  ÍG medio: 56-69  |  ÍG alto: ≥70
+# Todos los valores son ÍG referenciado a glucosa = 100.
+GI_DB = {
+    # Cereales / panes
+    "arroz blanco":    73,
+    "arroz integral":  55,
+    "arroz":           73,
+    "pasta":           49,
+    "fideos":          49,
+    "espagueti":       49,
+    "tallarines":      49,
+    "avena":           55,
+    "granola":         62,
+    "muesli":          57,
+    "pan blanco":      75,
+    "pan integral":    53,
+    "pan":             75,
+    "pan de molde":    75,
+    "pan pita":        68,
+    "tortilla":        52,
+    "arepa":           72,
+    "quinoa":          53,
+    "cous cous":       65,
+    "polenta":         68,
+    "maicena":         85,
+    "harina":          70,
+    "galleta":         70,
+    "galletas":        70,
+    "cereal":          75,
+    "corn flakes":     81,
+    "maíz":            52,
+    "choclo":          52,
+    "elote":           52,
+    "popcorn":         65,
+    "canchita":        65,
+    # Tubérculos
+    "papa":            78,
+    "patata":          78,
+    "papas fritas":    75,
+    "puré de papa":    87,
+    "camote":          63,
+    "batata":          63,
+    "boniato":         63,
+    "mandioca":        94,
+    "yuca":            94,
+    "ñame":            54,
+    # Frutas
+    "manzana":         36,
+    "pera":            38,
+    "naranja":         43,
+    "plátano":         51,
+    "banana":          51,
+    "kiwi":            52,
+    "uva":             59,
+    "mango":           60,
+    "sandía":          76,
+    "melón":           65,
+    "durazno":         42,
+    "melocotón":       42,
+    "ciruela":         40,
+    "frutilla":        41,
+    "fresa":           41,
+    "arándano":        53,
+    "piña":            59,
+    "ananá":           59,
+    "papaya":          60,
+    "higo":            61,
+    "dátil":           42,
+    "pasa":            64,
+    "ciruela seca":    29,
+    # Verduras (la mayoría tienen ÍG muy bajo)
+    "brócoli":         15,
+    "espinaca":        15,
+    "lechuga":         15,
+    "tomate":          15,
+    "pepino":          15,
+    "apio":            15,
+    "pimiento":        15,
+    "zucchini":        15,
+    "zapallo":         75,
+    "calabaza":        75,
+    "zanahoria":       39,
+    "remolacha":       64,
+    "cebolla":         10,
+    "ajo":             10,
+    "coliflor":        15,
+    "repollo":         10,
+    "col":             10,
+    "acelga":          15,
+    "poroto verde":    15,
+    "chaucha":         15,
+    "berenjena":       15,
+    "alcachofa":       15,
+    "espárrago":       15,
+    # Legumbres (naturalmente bajo ÍG)
+    "garbanzo":        28,
+    "lenteja":         32,
+    "poroto":          29,
+    "frijol":          29,
+    "arveja":          51,
+    "chícharo":        51,
+    "soja":            15,
+    "haba":            40,
+    "edamame":         18,
+    "hummus":          28,
+    # Lácteos
+    "leche":           39,
+    "leche descremada": 37,
+    "yogur":           35,
+    "yogur griego":    11,
+    "queso":            0,
+    "ricota":           0,
+    # Proteínas (no tienen CH → ÍG no aplica, usamos 0)
+    "pollo":            0,
+    "carne":            0,
+    "vacuno":           0,
+    "ternera":          0,
+    "cerdo":            0,
+    "pescado":          0,
+    "salmón":           0,
+    "atún":             0,
+    "huevo":            0,
+    "tofu":             0,
+    # Dulces y snacks
+    "azúcar":          65,
+    "miel":            61,
+    "chocolate negro": 40,
+    "chocolate con leche": 45,
+    "helado":          51,
+    "torta":           52,
+    "bizcochuelo":     52,
+    "alfajor":         60,
+    "nutella":         33,
+    "mermelada":       51,
+    "jugo naranja":    50,
+    "jugo":            60,
+    "gaseosa":         65,
+    "coca cola":       65,
+    "fanta":           68,
+    # Aceites y grasas (sin CH)
+    "aceite":           0,
+    "mantequilla":      0,
+    "manteca":          0,
+    "crema":            0,
+    "palta":            0,
+    "aguacate":         0,
+    "nuez":            15,
+    "almendra":        15,
+    "maní":            14,
+    "cacahuate":       14,
+    "semillas":        10,
+    # Misceláneos
+    "pizza":           60,
+    "hamburguesa":     66,
+    "sándwich":        56,
+    "empanada":        55,
+}
+
+
+def get_gi(nombre: str) -> int | None:
+    """
+    Devuelve el Índice Glucémico estimado para un alimento.
+    Busca por substring en el nombre (en minúsculas).
+    Retorna None si no hay datos.
+
+    Ref: Atkinson et al. (2008) Diabetes Care 31(12):2281-2283.
+    """
+    nombre_lower = nombre.lower().strip()
+    # Búsqueda exacta primero
+    if nombre_lower in GI_DB:
+        return GI_DB[nombre_lower]
+    # Búsqueda por substring (la clave está contenida en el nombre)
+    for key, gi in GI_DB.items():
+        if key in nombre_lower:
+            return gi
+    return None
+
+
+def gl_from_gi(gi: int | None, carbs_g: float) -> float | None:
+    """
+    Calcula la Carga Glucémica (GL) a partir del ÍG y los gramos de CH.
+    GL = (ÍG × CH_g) / 100
+
+    Interpretación:
+    - GL ≤ 10 : baja
+    - GL 11-19: media
+    - GL ≥ 20 : alta
+    """
+    if gi is None or carbs_g <= 0:
+        return None
+    return round((gi * carbs_g) / 100, 1)
