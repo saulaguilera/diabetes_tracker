@@ -160,6 +160,15 @@
     </div>
   </div>
 
+  <!-- Botón backfill fibra/ÍG -->
+  <div style="margin-bottom:.9rem;">
+    <button id="btn-backfill" onclick="backfillFiberGi()" class="pat-backfill-btn">
+      <i class="bi bi-arrow-repeat"></i>
+      Completar fibra e ÍG en ingredientes ya guardados
+    </button>
+    <div id="backfill-result" style="display:none;margin-top:.5rem;font-size:.78rem;"></div>
+  </div>
+
   {% if not postprandial.datos %}
   <p class="pat-no-data">
     Sin suficientes comidas con ≥3 lecturas de glucosa en las 3h post-comida.
@@ -545,11 +554,51 @@
 /* Range pills override */
 .range-pill { border-color: rgba(99,102,241,.3); color: #6366f1; background: rgba(99,102,241,.06); }
 .range-pill:hover { background: rgba(99,102,241,.15); }
+
+/* Botón backfill */
+.pat-backfill-btn {
+  display: inline-flex; align-items: center; gap: .4rem;
+  padding: .38rem .9rem; border-radius: 20px; font-size: .78rem; font-weight: 600;
+  background: rgba(14,165,233,.08); border: 1px solid rgba(14,165,233,.3);
+  color: #0ea5e9; cursor: pointer; transition: all .15s;
+}
+.pat-backfill-btn:hover { background: rgba(14,165,233,.15); border-color: #0ea5e9; }
+.pat-backfill-btn:disabled { opacity:.6; cursor:wait; }
 </style>
 
 <script>
 const RATIO_DATOS   = {{ ratio_datos | tojson }};
 const POSTPRANDIAL  = {{ postprandial | tojson }};
+
+// ── Backfill fibra e ÍG ──────────────────────────────────────────────
+async function backfillFiberGi() {
+  const btn = document.getElementById('btn-backfill');
+  const res = document.getElementById('backfill-result');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Procesando…';
+  res.style.display = 'none';
+  try {
+    const r    = await fetch('/api/backfill-fiber-gi', { method: 'POST' });
+    const data = await r.json();
+    const gi   = data.gi_updated    || 0;
+    const fi   = data.fiber_updated || 0;
+    const tot  = data.candidatos    || 0;
+    if (gi === 0 && fi === 0) {
+      res.innerHTML = `<span style="color:#22c55e;">✓ Todos los ingredientes (${tot}) ya tenían fibra e ÍG completos.</span>`;
+    } else {
+      res.innerHTML =
+        `<span style="color:#22c55e;">✓ Actualizados: <b>${gi}</b> con ÍG · <b>${fi}</b> con fibra ` +
+        `(de ${tot} candidatos). <a href="" style="color:#0ea5e9;">Recargá la página para ver los cambios.</a></span>`;
+    }
+    res.style.display = '';
+    btn.innerHTML = '<i class="bi bi-check-circle-fill"></i> Completado';
+  } catch (e) {
+    res.innerHTML = '<span style="color:#ef4444;">Error al conectar. Intentá de nuevo.</span>';
+    res.style.display = '';
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Completar fibra e ÍG en ingredientes ya guardados';
+  }
+}
 
 const _BG   = 'transparent';
 const _FONT = { color: '#94a3b8', size: 11 };

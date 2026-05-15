@@ -562,6 +562,62 @@ def api_fix_utc_timestamps():
     })
 
 
+@app.route("/api/backfill-fiber-gi", methods=["POST"])
+@login_required
+def api_backfill_fiber_gi():
+    """
+    Backfill one-shot: asigna fibra e ÍG a todos los componentes de comida
+    ya guardados que tienen estos campos vacíos.
+
+    - fiber_g: se obtiene de la base nutricional interna (nutrition_db)
+    - glycemic_index: se obtiene de GI_DB (nutrition_db)
+
+    Idempotente: solo actualiza componentes donde falta al menos uno de los
+    dos valores. No sobreescribe datos ingresados manualmente.
+    """
+    from utils.nutrition_db import get_gi, estimar
+
+    # Componentes candidatos: sin ÍG O con fibra en 0
+    candidatos = MealComponent.query.filter(
+        db.or_(
+            MealComponent.glycemic_index == None,
+            MealComponent.fiber_g == 0,
+        )
+    ).all()
+
+    gi_updated    = 0
+    fiber_updated = 0
+
+    for comp in candidatos:
+        nombre = comp.name.strip()
+        if not nombre:
+            continue
+
+        # ── Índice Glucémico ─────────────────────────────────────────────
+        if comp.glycemic_index is None:
+            gi = get_gi(nombre)
+            if gi is not None:
+                comp.glycemic_index = gi
+                gi_updated += 1
+
+        # ── Fibra ────────────────────────────────────────────────────────
+        if (comp.fiber_g or 0) == 0:
+            estimado = estimar(nombre, carbs_usuario=comp.carbs_g or 0)
+            if estimado and estimado.get("fibra_g", 0) > 0:
+                comp.fiber_g = estimado["fibra_g"]
+                fiber_updated += 1
+
+    if gi_updated or fiber_updated:
+        db.session.commit()
+
+    return jsonify({
+        "candidatos":    len(candidatos),
+        "gi_updated":    gi_updated,
+        "fiber_updated": fiber_updated,
+        "ok": True,
+    })
+
+
 @app.route("/api/sync/libre/debug")
 def api_sync_libre_debug():
     """
