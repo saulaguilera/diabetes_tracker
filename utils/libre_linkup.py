@@ -177,10 +177,9 @@ def get_readings(token: str, base_url: str, patient_id: str, account_id: str = "
 
 def _parse_reading(raw: dict) -> dict:
     """Convierte una lectura raw de la API al formato interno."""
-    # FactoryTimestamp = UTC, Timestamp = hora local del servidor de Abbott
-    # Preferimos FactoryTimestamp para evitar desfases de zona horaria.
-    ts_raw = (raw.get("FactoryTimestamp") or raw.get("factoryTimestamp")
-              or raw.get("Timestamp") or raw.get("timestamp") or "")
+    # Usamos Timestamp (hora local del usuario en LibreLink) para que el valor
+    # guardado en DB coincida con la zona horaria local del usuario.
+    ts_raw = raw.get("Timestamp") or raw.get("timestamp") or ""
 
     # Formato Abbott: "1/15/2026 10:30:00 AM" (UTC si viene de FactoryTimestamp)
     try:

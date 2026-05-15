@@ -194,23 +194,11 @@ def _auto_categorizar(nombre: str) -> str | None:
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def parse_datetime(date_str, time_str):
-    """
-    Combina strings de fecha y hora en un objeto datetime UTC.
-    El cliente envía 'tz_offset' (resultado de getTimezoneOffset(), en minutos
-    positivos = horas detrás de UTC, ej. Chile UTC-4 → 240).
-    Sumamos el offset para convertir hora local del usuario → UTC.
-    """
+    """Combina strings de fecha y hora en un objeto datetime en hora local del usuario."""
     try:
-        dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+        return datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
     except ValueError:
-        return datetime.now(timezone.utc).replace(tzinfo=None)
-    # Leer offset del form/args (getTimezoneOffset da minutos positivos para UTC-)
-    from flask import request as _req, g as _g
-    try:
-        tz_offset = int(_req.form.get("tz_offset") or _req.args.get("tz_offset") or 0)
-    except (ValueError, RuntimeError):
-        tz_offset = 0
-    return dt + timedelta(minutes=tz_offset)
+        return datetime.now()
 
 
 def stats_resumen():

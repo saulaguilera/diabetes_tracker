@@ -961,7 +961,7 @@
       if (d.timestamp) {
         // El servidor guarda FactoryTimestamp (UTC) como datetime naive.
         // Al agregar 'Z' lo forzamos a UTC para que Date lo interprete correctamente.
-        const ts   = new Date(d.timestamp + 'Z');
+        const ts   = new Date(d.timestamp); // hora local guardada, sin 'Z'
         const mins = Math.max(0, Math.floor((Date.now() - ts.getTime()) / 60000));
         let time_ago;
         if (mins < 2)       time_ago = 'ahora';
@@ -988,7 +988,7 @@
 
     document.querySelectorAll('time.local-ts[data-utc]').forEach(function(el) {
       try {
-        const d   = new Date(el.dataset.utc + 'Z'); // 'Z' fuerza interpretación UTC
+        const d   = new Date(el.dataset.utc); // sin 'Z': interpretar como hora local guardada
         if (isNaN(d)) return;
         const fmt = el.dataset.fmt || 'dmhm';
         if      (fmt === 'hm')   el.textContent = fmtTime(d);
@@ -999,21 +999,6 @@
     });
   })();
 
-  // ── Agregar tz_offset a todos los formularios automáticamente ─────────────────
-  // getTimezoneOffset() devuelve minutos positivos para zonas UTC- (ej. Chile UTC-4 → 240)
-  // El servidor los suma a la hora local para obtener UTC antes de guardar.
-  (function() {
-    const offset = new Date().getTimezoneOffset();
-    document.querySelectorAll('form[method="post"], form[method="POST"]').forEach(function(form) {
-      if (!form.querySelector('[name="tz_offset"]')) {
-        const inp = document.createElement('input');
-        inp.type  = 'hidden';
-        inp.name  = 'tz_offset';
-        inp.value = offset;
-        form.appendChild(inp);
-      }
-    });
-  })();
 </script>
 </body>
 </html>
