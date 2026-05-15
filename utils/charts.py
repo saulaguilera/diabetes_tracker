@@ -701,7 +701,7 @@ def chart_agp(days=14) -> dict:
     from models import GlucoseReading
     from datetime import timezone
 
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now()
     desde = now - timedelta(days=days)
 
     lecturas = (GlucoseReading.query

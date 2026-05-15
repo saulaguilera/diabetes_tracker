@@ -189,7 +189,7 @@ def _parse_reading(raw: dict) -> dict:
             ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
             ts = ts.replace(tzinfo=None)
         except ValueError:
-            ts = datetime.now(timezone.utc).replace(tzinfo=None)
+            ts = datetime.now()  # fallback: hora local del servidor
 
     value = float(raw.get("ValueInMgPerDl") or raw.get("value") or 0)
 

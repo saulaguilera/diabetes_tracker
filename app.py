@@ -1,6 +1,17 @@
 import os
 import functools
 
+# Forzar zona horaria de Chile para que datetime.now() sea consistente
+# con los timestamps guardados en la DB (hora local del usuario).
+# TZ=America/Santiago puede sobreescribirse con variable de entorno en Railway.
+_tz = os.environ.get("TZ", "America/Santiago")
+os.environ["TZ"] = _tz
+try:
+    import time as _time_mod
+    _time_mod.tzset()   # Aplica en Linux/Mac; no-op en Windows pero no falla
+except AttributeError:
+    pass
+
 # Cargar .env si existe (desarrollo local)
 try:
     from dotenv import load_dotenv
@@ -203,7 +214,7 @@ def parse_datetime(date_str, time_str):
 
 def stats_resumen():
     """Estadísticas rápidas para el dashboard."""
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now()
     hace_24h = now - timedelta(hours=24)
     hace_7d = now - timedelta(days=7)
 
@@ -286,7 +297,7 @@ def _detectar_patrones(days=30):
     from collections import defaultdict, Counter
 
     alertas = []
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now()
     desde = now - timedelta(days=days)
 
     lecturas = (GlucoseReading.query
@@ -724,7 +735,7 @@ def dashboard():
 def glucemia():
     page = request.args.get("page", 1, type=int)
     dias = request.args.get("dias", 7, type=int)
-    desde = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=dias)
+    desde = datetime.now() - timedelta(days=dias)
     lecturas = (
         GlucoseReading.query.filter(GlucoseReading.timestamp >= desde)
         .order_by(GlucoseReading.timestamp.desc())
@@ -798,7 +809,7 @@ def comidas_grupos():
     from collections import defaultdict
     dias  = request.args.get("dias", 30, type=int)
     tab   = request.args.get("tab", "categorias")   # categorias | ingredientes
-    desde = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=dias)
+    desde = datetime.now() - timedelta(days=dias)
     comidas = Meal.query.filter(Meal.timestamp >= desde).order_by(Meal.timestamp.desc()).all()
 
     # ── Pre-calcular impacto glucémico de cada comida ─────────────────────
@@ -935,7 +946,7 @@ def comidas():
     page = request.args.get("page", 1, type=int)
     dias = request.args.get("dias", 7, type=int)
     solo_incompletas = request.args.get("incompletas", "0") == "1"
-    desde = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=dias)
+    desde = datetime.now() - timedelta(days=dias)
 
     if solo_incompletas:
         # Modo backfill: mostrar TODAS las comidas sin ingredientes (sin filtro de fecha)
@@ -1052,7 +1063,7 @@ def comida_eliminar(id):
 def insulina():
     page = request.args.get("page", 1, type=int)
     dias = request.args.get("dias", 7, type=int)
-    desde = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=dias)
+    desde = datetime.now() - timedelta(days=dias)
     dosis_list = (
         InsulinDose.query.filter(InsulinDose.timestamp >= desde)
         .order_by(InsulinDose.timestamp.desc())
@@ -1116,7 +1127,7 @@ ACTIVIDADES_COMUNES = [
 def actividad():
     page = request.args.get("page", 1, type=int)
     dias = request.args.get("dias", 7, type=int)
-    desde = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=dias)
+    desde = datetime.now() - timedelta(days=dias)
     actividades = (
         Activity.query.filter(Activity.timestamp >= desde)
         .order_by(Activity.timestamp.desc())
@@ -1600,7 +1611,7 @@ def _tabla_impacto_comidas(days):
     Calcula el impacto glucémico de cada comida registrada.
     Devuelve (filas_individuales, resumen_por_alimento).
     """
-    desde = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    desde = datetime.now() - timedelta(days=days)
     comidas = Meal.query.filter(Meal.timestamp >= desde).order_by(Meal.timestamp.desc()).all()
 
     filas = []
@@ -1722,7 +1733,7 @@ def agp():
     import statistics
 
     days = request.args.get("dias", 14, type=int)
-    now  = datetime.now(timezone.utc).replace(tzinfo=None)
+    now  = datetime.now()
     desde = now - timedelta(days=days)
 
     lecturas = (GlucoseReading.query
@@ -1811,8 +1822,8 @@ def reporte_semanal():
     import statistics as _stats
 
     dias = request.args.get("dias", 14, type=int)
-    desde = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=dias)
-    hasta = datetime.now(timezone.utc).replace(tzinfo=None)
+    desde = datetime.now() - timedelta(days=dias)
+    hasta = datetime.now()
 
     lecturas = GlucoseReading.query.filter(GlucoseReading.timestamp >= desde).order_by(GlucoseReading.timestamp).all()
     valores = [r.value_mgdl for r in lecturas]
@@ -1906,8 +1917,8 @@ def reporte_semanal_pdf():
     from flask import make_response
 
     dias = request.args.get("dias", 14, type=int)
-    desde = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=dias)
-    hasta = datetime.now(timezone.utc).replace(tzinfo=None)
+    desde = datetime.now() - timedelta(days=dias)
+    hasta = datetime.now()
 
     lecturas = GlucoseReading.query.filter(
         GlucoseReading.timestamp >= desde
@@ -2022,7 +2033,7 @@ def _calcular_isf_personal(days=60):
     Busca bolus sin comida cercana (correcciones puras) y mide la caída de glucosa.
     Retorna (isf_promedio, n_muestras).
     """
-    desde = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    desde = datetime.now() - timedelta(days=days)
     bolus_list = InsulinDose.query.filter(
         InsulinDose.type == "bolus",
         InsulinDose.timestamp >= desde,
@@ -2082,7 +2093,7 @@ def _calcular_icr_personal(days=90):
     para aislar el componente de cobertura de carbohidratos.
     Retorna (icr_promedio, n_muestras).
     """
-    desde = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    desde = datetime.now() - timedelta(days=days)
     isf_personal, _ = _calcular_isf_personal(days=days)
 
     comidas = Meal.query.filter(

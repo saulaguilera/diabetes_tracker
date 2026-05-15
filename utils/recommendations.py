@@ -15,7 +15,7 @@ from collections import defaultdict
 
 
 def _now():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now()  # hora local del servidor (TZ=America/Santiago)
 
 
 def _readings(days=30):
