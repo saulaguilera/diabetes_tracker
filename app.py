@@ -2446,8 +2446,11 @@ def _analisis_ingredientes(days=60):
     carbohidratos totales de esa comida, al arroz se le atribuyen 48 mg/dL
     y al pollo (0g CH) se le atribuyen 0 mg/dL.
 
-    Métrica adicional: Δ por 10g CH (índice glucémico relativo), útil para
-    comparar alimentos con mismos carbohidratos pero distinto impacto.
+    Calidad estadística:
+    - Solo se incluyen comidas cuyo Δ glucémico es razonable (pre entre 60–250 mg/dL)
+    - Solo ingredientes con ≥ 3 observaciones (con CH) tienen suficiente confianza
+    - delta_por_10g se acota a ±80 mg/dL (límite fisiológico razonable)
+    - Ingredientes con < 3 obs se muestran con flag "pocos datos"
     """
     desde = datetime.now() - timedelta(days=days)
     comidas = Meal.query.filter(Meal.timestamp >= desde).all()
@@ -2462,8 +2465,15 @@ def _analisis_ingredientes(days=60):
         if imp is None:
             continue
 
+        # Descartar comidas con glucosa pre fuera de rango razonable
+        # (evita contaminar el análisis con hipos o hipers previas)
+        if not (60 <= imp["pre"] <= 250):
+            continue
+
         # Carbohidratos totales de la comida (suma de componentes)
         total_ch = sum(comp.carbs_g or 0 for comp in c.components)
+        if total_ch < 3:          # comida sin carbohidratos relevantes → skip
+            continue
 
         for comp in c.components:
             nombre = comp.name.strip().lower()
@@ -2491,27 +2501,30 @@ def _analisis_ingredientes(days=60):
         # Δ por 10g CH: normaliza por porción → comparable entre alimentos
         items_con_ch = [i for i in items if i["carbs"] > 0]
         if items_con_ch:
-            delta_por_10g = round(
-                sum(i["delta_atrib"] / i["carbs"] * 10 for i in items_con_ch)
-                / len(items_con_ch), 0
-            )
+            raw = sum(i["delta_atrib"] / i["carbs"] * 10 for i in items_con_ch) / len(items_con_ch)
+            # Acotar a rango fisiológico razonable (±80 mg/dL por 10g CH)
+            delta_por_10g = round(max(-80, min(80, raw)), 0)
         else:
             delta_por_10g = 0
 
+        # Confianza: necesitamos al menos 3 obs con CH para una conclusión útil
+        confianza = "ok" if (n >= 3 and avg_carbs > 1) else ("baja" if avg_carbs > 1 else "sinCH")
+
         resultado.append({
-            "nombre":       nombre.title(),
-            "avg_delta":    avg_delta,      # Δ absoluto atribuido (varía con la porción)
-            "delta_por_10g": delta_por_10g, # Δ por 10g CH (normalizado, comparable)
-            "avg_carbs":    avg_carbs,
-            "n":            n,
-            "tiene_ch":     avg_carbs > 1,
+            "nombre":        nombre.title(),
+            "avg_delta":     avg_delta,
+            "delta_por_10g": delta_por_10g,
+            "avg_carbs":     avg_carbs,
+            "n":             n,
+            "tiene_ch":      avg_carbs > 1,
+            "confianza":     confianza,
         })
 
-    # Ordenar: primero los que tienen CH (por delta_por_10g), luego los sin CH
-    con_ch  = sorted([r for r in resultado if r["tiene_ch"]],
-                     key=lambda x: x["delta_por_10g"], reverse=True)
-    sin_ch  = sorted([r for r in resultado if not r["tiene_ch"]],
-                     key=lambda x: x["nombre"])
+    # Ordenar: con CH primero (por delta_por_10g desc), sin CH al final
+    con_ch = sorted([r for r in resultado if r["tiene_ch"]],
+                    key=lambda x: (x["confianza"] == "baja", -x["delta_por_10g"]))
+    sin_ch = sorted([r for r in resultado if not r["tiene_ch"]],
+                    key=lambda x: x["nombre"])
     return con_ch + sin_ch
 
 

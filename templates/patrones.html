@@ -170,9 +170,10 @@
   <div class="pat-insight pat-insight-info" style="margin-bottom:1rem;">
     <i class="bi bi-info-circle"></i>
     <div>
-      El <strong>Δ por 10g CH</strong> normaliza el impacto por porción: permite comparar
-      "arroz integral vs arroz blanco" aunque comas cantidades distintas.
-      Ingredientes sin carbohidratos (pollo, carne, verduras) siempre muestran 0 — correcto.
+      El <strong>Δ por 10g CH</strong> es el impacto glucémico atribuido proporcionalmente
+      a los carbohidratos del ingrediente, normalizado para poder comparar porciones distintas.
+      Se necesitan <strong>≥ 3 registros</strong> para que el dato sea confiable —
+      los que tienen menos aparecen marcados con <span class="conf-baja-badge">pocos datos</span>.
     </div>
   </div>
 
@@ -200,15 +201,21 @@
         </thead>
         <tbody>
           {% for ing in ing_con_ch %}
-          <tr>
-            <td><strong>{{ ing.nombre }}</strong></td>
+          <tr class="{{ 'tr-baja-conf' if ing.confianza == 'baja' else '' }}">
+            <td>
+              <strong>{{ ing.nombre }}</strong>
+              {% if ing.confianza == 'baja' %}
+                <span class="conf-baja-badge">pocos datos</span>
+              {% endif %}
+            </td>
             <td class="{{ 'td-pos' if ing.delta_por_10g > 20 else ('td-mid' if ing.delta_por_10g > 8 else 'td-neg') }}">
+              {% if ing.confianza == 'baja' %}
+                <span style="opacity:.5">~</span>
+              {% endif %}
               <strong>+{{ ing.delta_por_10g | int }}</strong>
             </td>
             <td>{{ ing.avg_carbs }}g</td>
-            <td style="color:var(--text-muted)">
-              +{{ ing.avg_delta | int }} mg/dL
-            </td>
+            <td style="color:var(--text-muted)">+{{ ing.avg_delta | int }} mg/dL</td>
             <td style="color:var(--text-muted)">{{ ing.n }}x</td>
           </tr>
           {% endfor %}
@@ -426,6 +433,15 @@
 .hora-bajo   { color: #22c55e; }
 .hora-n      { font-size: .65rem; color: var(--text-muted); margin-top: .15rem; }
 
+/* Confianza baja */
+.conf-baja-badge {
+  font-size: .65rem; font-weight: 600; padding: .1em .45em;
+  border-radius: 20px; background: rgba(148,163,184,.15);
+  color: var(--text-muted); border: 1px solid rgba(148,163,184,.25);
+  margin-left: .3rem; vertical-align: middle;
+}
+.tr-baja-conf { opacity: .65; }
+
 /* Range pills override */
 .range-pill { border-color: rgba(99,102,241,.3); color: #6366f1; background: rgba(99,102,241,.06); }
 .range-pill:hover { background: rgba(99,102,241,.15); }
@@ -465,7 +481,8 @@ if (RATIO_DATOS.length && document.getElementById('chart-ratio')) {
 // ── Gráfica ingredientes — solo los que tienen CH ────────────────────
 const ING_CON_CH = INGREDIENTES.filter(i => i.tiene_ch);
 if (ING_CON_CH.length && document.getElementById('chart-ingredientes')) {
-  const top = ING_CON_CH.slice(0, 20);
+  // Solo graficar ingredientes con confianza "ok" (≥3 obs)
+  const top = ING_CON_CH.filter(i => i.confianza === 'ok').slice(0, 20);
   const colores = top.map(i =>
     i.delta_por_10g > 20 ? '#ef4444' : i.delta_por_10g > 8 ? '#f59e0b' : '#22c55e'
   );
