@@ -36,11 +36,13 @@ def actividad_nueva():
             flash("El tipo de actividad es obligatorio.", "danger")
             return redirect(url_for("actividad_nueva"))
 
+        ex_type = request.form.get("exercise_type") or None
         act = Activity(
             timestamp=parse_datetime(fecha, hora),
             activity_type=tipo,
             duration_min=duracion,
             intensity=intensidad,
+            exercise_type=ex_type,
             notes=notas,
         )
         db.session.add(act)
@@ -74,6 +76,7 @@ def actividad_editar(id):
         act.activity_type = request.form.get("activity_type", act.activity_type).strip()
         act.duration_min  = request.form.get("duration_min", type=int)
         act.intensity     = request.form.get("intensity", act.intensity)
+        act.exercise_type = request.form.get("exercise_type") or None
         act.notes         = request.form.get("notas", "")
         db.session.commit()
         flash("Actividad actualizada.", "success")

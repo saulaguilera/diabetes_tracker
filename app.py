@@ -129,6 +129,11 @@ with app.app_context():
             conn.commit()
         if "pre_meal_min" not in id_cols:
             conn.execute(text("ALTER TABLE insulin_doses ADD COLUMN pre_meal_min INTEGER"))
+        # Migración: exercise_type en activities
+        act_cols = [c["name"] for c in inspector.get_columns("activities")]
+        if "exercise_type" not in act_cols:
+            conn.execute(text("ALTER TABLE activities ADD COLUMN exercise_type VARCHAR(20)"))
+            conn.commit()
 
 
 # ── Configuración LibreLinkUp ─────────────────────────────────────────────────

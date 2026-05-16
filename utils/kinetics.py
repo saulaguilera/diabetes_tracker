@@ -38,6 +38,151 @@ _GI_ABSORPTION: dict[str, int] = {
 }
 _DEFAULT_ABSORPTION_MIN = 120   # used when GI is unknown
 
+# ── Exercise sensitivity model ────────────────────────────────────────────────
+# Clinical basis:
+#   • Aerobic: enhanced insulin sensitivity +10–35%, lasting 12–24h post-exercise.
+#     Peaks at 4–8h. Magnitude depends on intensity and duration.
+#     Ref: Borghouts & Keizer (2000) Int J Sports Med; Richter & Hargreaves (2013).
+#   • Anaerobic (resistance/HIIT): ACUTE reduction (0–2h) due to counter-regulatory
+#     hormones, followed by a recovery enhancement phase (2–16h, smaller than aerobic).
+#     Ref: Marliss & Vranic (2002) Diabetes; van Dijk et al. (2012).
+
+_AEROBIC_KEYWORDS = {
+    "caminata", "caminar", "correr", "trotar", "trote", "running", "jogging",
+    "natacion", "natación", "nadar", "ciclismo", "bicicleta", "cycling",
+    "cardio", "yoga", "pilates", "baile", "danza", "zumba", "eliptica",
+    "elíptica", "remo", "senderismo", "marcha", "aerobico", "aeróbico",
+    "tennis", "tenis", "futbol", "fútbol", "basket", "basquetbol",
+}
+
+_ANAEROBIC_KEYWORDS = {
+    "pesas", "pesa", "gimnasio", "gym", "crossfit", "hiit", "sentadillas",
+    "press", "curl", "mancuernas", "barra", "levantamiento", "powerlifting",
+    "sprint", "sprints", "velocidad", "fuerza", "musculacion", "musculación",
+    "funcional", "calistenia",
+}
+
+# Intensity → effect magnitude multiplier
+_INTENSITY_MULT: dict[str, float] = {"baja": 0.6, "media": 1.0, "alta": 1.4}
+
+
+def _classify_exercise(name: str, exercise_type: Optional[str]) -> str:
+    """
+    Return 'aerobico', 'anaerobico', or 'mixto'.
+    Explicit exercise_type on the Activity model takes precedence;
+    otherwise inferred from keyword matching on the activity name.
+    """
+    if exercise_type in ("aerobico", "anaerobico", "mixto"):
+        return exercise_type
+    name_lower = (name or "").lower()
+    words = set(name_lower.replace(",", " ").replace(";", " ").split())
+    is_aerobic   = bool(words & _AEROBIC_KEYWORDS)
+    is_anaerobic = bool(words & _ANAEROBIC_KEYWORDS)
+    if is_aerobic and is_anaerobic:
+        return "mixto"
+    if is_aerobic:
+        return "aerobico"
+    if is_anaerobic:
+        return "anaerobico"
+    return "mixto"   # unknown → conservative middle-ground
+
+
+def exercise_sensitivity_factor(
+    activities,
+    at_time: Optional[datetime] = None,
+) -> float:
+    """
+    Compute an insulin-sensitivity multiplier from recent exercise.
+
+    Returns
+    -------
+    float  — multiplier applied to ISF:
+        > 1.0  more sensitive (aerobic recovery) → smaller correction dose
+        < 1.0  less sensitive (anaerobic acute)  → larger correction dose
+        = 1.0  no relevant exercise
+
+    Clamped to [0.70, 1.50] for safety.
+
+    Model (clinical references in module docstring)
+    -----------------------------------------------
+    Aerobic exercise:
+        • Duration multiplier  = min(duration_h, 2.0)  [caps at 2h equivalent]
+        • Intensity multiplier = 0.6 / 1.0 / 1.4  (baja/media/alta)
+        • Max Δ sensitivity    = +35 % × intensity × duration_mult
+        • Time curve           : small at 0–2h → rises → peaks 4–12h → fades 12–24h
+
+    Anaerobic exercise:
+        • Acute phase (0–2h)   : −15 % × intensity  (counter-regulatory hormones)
+        • Recovery phase (2–16h): +15 % × intensity × duration_mult
+          peaks 4–10h post-exercise, fades to zero at 16h
+
+    Mixed exercise: average of both profiles.
+    """
+    if at_time is None:
+        at_time = datetime.now()
+
+    total_delta = 0.0
+
+    for act in activities:
+        elapsed_h = (at_time - act.timestamp).total_seconds() / 3600.0
+        if elapsed_h < 0 or elapsed_h > 24:
+            continue
+
+        duration_h    = ((act.duration_min or 30) / 60.0)
+        dur_mult      = min(duration_h, 2.0)           # cap at 2h equivalent
+        int_mult      = _INTENSITY_MULT.get(act.intensity or "media", 1.0)
+        ex_type       = _classify_exercise(act.activity_type, act.exercise_type)
+
+        if ex_type == "aerobico":
+            # Max Δ at full intensity + 2h duration = +35 %
+            max_delta = 0.35 * int_mult * dur_mult
+            if elapsed_h < 2:
+                delta = max_delta * 0.30 * (elapsed_h / 2)
+            elif elapsed_h < 4:
+                delta = max_delta * (0.30 + 0.35 * (elapsed_h - 2) / 2)
+            elif elapsed_h < 12:
+                # Peak plateau
+                delta = max_delta * (0.65 + 0.35 * (elapsed_h - 4) / 8)
+            elif elapsed_h < 24:
+                delta = max_delta * (1.0 - (elapsed_h - 12) / 12)
+            else:
+                delta = 0.0
+            total_delta += delta
+
+        elif ex_type == "anaerobico":
+            if elapsed_h < 2:
+                # Acute: counter-regulatory response, less sensitive
+                acute_max = -0.15 * int_mult
+                delta = acute_max * (1.0 - elapsed_h / 2.0)
+            elif elapsed_h < 16:
+                # Recovery enhancement
+                recovery_max = 0.15 * int_mult * dur_mult
+                if elapsed_h < 6:
+                    delta = recovery_max * (elapsed_h - 2) / 4.0
+                elif elapsed_h < 10:
+                    delta = recovery_max
+                else:
+                    delta = recovery_max * (1.0 - (elapsed_h - 10) / 6.0)
+            else:
+                delta = 0.0
+            total_delta += delta
+
+        else:  # mixto
+            # Mild acute dip, then moderate recovery
+            if elapsed_h < 1:
+                delta = -0.05 * int_mult
+            elif elapsed_h < 12:
+                delta = 0.20 * int_mult * dur_mult * (elapsed_h - 1) / 11.0
+            elif elapsed_h < 24:
+                delta = 0.20 * int_mult * dur_mult * (1.0 - (elapsed_h - 12) / 12.0)
+            else:
+                delta = 0.0
+            total_delta += delta
+
+    factor = 1.0 + total_delta
+    factor = max(0.70, min(1.50, factor))
+    return round(factor, 3)
+
 # ── Fat + Protein glucose-equivalent model ────────────────────────────────────
 # Clinical basis:
 #   • Wolpert et al. (2013) Diabetes Care: 50g fat → ~50–90 mg/dL glucose rise
@@ -574,7 +719,7 @@ def get_kinetics_snapshot(
         last_glucose : float or None (most recent reading)
         context    : str (human-readable summary)
     """
-    from models import InsulinDose, Meal, GlucoseReading
+    from models import InsulinDose, Meal, GlucoseReading, Activity
     from helpers import _get_setting
 
     now = datetime.now()
@@ -593,8 +738,6 @@ def get_kinetics_snapshot(
         InsulinDose.timestamp >= cutoff,
     ).all()
 
-    meals = Meal.query.filter(Meal.timestamp >= cutoff).all()
-
     roc_cutoff = now - timedelta(minutes=30)
     cgm_readings = GlucoseReading.query.filter(
         GlucoseReading.timestamp >= roc_cutoff,
@@ -604,13 +747,25 @@ def get_kinetics_snapshot(
     fat_cutoff = now - timedelta(hours=max(hours_lookback, 8))
     meals_extended = Meal.query.filter(Meal.timestamp >= fat_cutoff).all()
 
+    # Activities: 24h lookback for exercise sensitivity
+    act_cutoff = now - timedelta(hours=24)
+    activities = Activity.query.filter(Activity.timestamp >= act_cutoff).all()
+
     # Compute
-    iob      = current_iob(boluses, at_time=now, peak_min=peak_min, dia_min=dia_min)
-    cob_data = current_cob_detailed(meals_extended, at_time=now)
-    slope    = glucose_roc(cgm_readings, window_min=20)
-    arrow    = roc_arrow(slope)
+    iob         = current_iob(boluses, at_time=now, peak_min=peak_min, dia_min=dia_min)
+    cob_data    = current_cob_detailed(meals_extended, at_time=now)
+    slope       = glucose_roc(cgm_readings, window_min=20)
+    arrow       = roc_arrow(slope)
+    ex_factor   = exercise_sensitivity_factor(activities, at_time=now)
 
     last_glucose = cgm_readings[-1].value_mgdl if cgm_readings else None
+
+    # Describe exercise effect
+    ex_label = None
+    if ex_factor >= 1.10:
+        ex_label = f"+{round((ex_factor - 1) * 100):.0f}% sensibilidad (ejercicio)"
+    elif ex_factor <= 0.92:
+        ex_label = f"−{round((1 - ex_factor) * 100):.0f}% sensibilidad (ejercicio agudo)"
 
     # Human-readable context
     parts = []
@@ -620,20 +775,24 @@ def get_kinetics_snapshot(
         parts.append(f"COB {cob_data['carbs_cob']:.0f}g CH")
     if cob_data["fp_cob"] >= 2:
         parts.append(f"+{cob_data['fp_cob']:.0f}g grasa/prot")
+    if ex_label:
+        parts.append(ex_label)
     if slope is not None:
         parts.append(f"{arrow} {abs(slope * 10):.0f} mg/dL·10min")
     context = "  ·  ".join(parts) if parts else "Sin insulina ni carbohidratos activos"
 
     return {
-        "iob":          iob,
-        "cob":          cob_data["carbs_cob"],
-        "cob_detail":   cob_data,
-        "roc":          slope,
-        "arrow":        arrow,
-        "last_glucose": last_glucose,
-        "context":      context,
-        "dia_min":      dia_min,
-        "peak_min":     peak_min,
+        "iob":             iob,
+        "cob":             cob_data["carbs_cob"],
+        "cob_detail":      cob_data,
+        "roc":             slope,
+        "arrow":           arrow,
+        "last_glucose":    last_glucose,
+        "context":         context,
+        "dia_min":         dia_min,
+        "peak_min":        peak_min,
+        "exercise_factor": ex_factor,
+        "exercise_label":  ex_label,
     }
 
 

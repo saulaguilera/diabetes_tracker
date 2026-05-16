@@ -83,7 +83,7 @@ def api_calculadora_correccion():
     isf_circ      = _calcular_isf_circadiano(days=90)
     isf_bloque, bloque_label, fuente_circ = _isf_para_hora(hora, isf_circ, isf_personal)
 
-    isf = isf_manual or isf_guardado or isf_bloque or isf_personal
+    isf_base = isf_manual or isf_guardado or isf_bloque or isf_personal
     isf_fuente = (
         "manual"      if isf_manual  else
         "guardado"    if isf_guardado else
@@ -95,8 +95,27 @@ def api_calculadora_correccion():
 
     if not glucemia or glucemia <= 0:
         return jsonify({"error": "Glucemia inválida"})
-    if not isf:
+    if not isf_base:
         return jsonify({"error": "Sin ISF — ingresalo manualmente en Configuración"})
+
+    # ── Exercise sensitivity factor ───────────────────────────────────────────
+    exercise_factor = 1.0
+    exercise_label  = None
+    try:
+        from models import Activity
+        from utils.kinetics import exercise_sensitivity_factor
+        act_cutoff  = datetime.now() - timedelta(hours=24)
+        activities  = Activity.query.filter(Activity.timestamp >= act_cutoff).all()
+        exercise_factor = exercise_sensitivity_factor(activities)
+        if exercise_factor >= 1.10:
+            exercise_label = f"+{round((exercise_factor - 1) * 100):.0f}% sensibilidad (ejercicio)"
+        elif exercise_factor <= 0.92:
+            exercise_label = f"−{round((1 - exercise_factor) * 100):.0f}% sensibilidad (ejercicio agudo)"
+    except Exception:
+        pass
+
+    # Apply exercise factor to ISF (more sensitive → higher effective ISF → smaller dose)
+    isf = round((isf_base or 0) * exercise_factor, 1)
 
     # ── Componente de corrección ──────────────────────────────────────────────
     if glucemia > objetivo:
@@ -171,6 +190,10 @@ def api_calculadora_correccion():
         "deferred_units":   split_rec["deferred_units"]   if split_rec else 0,
         "deferred_at":      split_rec["deferred_at"]      if split_rec else "",
         "fp_trigger":       split_rec["trigger"]          if split_rec else "",
+        # Exercise sensitivity
+        "exercise_factor":  round(exercise_factor, 3),
+        "exercise_label":   exercise_label or "",
+        "isf_base":         isf_base,
     })
 
 

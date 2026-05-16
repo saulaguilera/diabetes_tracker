@@ -100,6 +100,8 @@ class Activity(db.Model):
     duration_min = db.Column(db.Integer)
     # baja, media, alta
     intensity = db.Column(db.String(20))
+    # aerobico | anaerobico | mixto  (None = no especificado → inferido por nombre)
+    exercise_type = db.Column(db.String(20))
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 

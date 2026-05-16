@@ -10,7 +10,9 @@
 
 <div class="form-card">
   <form method="post">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {# ── Fecha / Hora ────────────────────────────────────────────────────────── #}
     <div class="row g-3 mb-3">
       <div class="col-5">
         <label class="form-label fw-semibold">Fecha</label>
@@ -25,6 +27,7 @@
       </div>
     </div>
 
+    {# ── Tipo de actividad ───────────────────────────────────────────────────── #}
     <div class="mb-3">
       <label class="form-label fw-semibold">Tipo de actividad</label>
       {% if not editar %}
@@ -47,9 +50,70 @@
       {% endif %}
       <input type="text" id="activity-input" name="activity_type" class="form-control"
              value="{{ item.activity_type if editar else '' }}"
-             placeholder="ej. Caminata, Ciclismo, Yoga..." required>
+             placeholder="ej. Caminata, Ciclismo, Yoga..." required
+             oninput="inferExerciseType(this.value)">
     </div>
 
+    {# ── Tipo metabólico (aeróbico / anaeróbico) ─────────────────────────────── #}
+    <div class="mb-3">
+      <label class="form-label fw-semibold">
+        Tipo metabólico
+        <span class="text-muted fw-normal" style="font-size:.8rem;">
+          — afecta el cálculo de sensibilidad a la insulina
+        </span>
+      </label>
+      <div class="ex-type-grid">
+
+        <label class="ex-type-card" id="card-aerobico">
+          <input type="radio" name="exercise_type" value="aerobico"
+                 {{ 'checked' if editar and item.exercise_type == 'aerobico' }}>
+          <div class="ex-type-body">
+            <div class="ex-type-icon text-success"><i class="bi bi-heart-pulse-fill"></i></div>
+            <div class="ex-type-name">Aeróbico</div>
+            <div class="ex-type-hint">Cardio, correr, nadar, ciclismo, yoga</div>
+            <div class="ex-type-effect">
+              <span class="badge bg-success-subtle text-success">
+                ↑ sensibilidad 4–24h
+              </span>
+            </div>
+          </div>
+        </label>
+
+        <label class="ex-type-card" id="card-anaerobico">
+          <input type="radio" name="exercise_type" value="anaerobico"
+                 {{ 'checked' if editar and item.exercise_type == 'anaerobico' }}>
+          <div class="ex-type-body">
+            <div class="ex-type-icon text-warning"><i class="bi bi-lightning-charge-fill"></i></div>
+            <div class="ex-type-name">Anaeróbico</div>
+            <div class="ex-type-hint">Pesas, HIIT, sprints, crossfit</div>
+            <div class="ex-type-effect">
+              <span class="badge bg-danger-subtle text-danger">↓ 0–2h agudo</span>
+              <span class="badge bg-success-subtle text-success ms-1">↑ 2–16h rec.</span>
+            </div>
+          </div>
+        </label>
+
+        <label class="ex-type-card" id="card-mixto">
+          <input type="radio" name="exercise_type" value="mixto"
+                 {{ 'checked' if not editar or (editar and item.exercise_type == 'mixto') }}>
+          <div class="ex-type-body">
+            <div class="ex-type-icon text-primary"><i class="bi bi-shuffle"></i></div>
+            <div class="ex-type-name">Mixto / No sé</div>
+            <div class="ex-type-hint">Funcional, deportes de equipo</div>
+            <div class="ex-type-effect">
+              <span class="badge bg-primary-subtle text-primary">efecto moderado</span>
+            </div>
+          </div>
+        </label>
+
+      </div>
+
+      {# Hint contextual que aparece al seleccionar #}
+      <div id="ex-type-hint-box" class="alert alert-info py-2 px-3 mt-2 d-none" style="font-size:.82rem;">
+      </div>
+    </div>
+
+    {# ── Duración ────────────────────────────────────────────────────────────── #}
     <div class="mb-3">
       <label class="form-label fw-semibold">Duración (minutos)</label>
       {% if not editar %}
@@ -69,6 +133,7 @@
       </div>
     </div>
 
+    {# ── Intensidad ──────────────────────────────────────────────────────────── #}
     <div class="mb-3">
       <label class="form-label fw-semibold">Intensidad</label>
       <div class="d-flex gap-3 flex-wrap">
@@ -99,6 +164,7 @@
       </div>
     </div>
 
+    {# ── Notas ───────────────────────────────────────────────────────────────── #}
     <div class="mb-4">
       <label class="form-label fw-semibold">Notas <span class="text-muted fw-normal">(opcional)</span></label>
       <input type="text" name="notas" class="form-control"
@@ -116,6 +182,44 @@
 {% endblock %}
 
 {% block scripts %}
+<style>
+  .ex-type-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: .6rem;
+  }
+  @media (max-width: 480px) {
+    .ex-type-grid { grid-template-columns: 1fr; }
+  }
+  .ex-type-card {
+    cursor: pointer;
+    display: block;
+    border: 2px solid var(--border-color, #dee2e6);
+    border-radius: 12px;
+    transition: border-color .15s, box-shadow .15s, background .15s;
+    background: var(--card-bg, #fff);
+  }
+  .ex-type-card input[type=radio] { display: none; }
+  .ex-type-body {
+    padding: .8rem .7rem;
+    text-align: center;
+  }
+  .ex-type-icon { font-size: 1.5rem; margin-bottom: .3rem; }
+  .ex-type-name { font-weight: 700; font-size: .92rem; }
+  .ex-type-hint { font-size: .72rem; color: var(--text-muted); margin: .2rem 0; }
+  .ex-type-effect { margin-top: .35rem; }
+
+  /* selected state */
+  .ex-type-card:has(input:checked) {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99,102,241,.20);
+    background: rgba(99,102,241,.04);
+  }
+  #card-aerobico:has(input:checked)  { border-color: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,.18); background: rgba(34,197,94,.04); }
+  #card-anaerobico:has(input:checked){ border-color: #f97316; box-shadow: 0 0 0 3px rgba(249,115,22,.18); background: rgba(249,115,22,.04); }
+  #card-mixto:has(input:checked)     { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.18); background: rgba(99,102,241,.04); }
+</style>
+
 <script>
   function setActNow() {
     const n = new Date();
@@ -123,7 +227,58 @@
     document.getElementById('act-hora').value  = n.toTimeString().slice(0, 5);
   }
   {% if not editar %}document.addEventListener('DOMContentLoaded', setActNow);{% endif %}
+
+  // Keyword → exercise type inference
+  const _AEROBIC_KW  = new Set(["caminar","caminata","correr","trotar","trote","running","jogging",
+    "natacion","natación","nadar","ciclismo","bicicleta","cycling","cardio","yoga","pilates",
+    "baile","danza","zumba","eliptica","elíptica","remo","senderismo","marcha","aerobico","aeróbico",
+    "tenis","tennis","futbol","fútbol","basket","basquetbol"]);
+  const _ANAER_KW    = new Set(["pesas","pesa","gimnasio","gym","crossfit","hiit","sentadillas",
+    "press","curl","mancuernas","barra","levantamiento","powerlifting","sprint","sprints",
+    "fuerza","musculacion","musculación","funcional","calistenia"]);
+
+  function inferExerciseType(val) {
+    const words = val.toLowerCase().split(/[\s,;]+/);
+    const isAer  = words.some(w => _AEROBIC_KW.has(w));
+    const isAnaer = words.some(w => _ANAER_KW.has(w));
+    let inferred = null;
+    if (isAer && isAnaer) inferred = "mixto";
+    else if (isAer)       inferred = "aerobico";
+    else if (isAnaer)     inferred = "anaerobico";
+
+    if (inferred) {
+      document.querySelector(`input[name=exercise_type][value="${inferred}"]`).checked = true;
+      onExTypeChange(inferred, true);
+    }
+  }
+
+  const _EX_HINTS = {
+    aerobico:   "💚 Aeróbico: mejora la sensibilidad a la insulina durante las 12–24h siguientes. " +
+                "Vigilá hipoglucemia diferida.",
+    anaerobico: "⚡ Anaeróbico: puede subir la glucosa en la 1ª hora (adrenalina), " +
+                "pero aumenta la sensibilidad en las 2–16h de recuperación.",
+    mixto:      "🔀 Mixto: efecto moderado. El modelo aplicará un promedio de ambos perfiles.",
+  };
+
+  function onExTypeChange(val, auto) {
+    const box = document.getElementById('ex-type-hint-box');
+    if (_EX_HINTS[val]) {
+      box.textContent = _EX_HINTS[val] + (auto ? "  (inferido del nombre)" : "");
+      box.classList.remove('d-none');
+    } else {
+      box.classList.add('d-none');
+    }
+  }
+
+  document.querySelectorAll('input[name=exercise_type]').forEach(r => {
+    r.addEventListener('change', e => onExTypeChange(e.target.value, false));
+  });
+  // Show hint for initial selection on edit
+  {% if editar and item.exercise_type %}
+  document.addEventListener('DOMContentLoaded', () => onExTypeChange('{{ item.exercise_type }}', false));
+  {% endif %}
 </script>
+
 {% if not editar %}
 <script>
   function selectActivity(name) {
@@ -134,6 +289,7 @@
     });
     event.target.closest('button').classList.add('btn-success', 'text-white');
     event.target.closest('button').classList.remove('btn-outline-secondary');
+    inferExerciseType(name);
   }
   function selectDuration(min) {
     document.getElementById('duration-input').value = min;

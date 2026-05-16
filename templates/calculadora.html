@@ -305,8 +305,8 @@
     <div class="alert border mt-3"
          style="font-size:.8rem; background:var(--surface2); color:var(--text);">
       <i class="bi bi-shield-exclamation text-warning me-1"></i>
-      <strong>Solo orientativo.</strong> El resultado incluye IOB activo, pero no
-      considera ejercicio reciente ni toda la variabilidad individual.
+      <strong>Solo orientativo.</strong> El resultado considera IOB activo y ejercicio
+      de las últimas 24h, pero no captura toda la variabilidad individual.
       Consultá con tu médico antes de cambiar dosis.
     </div>
   </div>
@@ -713,6 +713,24 @@
         </div>
       </div>
 
+      <!-- Ejercicio -->
+      ${d.exercise_factor && d.exercise_factor !== 1 && Math.abs(d.exercise_factor - 1) >= 0.05 ? `
+      <div class="d-flex align-items-center gap-2 p-2 rounded mb-3"
+           style="background:${d.exercise_factor >= 1 ? 'rgba(34,197,94,.08)' : 'rgba(239,68,68,.08)'};
+                  border:1px solid ${d.exercise_factor >= 1 ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'};
+                  font-size:.82rem;">
+        <i class="bi bi-${d.exercise_factor >= 1 ? 'heart-pulse-fill text-success' : 'lightning-charge-fill text-danger'}"
+           style="font-size:1.1rem; flex-shrink:0;"></i>
+        <div>
+          <strong style="color:${d.exercise_factor >= 1 ? '#15803d' : '#dc2626'};">
+            ${d.exercise_label}
+          </strong>
+          — ISF base ${d.isf_base} → efectivo
+          <strong>${d.isf} mg/dL·U</strong>
+          (×${d.exercise_factor.toFixed(2)})
+        </div>
+      </div>` : ''}
+
       <!-- Fuentes -->
       <div class="d-flex flex-wrap gap-1 justify-content-center">
         <span class="badge ${d.fuente_isf === 'circadiano' ? '' : 'bg-secondary'}"
@@ -721,6 +739,10 @@
         </span>
         ${d.icr ? `<span class="badge bg-secondary" style="font-size:.7rem;">${icrLabel}</span>` : ''}
         ${d.iob_actual > 0.05 ? `<span class="badge" style="font-size:.7rem;background:rgba(99,102,241,.15);color:#6366f1;">IOB ${d.iob_actual.toFixed(1)} U descontado</span>` : ''}
+        ${d.exercise_factor && Math.abs(d.exercise_factor - 1) >= 0.05
+          ? `<span class="badge" style="font-size:.7rem;background:${d.exercise_factor >= 1 ? 'rgba(34,197,94,.15)' : 'rgba(239,68,68,.15)'};color:${d.exercise_factor >= 1 ? '#15803d' : '#dc2626'};">
+              ejercicio ×${d.exercise_factor.toFixed(2)}
+            </span>` : ''}
       </div>`;
   }
 
