@@ -660,49 +660,49 @@
   </div>
 
   <div class="nav-section">Principal</div>
-  <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">
+  <a href="{{ url_for('dashboard') }}" class="nav-link {% if ep == 'dashboard' %}active{% endif %}">
     <i class="bi bi-speedometer2"></i> Dashboard
   </a>
 
   <div class="nav-section">Registrar</div>
-  <a href="{{ url_for('quicklog') }}" class="nav-link {% if request.endpoint == 'quicklog' %}active{% endif %}"
+  <a href="{{ url_for('quicklog') }}" class="nav-link {% if ep == 'quicklog' %}active{% endif %}"
      style="background:rgba(99,102,241,.12); border:1px solid rgba(99,102,241,.25); border-radius:8px; margin-bottom:4px; font-weight:600;">
     <i class="bi bi-lightning-charge-fill text-warning"></i> Quick Log
   </a>
-  <a href="{{ url_for('glucemia') }}" class="nav-link {% if 'glucemia' in request.endpoint %}active{% endif %}">
+  <a href="{{ url_for('glucemia') }}" class="nav-link {% if 'glucemia' in ep %}active{% endif %}">
     <i class="bi bi-droplet-fill"></i> Glucemia
   </a>
-  <a href="{{ url_for('comidas') }}" class="nav-link {% if request.endpoint in ['comidas','comida_nueva','comida_editar'] %}active{% endif %}">
+  <a href="{{ url_for('comidas') }}" class="nav-link {% if ep in ['comidas','comida_nueva','comida_editar','comidas_grupos'] %}active{% endif %}">
     <i class="bi bi-egg-fried"></i> Comidas
   </a>
-  <a href="{{ url_for('insulina') }}" class="nav-link {% if 'insulina' in request.endpoint %}active{% endif %}">
+  <a href="{{ url_for('insulina') }}" class="nav-link {% if 'insulina' in ep %}active{% endif %}">
     <i class="bi bi-capsule-pill"></i> Insulina
   </a>
-  <a href="{{ url_for('actividad') }}" class="nav-link {% if 'actividad' in request.endpoint %}active{% endif %}">
+  <a href="{{ url_for('actividad') }}" class="nav-link {% if 'actividad' in ep %}active{% endif %}">
     <i class="bi bi-bicycle"></i> Actividad física
   </a>
   <div class="nav-section">Análisis</div>
-  <a href="{{ url_for('agp') }}" class="nav-link {% if request.endpoint == 'agp' %}active{% endif %}">
+  <a href="{{ url_for('agp') }}" class="nav-link {% if ep == 'agp' %}active{% endif %}">
     <i class="bi bi-layers-fill"></i> AGP
   </a>
-  <a href="{{ url_for('reportes') }}" class="nav-link {% if request.endpoint == 'reportes' %}active{% endif %}">
+  <a href="{{ url_for('reportes') }}" class="nav-link {% if ep == 'reportes' %}active{% endif %}">
     <i class="bi bi-diagram-3-fill"></i> Correlaciones
   </a>
-  <a href="{{ url_for('patrones') }}" class="nav-link {% if request.endpoint == 'patrones' %}active{% endif %}">
+  <a href="{{ url_for('patrones') }}" class="nav-link {% if ep == 'patrones' %}active{% endif %}">
     <i class="bi bi-graph-up-arrow"></i> Patrones
   </a>
-  <a href="{{ url_for('recomendaciones') }}" class="nav-link {% if request.endpoint == 'recomendaciones' %}active{% endif %}">
+  <a href="{{ url_for('recomendaciones') }}" class="nav-link {% if ep == 'recomendaciones' %}active{% endif %}">
     <i class="bi bi-lightbulb-fill"></i> Recomendaciones
   </a>
-  <a href="{{ url_for('calculadora') }}" class="nav-link {% if request.endpoint == 'calculadora' %}active{% endif %}">
+  <a href="{{ url_for('calculadora') }}" class="nav-link {% if ep == 'calculadora' %}active{% endif %}">
     <i class="bi bi-calculator-fill"></i> Calculadora ISF
   </a>
 
   <div class="nav-section">Clínico</div>
-  <a href="{{ url_for('reporte_semanal') }}" class="nav-link {% if request.endpoint == 'reporte_semanal' %}active{% endif %}">
+  <a href="{{ url_for('reporte_semanal') }}" class="nav-link {% if ep == 'reporte_semanal' %}active{% endif %}">
     <i class="bi bi-file-medical-fill"></i> Reporte clínico
   </a>
-  <a href="{{ url_for('backup_importar') }}" class="nav-link {% if 'backup' in request.endpoint or request.endpoint == 'importar' %}active{% endif %}">
+  <a href="{{ url_for('backup_importar') }}" class="nav-link {% if 'backup' in ep or ep == 'importar' %}active{% endif %}">
     <i class="bi bi-database-fill-gear"></i> Backup & Datos
   </a>
 
@@ -733,15 +733,15 @@
 
 <!-- Bottom nav (mobile, siempre oscuro) -->
 <nav class="bottom-nav" data-bs-theme="dark">
-  <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}">
+  <a href="{{ url_for('dashboard') }}" class="{% if ep == 'dashboard' %}active{% endif %}">
     <i class="bi bi-speedometer2"></i>Inicio
   </a>
-  <a href="{{ url_for('glucemia_nueva') }}" class="{% if request.endpoint == 'glucemia_nueva' %}active{% endif %}">
+  <a href="{{ url_for('glucemia_nueva') }}" class="{% if ep == 'glucemia_nueva' %}active{% endif %}">
     <i class="bi bi-droplet-fill"></i>Glucemia
   </a>
   <!-- Botón central Quick Log -->
   <a href="{{ url_for('quicklog') }}"
-     class="{% if request.endpoint == 'quicklog' %}active{% endif %}"
+     class="{% if ep == 'quicklog' %}active{% endif %}"
      style="flex-direction:column; position:relative;">
     <span style="background:#6366f1; border-radius:50%; width:44px; height:44px;
                  display:flex; align-items:center; justify-content:center;
@@ -751,10 +751,10 @@
     </span>
     <span style="font-size:.62rem; margin-top:2px; color:#94a3b8;">Log</span>
   </a>
-  <a href="{{ url_for('actividad_nueva') }}" class="{% if request.endpoint == 'actividad_nueva' %}active{% endif %}">
+  <a href="{{ url_for('actividad_nueva') }}" class="{% if ep == 'actividad_nueva' %}active{% endif %}">
     <i class="bi bi-bicycle"></i>Ejercicio
   </a>
-  <a href="{{ url_for('agp') }}" class="{% if request.endpoint == 'agp' %}active{% endif %}">
+  <a href="{{ url_for('agp') }}" class="{% if ep == 'agp' %}active{% endif %}">
     <i class="bi bi-layers-fill"></i>AGP
   </a>
 </nav>

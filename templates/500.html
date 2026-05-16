@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Error interno — DiabetesTracker{% endblock %}
+{% block content %}
+<div class="error-page">
+  <div class="error-code">500</div>
+  <div class="error-icon"><i class="bi bi-bug-fill"></i></div>
+  <h2 class="error-title">Algo salió mal</h2>
+  <p class="error-body">Ocurrió un error inesperado. Ya fue registrado. Podés intentar de nuevo o volver al inicio.</p>
+  <div class="d-flex gap-2 justify-content-center flex-wrap">
+    <a href="javascript:history.back()" class="btn-list-secondary">
+      <i class="bi bi-arrow-left"></i> Volver
+    </a>
+    <a href="{{ url_for('dashboard') }}" class="btn-list-add">
+      <i class="bi bi-house-fill"></i> Inicio
+    </a>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<style>
+.error-page {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 4rem 1rem; text-align: center; gap: .5rem;
+}
+.error-code {
+  font-size: 6rem; font-weight: 900; line-height: 1;
+  background: linear-gradient(135deg, #ef4444, #fca5a5);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.error-icon { font-size: 2.5rem; color: var(--text-muted); margin-bottom: .5rem; }
+.error-title { font-size: 1.5rem; font-weight: 700; margin: 0; }
+.error-body  { color: var(--text-muted); font-size: .95rem; max-width: 420px; margin-bottom: 1.5rem; }
+</style>
+{% endblock %}

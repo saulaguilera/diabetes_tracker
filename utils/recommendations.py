@@ -10,7 +10,7 @@ Cada recomendación tiene:
   - data:      dict con los números que sustentan la recomendación
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from collections import defaultdict
 
 
@@ -34,18 +34,14 @@ def _meals(days=30):
     ).order_by(Meal.timestamp.asc()).all()
 
 
-def _glucose_near(timestamp, window_before_min=30, window_after_min=0):
-    """Lectura de glucosa más cercana dentro de una ventana de tiempo."""
-    from models import GlucoseReading
-    desde = timestamp - timedelta(minutes=window_before_min)
-    hasta = timestamp + timedelta(minutes=window_after_min)
-    return (
-        GlucoseReading.query
-        .filter(GlucoseReading.timestamp >= desde,
-                GlucoseReading.timestamp <= hasta)
-        .order_by(GlucoseReading.timestamp.desc())
-        .first()
-    )
+def _load_bolus(days=30):
+    """Carga todos los bolus del período en UNA sola query."""
+    from models import InsulinDose
+    desde = _now() - timedelta(days=days)
+    return InsulinDose.query.filter(
+        InsulinDose.type == "bolus",
+        InsulinDose.timestamp >= desde,
+    ).order_by(InsulinDose.timestamp.asc()).all()
 
 
 # ─── Analizadores individuales ────────────────────────────────────────────────
@@ -134,7 +130,6 @@ def _rec_patron_circadiano(readings) -> dict | None:
     for r in readings:
         por_hora[r.timestamp.hour].append(r.value_mgdl)
 
-    # Horas con promedio más alto
     promedios = {h: sum(v) / len(v) for h, v in por_hora.items() if len(v) >= 3}
     if not promedios:
         return None
@@ -145,7 +140,6 @@ def _rec_patron_circadiano(readings) -> dict | None:
     val_min  = round(promedios[hora_min], 0)
 
     if val_max > 200:
-        franja = f"{hora_max:02d}:00–{(hora_max+1)%24:02d}:00"
         return {
             "category": "glucemia",
             "priority": "importante",
@@ -165,7 +159,6 @@ def _rec_patron_circadiano(readings) -> dict | None:
                      "hora_min": hora_min, "promedio_min": val_min},
         }
 
-    # Variabilidad alta en alguna franja
     variabilidades = {}
     for h, vals in por_hora.items():
         if len(vals) >= 5:
@@ -206,7 +199,6 @@ def _rec_hipoglucemia_nocturna(readings) -> dict | None:
         (readings[-1].timestamp - readings[0].timestamp).days, 1
     )
     if len(hipos_nocturnas) >= 3:
-        frecuencia = round(len(hipos_nocturnas) / total_noches * 100, 0)
         return {
             "category": "glucemia",
             "priority": "urgente",
@@ -227,38 +219,41 @@ def _rec_hipoglucemia_nocturna(readings) -> dict | None:
     return None
 
 
-def _rec_comidas_problematicas(meals) -> dict | None:
+def _rec_comidas_problematicas(meals, all_readings) -> dict | None:
+    """
+    Detecta comidas que disparan la glucemia más de lo esperado.
+    Usa all_readings pre-cargado — sin queries por comida.
+    """
     if len(meals) < 5:
         return None
 
-    from models import GlucoseReading
-
     resultados = []
     for comida in meals:
-        pre = _glucose_near(comida.timestamp, window_before_min=30, window_after_min=0)
-        post_lecturas = (
-            GlucoseReading.query
-            .filter(
-                GlucoseReading.timestamp > comida.timestamp,
-                GlucoseReading.timestamp <= comida.timestamp + timedelta(hours=2),
-            ).all()
-        )
-        if not pre or not post_lecturas:
+        t0 = comida.timestamp
+        # Pre: lectura más reciente hasta 30 min antes de comer
+        pre_list = [r for r in all_readings
+                    if t0 - timedelta(minutes=30) <= r.timestamp <= t0]
+        # Post: lecturas en las 2 h siguientes
+        post_list = [r for r in all_readings
+                     if t0 < r.timestamp <= t0 + timedelta(hours=2)]
+
+        if not pre_list or not post_list:
             continue
-        pico = max(r.value_mgdl for r in post_lecturas)
-        delta = pico - pre.value_mgdl
+
+        pre  = pre_list[-1].value_mgdl   # la más cercana antes
+        pico = max(r.value_mgdl for r in post_list)
+        delta = pico - pre
         resultados.append({
             "nombre": comida.name,
-            "carbs": comida.carbs_g,
-            "pre": pre.value_mgdl,
-            "pico": pico,
-            "delta": delta,
+            "carbs":  comida.carbs_g,
+            "pre":    pre,
+            "pico":   pico,
+            "delta":  delta,
         })
 
     if len(resultados) < 3:
         return None
 
-    # Agrupar por nombre de comida y promediar delta
     por_comida = defaultdict(list)
     for r in resultados:
         por_comida[r["nombre"]].append(r["delta"])
@@ -270,7 +265,6 @@ def _rec_comidas_problematicas(meals) -> dict | None:
     }
 
     if not promedios_delta:
-        # Aun así, reportar la peor comida individual
         peor = max(resultados, key=lambda x: x["delta"])
         if peor["delta"] > 100:
             return {
@@ -315,10 +309,11 @@ def _rec_comidas_problematicas(meals) -> dict | None:
     return None
 
 
-def _rec_ratio_insulina_carbs(meals) -> dict | None:
-    """Estima el ratio I:C basado en comidas donde la glucemia se mantuvo en rango."""
-    from models import InsulinDose, GlucoseReading
-
+def _rec_ratio_insulina_carbs(meals, all_readings, all_bolus) -> dict | None:
+    """
+    Estima el ratio I:C basado en comidas donde la glucemia se mantuvo en rango.
+    Usa all_readings y all_bolus pre-cargados — sin queries por comida.
+    """
     if len(meals) < 10:
         return None
 
@@ -327,26 +322,18 @@ def _rec_ratio_insulina_carbs(meals) -> dict | None:
         if comida.carbs_g < 10:
             continue
 
-        # Insulina de bolo en los 30 min previos a la comida
-        bolo = (
-            InsulinDose.query
-            .filter(
-                InsulinDose.type == "bolus",
-                InsulinDose.timestamp >= comida.timestamp - timedelta(minutes=30),
-                InsulinDose.timestamp <= comida.timestamp + timedelta(minutes=15),
-            ).first()
-        )
-        if not bolo:
-            continue
+        t0 = comida.timestamp
 
-        # Glucemia 2h post — ¿se mantuvo en rango?
-        post = (
-            GlucoseReading.query
-            .filter(
-                GlucoseReading.timestamp >= comida.timestamp + timedelta(minutes=90),
-                GlucoseReading.timestamp <= comida.timestamp + timedelta(minutes=150),
-            ).all()
-        )
+        # Bolus prandial: ventana -30 / +15 min
+        bolus_cercanos = [b for b in all_bolus
+                          if t0 - timedelta(minutes=30) <= b.timestamp <= t0 + timedelta(minutes=15)]
+        if not bolus_cercanos:
+            continue
+        bolo = bolus_cercanos[0]  # el primero (más cercano antes de comer)
+
+        # Glucemia 90–150 min post-comida
+        post = [r for r in all_readings
+                if t0 + timedelta(minutes=90) <= r.timestamp <= t0 + timedelta(minutes=150)]
         if not post:
             continue
 
@@ -435,7 +422,6 @@ def _rec_pocos_datos() -> dict:
 def _rec_registros_inconsistentes(meals, days=14) -> dict | None:
     if not meals:
         return None
-    # Contar días con al menos una comida registrada
     dias_con_registro = len({m.timestamp.date() for m in meals})
     if dias_con_registro < days * 0.5:
         pct = round(dias_con_registro / days * 100, 0)
@@ -464,10 +450,12 @@ def _rec_registros_inconsistentes(meals, days=14) -> dict | None:
 def generate_recommendations(days: int = 30) -> list[dict]:
     """
     Genera lista de recomendaciones ordenadas por prioridad.
-    Retorna lista vacía si no hay datos.
+    Todas las queries de DB se hacen aquí en batch — los analizadores
+    individuales trabajan solo con listas en memoria.
     """
-    readings = _readings(days)
-    meals    = _meals(days)
+    readings  = _readings(days)
+    meals     = _meals(days)
+    all_bolus = _load_bolus(days)   # una sola query extra para los ratios
 
     PRIORITY_ORDER = {"urgente": 0, "importante": 1, "informativo": 2}
 
@@ -476,13 +464,12 @@ def generate_recommendations(days: int = 30) -> list[dict]:
 
     recs = []
 
-    # Ejecutar cada analizador
     analizadores = [
         _rec_tiempo_en_rango(readings),
         _rec_hipoglucemia_nocturna(readings),
         _rec_patron_circadiano(readings),
-        _rec_comidas_problematicas(meals),
-        _rec_ratio_insulina_carbs(meals),
+        _rec_comidas_problematicas(meals, readings),          # in-memory
+        _rec_ratio_insulina_carbs(meals, readings, all_bolus), # in-memory
         _rec_carbohidratos_altos(meals),
         _rec_registros_inconsistentes(meals, days=min(days, 14)),
     ]
