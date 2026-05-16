@@ -882,7 +882,7 @@ a.insight-chip:hover {
 .pred-seg-hipo  { background:#ef4444; }
 .pred-seg-rango { background:#22c55e; }
 .pred-seg-hiper { background:#f97316; }
-.pred-dom    { font-size:.63rem; color:var(--text-muted); white-space:nowrap; }
+.pred-dom    { font-size:.60rem; color:var(--text-muted); white-space:nowrap; letter-spacing:-.01em; }
 
 @media (max-width: 576px) {
   .pred-bar   { padding: .5rem .75rem; gap: .4rem; }
@@ -910,49 +910,66 @@ a.insight-chip:hover {
         el.classList.remove('pred-rango', 'pred-hiper', 'pred-hipo');
         el.classList.add(estadoClass[p.estado] || '');
 
-        // Probabilidad dominante y barra de 3 colores
+        // ── Probabilidades y distribución MC ─────────────────────────────
         const pHipo  = p.p_hipo  || 0;
         const pRango = p.p_rango || 0;
         const pHiper = p.p_hiper || 0;
         const sigma  = p.sigma   || '?';
+        const ci50   = p.ci_50   || null;
+        const ci90   = p.ci_90   || null;
+        const nSim   = p.n_sim   || 3000;
+        const skew   = p.skewness|| 0;
 
-        // Estado dominante en texto corto
+        // Etiqueta del estado dominante
         const domLabel = p.estado === 'rango' ? `${pRango}% rango`
                        : p.estado === 'hiper' ? `${pHiper}% hiper`
                        : `${pHipo}% hipo`;
 
+        // Rango 50 % más probable (IC50) — formato compacto
+        const ci50txt = ci50 ? `${ci50[0]}–${ci50[1]}` : '';
+
+        // Indicador de asimetría (skewness > 0.3 → más cola hacia hiper;  < -0.3 → hipo)
+        const skewIcon = skew >  0.4 ? ' ↑' : skew < -0.4 ? ' ↓' : '';
+
         el.innerHTML = `
           <span class="pred-time">+${mins}min</span>
-          <span class="pred-val">${p.glucemia_pred}</span>
+          <span class="pred-val">${p.glucemia_pred}${skewIcon}</span>
           <div class="pred-detail">
             <div class="pred-prob-bar" title="Hipo ${pHipo}% · Rango ${pRango}% · Hiper ${pHiper}%">
               <div class="pred-seg pred-seg-hipo"  style="width:${pHipo}%"></div>
               <div class="pred-seg pred-seg-rango" style="width:${pRango}%"></div>
               <div class="pred-seg pred-seg-hiper" style="width:${pHiper}%"></div>
             </div>
-            <span class="pred-dom">${domLabel}</span>
+            <span class="pred-dom">${domLabel}${ci50txt ? ' · ' + ci50txt : ''}</span>
           </div>`;
 
+        // Tooltip completo con datos MC
+        const comp = p.componentes || {};
         el.title =
-          `+${mins}min: ~${p.glucemia_pred} mg/dL (±${sigma} mg/dL)\n` +
-          `Hipo ${pHipo}% · Rango ${pRango}% · Hiper ${pHiper}%\n` +
-          `IC 90%: ${p.ci_90 ? p.ci_90[0]+' – '+p.ci_90[1] : '?'} mg/dL\n` +
-          `tendencia ${p.componentes.roc_effect >= 0 ? '+' : ''}${p.componentes.roc_effect}` +
-          ` · insulina ${p.componentes.insulin_effect}` +
-          ` · comida +${p.componentes.carb_effect}`;
+          `+${mins}min — ${p.glucemia_pred} mg/dL (mediana MC)\n` +
+          `Rango 50 %: ${ci50txt || '?'} mg/dL\n` +
+          `IC 90 %:    ${ci90 ? ci90[0]+' – '+ci90[1] : '?'} mg/dL\n` +
+          `───────────────────────────\n` +
+          `Hipo ${pHipo} % · Rango ${pRango} % · Hiper ${pHiper} %\n` +
+          `σ = ${sigma} mg/dL · sesgo ${skew > 0 ? '+' : ''}${skew}\n` +
+          `${nSim.toLocaleString()} simulaciones Monte Carlo\n` +
+          `───────────────────────────\n` +
+          `Tendencia: ${comp.roc_effect >= 0 ? '+' : ''}${comp.roc_effect} mg/dL\n` +
+          `Insulina:  ${comp.insulin_effect} mg/dL\n` +
+          `Comida:   +${comp.carb_effect} mg/dL`;
       }
 
-      // Mostrar advertencia si σ viene de defaults (sin datos históricos)
+      // Nota MC en la barra (reemplaza la de "literatura")
       const anyPred = Object.values(d.predictions)[0];
-      if (anyPred && !anyPred.data_based_sigma) {
+      if (anyPred) {
         const bar = document.getElementById('pred-bar');
-        if (bar && !bar.querySelector('.pred-sigma-note')) {
+        if (bar && !bar.querySelector('.pred-mc-note')) {
           const note = document.createElement('span');
-          note.className = 'pred-sigma-note text-muted';
-          note.style.cssText = 'font-size:.65rem; white-space:nowrap;';
-          note.textContent = '± est. literatura';
-          note.title = 'La incertidumbre usa valores de literatura (±22/35 mg/dL). ' +
-            'Se actualizará automáticamente cuando el modelo acumule predicciones resueltas.';
+          note.className = 'pred-mc-note text-muted';
+          note.style.cssText = 'font-size:.62rem; white-space:nowrap; opacity:.7;';
+          note.textContent = `MC ${(anyPred.n_sim || 3000).toLocaleString()} sim`;
+          note.title = `Predicción por simulación de Monte Carlo: ${anyPred.n_sim || 3000} escenarios\n` +
+            'propagando incertidumbre de ISF (±18%), ICR (±12%), absorción (±25%) y sensor (±0.28 mg/dL/min).';
           bar.querySelector('.kin-more')?.before(note);
         }
       }

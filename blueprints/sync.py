@@ -449,96 +449,97 @@ def api_predict_glucose():
         fat_cutoff = now - timedelta(hours=8)
         meals_ext  = Meal.query.filter(Meal.timestamp >= fat_cutoff).all()
 
-        # ── Constante de amortiguación del ROC ────────────────────────────
-        # El ritmo de cambio actual (ROC) no persiste de forma lineal:
-        # la glucosa tiende a revertir a la media por mecanismos fisiológicos.
-        # Usamos decaimiento exponencial con τ=30 min (ver Sparacino 2007):
+        # ── Imports internos para esta función ───────────────────────────
+        from utils.prediction_feedback import save_prediction, get_adaptive_bias, get_model_accuracy
+        from utils.monte_carlo import run_monte_carlo
+
+        # Bias adaptivo: desplazamiento sistemático observado en predicciones pasadas
+        bias    = get_adaptive_bias()
+        bias_30 = bias["bias_30"] if bias["confiable"] else 0.0
+        bias_60 = bias["bias_60"] if bias["confiable"] else 0.0
+        bias_map = {30: bias_30, 60: bias_60}
+
+        # ── Constante de amortiguación del ROC ───────────────────────────
+        # El ritmo actual (ROC) no persiste de forma lineal — decaimiento
+        # exponencial con τ=30 min (Sparacino 2007):
         #   roc_eff_min = τ × (1 − e^(−Δt/τ))
-        # Ejemplo: τ=30, Δt=60 → roc_eff=25.9 min (vs. 60 lineal = 2.3× exagerado)
-        _TAU_ROC = 30.0  # minutos
+        # τ=30, Δt=60 → 25.9 min efectivos  (vs. 60 lineal = 2.3× exagerado)
+        _TAU_ROC = 30.0
 
         predictions = {}
         for delta_min in (30, 60):
             t_fut    = now + timedelta(minutes=delta_min)
             iob_fut  = current_iob(boluses,   at_time=t_fut, peak_min=peak_min, dia_min=dia_min)
             cob_fut  = current_cob(meals_ext, at_time=t_fut)
-            d_iob    = iob_now  - iob_fut   # insulina que se "consume" en Δt (positivo → baja glucosa)
-            d_cob    = cob_now  - cob_fut   # carbos que se absorben en Δt   (positivo → sube glucosa)
+            d_iob    = iob_now - iob_fut   # insulina consumida en Δt (> 0 → baja glucosa)
+            d_cob    = cob_now - cob_fut   # carbos absorbidos en Δt  (> 0 → sube glucosa)
 
-            # Efecto ROC con decaimiento exponencial
-            # Cuando hay COB activo, el ROC ya refleja el alza de la comida → suprimirlo
-            # evita contarlo dos veces con carb_effect (mismo fenómeno, distinta variable).
-            roc_eff_min    = _TAU_ROC * (1.0 - _math.exp(-delta_min / _TAU_ROC))
-            cob_suppression = max(0.15, 1.0 - (cob_now / 35.0))   # suprime hasta 85 % con ≥35 g COB
-            roc_effect     = (roc or 0) * roc_eff_min * cob_suppression
+            # ROC con decaimiento exponencial + supresión por COB activo
+            # (evita doble conteo: comida ya está en ROC Y en carb_effect)
+            roc_eff_min     = _TAU_ROC * (1.0 - _math.exp(-delta_min / _TAU_ROC))
+            cob_suppression = max(0.15, 1.0 - (cob_now / 35.0))
+            roc_effect      = (roc or 0) * roc_eff_min * cob_suppression
+            insulin_effect  = d_iob * isf_ef
+            carb_effect     = (d_cob * isf_ef / icr) if icr else 0.0
 
-            # Efecto insulina residual
-            insulin_effect = d_iob * isf_ef
+            # Estimación puntual (referencia para tooltip y feedback)
+            g_pred_pt = g_actual + roc_effect - insulin_effect + carb_effect
 
-            # Efecto carbohidratos (gl ≈ g_COB × ISF/ICR → mg/dL)
-            carb_effect = (d_cob * isf_ef / icr) if icr else 0
-
-            g_pred = g_actual + roc_effect - insulin_effect + carb_effect
-
-            # Clasificar estado predicho
-            if g_pred < 70:    estado_pred = "hipo"
-            elif g_pred > 180: estado_pred = "hiper"
-            else:              estado_pred = "rango"
+            # ── Monte Carlo — propaga incertidumbre de todos los parámetros ──
+            # El bias se aplica desplazando g_actual: toda la distribución se
+            # corre el mismo offset sin afectar la forma (incertidumbre).
+            bias_val = bias_map[delta_min]
+            mc = run_monte_carlo(
+                g_actual        = g_actual + bias_val,
+                roc             = roc,
+                roc_eff_min     = roc_eff_min,
+                cob_suppression = cob_suppression,
+                d_iob           = d_iob,
+                d_cob           = d_cob,
+                isf_base        = isf_ef,
+                icr             = icr,
+                n               = 3_000,
+            )
 
             predictions[f"+{delta_min}min"] = {
-                "glucemia_pred":  round(g_pred),
-                "estado":         estado_pred,
+                # Valor central: mediana MC (más robusta que la media para distribuciones asimétricas)
+                "glucemia_pred":  mc["g_pred_median"],
+                "glucemia_mean":  mc["g_pred_mean"],
+                "glucemia_pt":    round(g_pred_pt + bias_val),   # estimado puntual (debug)
+                "estado":         mc["estado"],
                 "delta_min":      delta_min,
+                "bias_aplicado":  bias_val,
+                # Incertidumbre empírica (no asume Normal)
+                "sigma":          mc["sigma"],
+                "skewness":       mc["skewness"],
+                "p_hipo":         mc["p_hipo"],
+                "p_rango":        mc["p_rango"],
+                "p_hiper":        mc["p_hiper"],
+                "ci_50":          mc["ci_50"],    # [p25, p75]
+                "ci_68":          mc["ci_68"],    # [p16, p84]
+                "ci_90":          mc["ci_90"],    # [p5,  p95]
+                "p5":             mc["p5"],
+                "p95":            mc["p95"],
+                "n_sim":          mc["n_sim"],
+                # Componentes del modelo (para tooltip diagnóstico)
                 "componentes": {
-                    "roc_effect":     round(roc_effect,      1),
-                    "insulin_effect": round(-insulin_effect, 1),   # negativo = baja glucosa
-                    "carb_effect":    round(carb_effect,     1),
-                    "roc_eff_min":    round(roc_eff_min,     1),   # minutos efectivos del ROC
-                    "cob_suppression": round(cob_suppression, 2),  # factor de supresión COB
+                    "roc_effect":      round(roc_effect,      1),
+                    "insulin_effect":  round(-insulin_effect, 1),
+                    "carb_effect":     round(carb_effect,     1),
+                    "roc_eff_min":     round(roc_eff_min,     1),
+                    "cob_suppression": round(cob_suppression, 2),
                 },
-                "iob_fut":  round(iob_fut, 2),
-                "cob_fut":  round(cob_fut, 1),
+                "iob_fut": round(iob_fut, 2),
+                "cob_fut": round(cob_fut, 1),
             }
-
-        # ── Bias adaptivo + incertidumbre ────────────────────────────────
-        from utils.prediction_feedback import (
-            save_prediction, get_adaptive_bias, get_model_accuracy,
-            get_prediction_sigma, prediction_probabilities,
-        )
-        bias  = get_adaptive_bias()
-        sigma_info = get_prediction_sigma(n=30)
-
-        bias_30 = bias["bias_30"] if bias["confiable"] else 0.0
-        bias_60 = bias["bias_60"] if bias["confiable"] else 0.0
-
-        # Aplicar bias y calcular probabilidades por horizonte
-        for key, bias_val, sigma_val in [
-            ("+30min", bias_30, sigma_info["sigma_30"]),
-            ("+60min", bias_60, sigma_info["sigma_60"]),
-        ]:
-            raw = predictions[key]["glucemia_pred"]
-            adj = round(raw + bias_val)
-            probs = prediction_probabilities(adj, sigma_val)
-
-            predictions[key]["glucemia_pred_raw"] = raw
-            predictions[key]["glucemia_pred"]     = adj
-            predictions[key]["bias_aplicado"]     = bias_val
-            predictions[key]["sigma"]             = sigma_val
-            predictions[key]["data_based_sigma"]  = sigma_info["data_based"]
-            predictions[key]["p_hipo"]            = probs["p_hipo"]
-            predictions[key]["p_rango"]           = probs["p_rango"]
-            predictions[key]["p_hiper"]           = probs["p_hiper"]
-            predictions[key]["estado"]            = probs["estado"]
-            predictions[key]["ci_68"]             = probs["ci_68"]
-            predictions[key]["ci_90"]             = probs["ci_90"]
 
         # ── Guardar predicción en BD para feedback posterior ──────────────
         try:
             save_prediction(
                 predicted_at = now,
                 g_actual     = g_actual,
-                g_pred_30    = g_pred_30_adj,
-                g_pred_60    = g_pred_60_adj,
+                g_pred_30    = predictions["+30min"]["glucemia_pred"],
+                g_pred_60    = predictions["+60min"]["glucemia_pred"],
                 iob          = iob_now,
                 cob          = cob_now,
                 roc          = roc,
