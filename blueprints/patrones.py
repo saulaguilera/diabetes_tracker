@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request
 from datetime import datetime, timedelta
 from models import db, GlucoseReading, Meal, InsulinDose
-from helpers import _precargar_glucosa, _precargar_bolus, _glucosa_impacto
+from helpers import _precargar_glucosa, _precargar_bolus, _glucosa_impacto, _calcular_isf_personal
 
 bp = Blueprint("patrones", __name__)
 
@@ -9,7 +9,10 @@ bp = Blueprint("patrones", __name__)
 def _analisis_ratio_insulina(days=30):
     """
     Para cada comida con bolus cercano y glucosa pre/post:
-    calcula ratio CH:Insulina, delta glucémico y outcome.
+    calcula ratio CH:Insulina, delta glucémico, IOB al momento y outcome.
+
+    Incluye delta_neto = ΔGlucosa_real + (IOB_al_comer × ISF_personal)
+    que aísla el efecto real de la comida de la insulina ya activa.
     """
     desde = datetime.now() - timedelta(days=days)
     comidas = Meal.query.filter(
@@ -20,6 +23,22 @@ def _analisis_ratio_insulina(days=30):
     # Precarga batch ─────────────────────────────────────────────────────────
     all_readings = _precargar_glucosa(comidas, horas_post=3)
     all_bolus    = _precargar_bolus(comidas)
+
+    # ISF personal para calcular delta neto
+    isf_personal, _ = _calcular_isf_personal(days=90)
+
+    # Todos los bolus en el período para calcular IOB al momento de la comida
+    bolus_todos = InsulinDose.query.filter(
+        InsulinDose.type == "bolus",
+        InsulinDose.timestamp >= desde - timedelta(hours=6),
+    ).all()
+
+    # Kinetics helpers (importación diferida)
+    try:
+        from utils.kinetics import current_iob as _calc_iob
+        _kinetics_ok = True
+    except ImportError:
+        _kinetics_ok = False
 
     datos = []
     for c in comidas:
@@ -48,16 +67,33 @@ def _analisis_ratio_insulina(days=30):
         elif post.value_mgdl > 180: outcome = "hiper"
         else:                        outcome = "rango"
 
+        # IOB al momento de la comida (de bolus ANTERIORES al meal, no incluidos en la comida)
+        bolus_previos = [b for b in bolus_todos
+                         if b.timestamp < t0 - timedelta(minutes=30)]
+        iob_al_comer = 0.0
+        if _kinetics_ok and bolus_previos:
+            iob_al_comer = _calc_iob(bolus_previos, at_time=t0)
+
+        # Delta neto: aísla el efecto de la comida de la insulina ya activa
+        # ΔGlucosa_neto = ΔGlucosa_real + (IOB_al_comer × ISF)
+        # Un IOB alto "presiona" la glucosa a la baja; el delta neto muestra
+        # cuánto subió la glucosa si no hubiera habido insulina residual.
+        delta_neto = None
+        if isf_personal and iob_al_comer > 0.1:
+            delta_neto = round(delta + iob_al_comer * isf_personal, 0)
+
         datos.append({
-            "name":    c.name,
-            "carbs":   round(c.carbs_g, 1),
-            "bolus":   round(total_bolus, 1),
-            "ratio":   ratio,
-            "pre":     int(pre.value_mgdl),
-            "post":    int(post.value_mgdl),
-            "delta":   delta,
-            "outcome": outcome,
-            "hora":    hora,
+            "name":        c.name,
+            "carbs":       round(c.carbs_g, 1),
+            "bolus":       round(total_bolus, 1),
+            "ratio":       ratio,
+            "pre":         int(pre.value_mgdl),
+            "post":        int(post.value_mgdl),
+            "delta":       delta,
+            "delta_neto":  delta_neto,
+            "iob_al_comer": round(iob_al_comer, 2),
+            "outcome":     outcome,
+            "hora":        hora,
         })
     return datos
 

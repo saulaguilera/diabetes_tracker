@@ -22,6 +22,14 @@ def calculadora():
     isf_manual_guard  = _get_setting("isf_manual")
     objetivo_guardado = _get_setting("objetivo", "100")
 
+    # IOB actual para descontar de la dosis sugerida
+    kinetics = {}
+    try:
+        from utils.kinetics import get_kinetics_snapshot
+        kinetics = get_kinetics_snapshot(hours_lookback=6)
+    except Exception:
+        pass
+
     return render_template("calculadora.html",
         isf_personal=isf_personal,
         n_isf=n_isf,
@@ -31,6 +39,7 @@ def calculadora():
         isf_manual_guardado=isf_manual_guard,
         objetivo_guardado=objetivo_guardado,
         ultima=ultima,
+        kinetics=kinetics,
     )
 
 
@@ -70,9 +79,20 @@ def api_calculadora_correccion():
             return jsonify({"error": "Sin I:CH — ingresalo en Configuración"})
         bolo_comida_exacto = carbs / icr
 
+    # ── IOB deduction ────────────────────────────────────────────────────────
+    iob_actual = 0.0
+    try:
+        from utils.kinetics import get_kinetics_snapshot
+        snap = get_kinetics_snapshot(hours_lookback=6)
+        iob_actual = snap.get("iob", 0.0)
+    except Exception:
+        pass
+    iob_deduccion = min(iob_actual, correccion_exacta + bolo_comida_exacto)  # no restar más de lo que se daría
+
     # ── Total ─────────────────────────────────────────────────────────────────
-    total_exacto    = correccion_exacta + bolo_comida_exacto
-    total_redondeado = round(total_exacto * 2) / 2  # redondear a 0.5U
+    total_exacto      = correccion_exacta + bolo_comida_exacto
+    total_neto_exacto = max(0.0, total_exacto - iob_deduccion)
+    total_redondeado  = round(total_neto_exacto * 2) / 2  # redondear a 0.5U
 
     resultado_esperado = round(glucemia - correccion_exacta * isf, 0)
 
@@ -80,6 +100,10 @@ def api_calculadora_correccion():
         # Totales
         "total_exacto":     round(total_exacto, 2),
         "total_sugerido":   total_redondeado,
+        # IOB
+        "iob_actual":       round(iob_actual, 2),
+        "iob_deduccion":    round(iob_deduccion, 2),
+        "total_neto_exacto": round(total_neto_exacto, 2),
         # Componentes
         "correccion_exacta":     round(correccion_exacta, 2),
         "correccion_redondeada": round(round(correccion_exacta * 2) / 2, 1),
@@ -172,11 +196,21 @@ def quicklog():
 
     ahora = datetime.now()
     ultima_glucemia = GlucoseReading.query.order_by(GlucoseReading.timestamp.desc()).first()
+
+    # IOB / COB snapshot para contexto al registrar
+    kinetics = {}
+    try:
+        from utils.kinetics import get_kinetics_snapshot
+        kinetics = get_kinetics_snapshot(hours_lookback=6)
+    except Exception:
+        pass
+
     return render_template(
         "quicklog.html",
         fecha=ahora.strftime("%Y-%m-%d"),
         hora=ahora.strftime("%H:%M"),
         ultima_glucemia=ultima_glucemia,
+        kinetics=kinetics,
     )
 
 

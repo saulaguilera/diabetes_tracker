@@ -297,6 +297,8 @@ _ENDPOINT_ALIASES = [
     ("reportes.reporte_semanal_pdf","reporte_semanal_pdf"),
     ("reportes.api_settings_save",  "api_settings_save"),
     ("patrones.patrones",           "patrones"),
+    ("sync.api_kinetics",           "api_kinetics"),
+    ("sync.api_dia_estimate",       "api_dia_estimate"),
 ]
 
 for _bp_endpoint, _flat_name in _ENDPOINT_ALIASES:

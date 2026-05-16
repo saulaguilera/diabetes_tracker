@@ -166,15 +166,69 @@
       <div id="resultado-contenido" style="display:none;"></div>
     </div>
 
+    {% if kinetics and kinetics.iob > 0.05 %}
+    <div class="alert border mt-3 d-flex align-items-center gap-2"
+         style="font-size:.82rem; background:rgba(99,102,241,.07); border-color:rgba(99,102,241,.25)!important; color:var(--text);">
+      <i class="bi bi-capsule-pill" style="color:#6366f1; font-size:1.1rem; flex-shrink:0;"></i>
+      <div>
+        <strong style="color:#6366f1;">IOB detectado: {{ "%.1f"|format(kinetics.iob) }} U</strong>
+        — hay insulina activa en este momento.
+        La calculadora <strong>la descuenta automáticamente</strong> del bolo sugerido.
+      </div>
+    </div>
+    {% endif %}
+
     <div class="alert border mt-3"
          style="font-size:.8rem; background:var(--surface2); color:var(--text);">
       <i class="bi bi-shield-exclamation text-warning me-1"></i>
-      <strong>Solo orientativo.</strong> No considera insulina activa (IOB),
-      ejercicio reciente ni variabilidad individual. Consultá con tu médico
-      antes de cambiar dosis.
+      <strong>Solo orientativo.</strong> El resultado incluye IOB activo, pero no
+      considera ejercicio reciente ni toda la variabilidad individual.
+      Consultá con tu médico antes de cambiar dosis.
     </div>
   </div>
 
+</div>
+
+{# ── DIA Estimation card ──────────────────────────────────────────────────── #}
+<div class="row g-3 mt-1">
+  <div class="col-12">
+    <div class="chart-box">
+      <div class="d-flex justify-content-between align-items-start mb-2">
+        <div>
+          <h6 class="fw-semibold mb-0">
+            <i class="bi bi-clock-history me-2 text-secondary"></i>
+            Duración de Acción de la Insulina (DIA)
+          </h6>
+          <small class="text-muted">Estimado desde tus correcciones reales</small>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" onclick="estimarDIA()">
+          <i class="bi bi-cpu me-1"></i>Estimar desde mis datos
+        </button>
+      </div>
+
+      <div id="dia-resultado" class="mt-2"></div>
+
+      <div class="row g-2 mt-2">
+        <div class="col-auto">
+          <small class="text-muted">DIA configurado actualmente:</small>
+          <span id="dia-actual" class="badge bg-secondary ms-1">
+            {% if kinetics and kinetics.dia_min %}
+              {{ kinetics.dia_min }} min ({{ kinetics.dia_min // 60 }}h {{ kinetics.dia_min % 60 }}min)
+            {% else %}
+              240 min (4h — default NovoRapid)
+            {% endif %}
+          </span>
+        </div>
+      </div>
+      <div class="mt-2" style="font-size:.78rem; color:var(--text-muted); line-height:1.5;">
+        <i class="bi bi-info-circle me-1"></i>
+        El DIA (Duration of Insulin Action) afecta el cálculo de IOB.
+        NovoRapid tiene un DIA típico de 3–5h. La estimación analiza tus
+        correcciones puras (sin comida cercana) para medir cuánto tarda tu
+        glucosa en estabilizarse.
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ── Explicación ── -->
@@ -348,18 +402,42 @@
     const icrLabel = d.icr && d.fuente_icr === 'calculado'
       ? `I:CH estimado (${d.n_icr} comidas)` : 'I:CH configurado manualmente';
 
+    // IOB deduction row
+    let iobRow = '';
+    if (d.iob_actual && d.iob_actual > 0.05) {
+      iobRow = `
+        <div class="d-flex justify-content-between align-items-center py-2 border-bottom"
+             style="background:rgba(99,102,241,.05); border-radius:6px; padding:.5rem .75rem!important;">
+          <div>
+            <i class="bi bi-capsule-pill me-2" style="color:#6366f1;"></i>
+            <span style="font-size:.88rem;">IOB activo (descontar)</span>
+            <div style="font-size:.75rem; color:#6366f1; font-family:monospace;">
+              insulina aún activa en sangre
+            </div>
+          </div>
+          <strong style="color:#6366f1;">− ${d.iob_deduccion.toFixed(2)} U</strong>
+        </div>`;
+    }
+
+    const totalLabel = d.iob_actual > 0.05
+      ? `Bolo neto sugerido <small class="text-muted fw-normal">(−IOB)</small>`
+      : 'Bolo total sugerido';
+
     box.innerHTML = `
       <!-- Total -->
       <div class="text-center mb-3">
-        <div class="text-muted mb-1" style="font-size:.85rem;">Bolo total sugerido</div>
+        <div class="text-muted mb-1" style="font-size:.85rem;">${totalLabel}</div>
         <div class="display-4 fw-bold ${colorTotal}">${d.total_sugerido} U</div>
         <div class="text-muted" style="font-size:.8rem;">
-          (exacto: ${d.total_exacto.toFixed(2)} U — redondeado a 0.5U)
+          ${d.iob_actual > 0.05
+            ? `bruto ${d.total_exacto.toFixed(2)} U − IOB ${d.iob_deduccion.toFixed(2)} U = neto ${d.total_neto_exacto.toFixed(2)} U → redondeado`
+            : `(exacto: ${d.total_exacto.toFixed(2)} U — redondeado a 0.5U)`
+          }
         </div>
       </div>
 
       <!-- Desglose -->
-      <div class="mb-3">${desglose}</div>
+      <div class="mb-3">${desglose}${iobRow}</div>
 
       <!-- Resultado esperado -->
       <div class="text-center p-2 rounded mb-3" style="background:var(--surface2);">
@@ -373,6 +451,7 @@
       <div class="d-flex flex-wrap gap-1 justify-content-center">
         <span class="badge bg-secondary" style="font-size:.7rem;">${isfLabel}</span>
         ${d.icr ? `<span class="badge bg-secondary" style="font-size:.7rem;">${icrLabel}</span>` : ''}
+        ${d.iob_actual > 0.05 ? `<span class="badge" style="font-size:.7rem;background:rgba(99,102,241,.15);color:#6366f1;">IOB ${d.iob_actual.toFixed(1)} U descontado</span>` : ''}
       </div>`;
   }
 
@@ -391,5 +470,52 @@
   {% if ultima and ultima.value_mgdl > 100 %}
   window.addEventListener('DOMContentLoaded', () => calcular());
   {% endif %}
+
+  // ── DIA estimation ─────────────────────────────────────────────────────────
+  async function estimarDIA() {
+    const box = document.getElementById('dia-resultado');
+    box.innerHTML = `<div class="text-muted" style="font-size:.83rem;">
+      <span class="spinner-border spinner-border-sm me-2" style="width:.9rem;height:.9rem;"></span>
+      Analizando correcciones de los últimos 90 días…
+    </div>`;
+    try {
+      const r = await fetch('/api/kinetics/dia');
+      const d = await r.json();
+      if (!d.ok) { box.innerHTML = `<div class="text-danger">${d.error}</div>`; return; }
+
+      const confColor = { alta: 'success', media: 'warning', baja: 'secondary', insuficiente: 'secondary' };
+      const col = confColor[d.confidence] || 'secondary';
+
+      if (d.estimated_dia_min) {
+        const h = Math.floor(d.estimated_dia_min / 60);
+        const m = d.estimated_dia_min % 60;
+        box.innerHTML = `
+          <div class="d-flex align-items-center gap-3 p-3 rounded"
+               style="background:rgba(34,197,94,.08); border:1px solid rgba(34,197,94,.2);">
+            <div class="text-center">
+              <div style="font-size:2rem; font-weight:800; color:#16a34a; line-height:1;">${h}h ${m}min</div>
+              <div style="font-size:.72rem; color:#16a34a; text-transform:uppercase; letter-spacing:.05em;">DIA estimado</div>
+            </div>
+            <div>
+              <span class="badge bg-${col} mb-1">Confianza ${d.confidence}</span>
+              <div style="font-size:.82rem; color:var(--text-muted);">${d.sample_size} evento(s) de corrección analizados</div>
+              <div style="font-size:.78rem; color:var(--text-muted); margin-top:.25rem;">
+                Guardá este valor en UserSettings (dia_min) para mejorar el cálculo de IOB.
+              </div>
+            </div>
+          </div>`;
+        document.getElementById('dia-actual').textContent =
+          `${d.estimated_dia_min} min (${h}h ${m}min — estimado)`;
+        document.getElementById('dia-actual').className = 'badge bg-success ms-1';
+      } else {
+        box.innerHTML = `
+          <div class="alert border" style="font-size:.82rem; background:var(--surface2);">
+            <i class="bi bi-info-circle me-1"></i>${d.message}
+          </div>`;
+      }
+    } catch(e) {
+      box.innerHTML = `<div class="text-danger">Error al estimar DIA: ${e.message}</div>`;
+    }
+  }
 </script>
 {% endblock %}

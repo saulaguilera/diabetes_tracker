@@ -251,3 +251,41 @@ def sync_libre_manual():
         flash(msg, "success")
 
     return redirect(url_for("dashboard"))
+
+
+
+@bp.route("/api/kinetics", endpoint="api_kinetics")
+def api_kinetics():
+    """
+    Devuelve un snapshot de IOB / COB / ROC actual en JSON.
+    Útil para actualización periódica en el navegador sin recargar la página.
+    """
+    try:
+        from utils.kinetics import get_kinetics_snapshot
+        snap = get_kinetics_snapshot(hours_lookback=6)
+        return jsonify({
+            "ok":    True,
+            "iob":   snap["iob"],
+            "cob":   snap["cob"],
+            "roc":   snap["roc"],
+            "arrow": snap["arrow"],
+            "last_glucose": snap["last_glucose"],
+            "context":      snap["context"],
+            "dia_min":      snap["dia_min"],
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/kinetics/dia", endpoint="api_dia_estimate")
+def api_dia_estimate():
+    """
+    Estima la Duración de Acción de la Insulina (DIA) del usuario
+    analizando eventos de corrección pura (sin comida cercana).
+    """
+    try:
+        from utils.kinetics import estimate_dia_from_data
+        result = estimate_dia_from_data(days=90)
+        return jsonify({"ok": True, **result})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500

@@ -96,6 +96,54 @@
   </div>
 </div>
 
+{# ── IOB / COB / ROC live bar ─────────────────────────────────────────────── #}
+{% if insights and insights.kinetics %}
+  {% set kin = insights.kinetics %}
+  {% if kin.iob > 0.05 or kin.cob > 1 %}
+  <div class="kinetics-bar mb-3">
+    <div class="kin-label">Activo ahora</div>
+
+    {% if kin.iob > 0.05 %}
+    <div class="kin-pill kin-insulin" title="Insulin On Board — insulina aún activa">
+      <i class="bi bi-capsule-pill"></i>
+      <span class="kin-val">{{ "%.1f"|format(kin.iob) }} U</span>
+      <span class="kin-sublabel">IOB</span>
+    </div>
+    {% endif %}
+
+    {% if kin.cob > 1 %}
+    <div class="kin-pill kin-carbs" title="Carbs On Board — carbohidratos aún absorbiéndose">
+      <i class="bi bi-egg-fried"></i>
+      <span class="kin-val">{{ kin.cob | int }} g</span>
+      <span class="kin-sublabel">COB</span>
+    </div>
+    {% endif %}
+
+    {% if kin.roc is not none %}
+    <div class="kin-pill kin-roc
+      {% if kin.roc > 1.5 %}kin-roc-up{% elif kin.roc < -1.5 %}kin-roc-down{% else %}kin-roc-stable{% endif %}"
+      title="Tendencia de glucosa (mg/dL·min)">
+      <span class="kin-arrow">{{ kin.arrow }}</span>
+      <span class="kin-val">{{ "%+.1f"|format(kin.roc * 10) }}</span>
+      <span class="kin-sublabel">mg/dL·10min</span>
+    </div>
+    {% endif %}
+
+    {% if kin.iob > 0.3 and insights.isf %}
+    <div class="kin-pill kin-iob-effect" title="Cuánto puede bajar la glucosa el IOB activo">
+      <i class="bi bi-arrow-down-circle"></i>
+      <span class="kin-val">~{{ (kin.iob * insights.isf) | int }} mg/dL</span>
+      <span class="kin-sublabel">efecto ISF</span>
+    </div>
+    {% endif %}
+
+    <a href="{{ url_for('calculadora') }}" class="kin-more ms-auto">
+      <i class="bi bi-calculator me-1"></i>Calcular corrección
+    </a>
+  </div>
+  {% endif %}
+{% endif %}
+
 {# ── Stats row ─────────────────────────────────────────────────────────────── #}
 <div class="row g-3 mb-3">
 
@@ -694,6 +742,69 @@ a.insight-chip:hover {
 /* dark mode tweaks */
 [data-theme="dark"] .glucose-hero-card::before {
   background: linear-gradient(90deg, #16a34a, #2563eb);
+}
+
+/* ── Kinetics bar (IOB / COB / ROC) ─────────────────────────────────────────── */
+.kinetics-bar {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: .6rem 1rem;
+  position: relative;
+  overflow: hidden;
+}
+.kinetics-bar::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: linear-gradient(180deg, #6366f1, #8b5cf6);
+  border-radius: 12px 0 0 12px;
+}
+.kin-label {
+  font-size: .68rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--text-muted); white-space: nowrap;
+}
+.kin-pill {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .28rem .65rem; border-radius: 20px;
+  font-size: .82rem; font-weight: 600; white-space: nowrap;
+}
+.kin-val { font-weight: 800; }
+.kin-sublabel {
+  font-size: .65rem; font-weight: 500; opacity: .7;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.kin-insulin {
+  background: rgba(99,102,241,.12); color: #6366f1;
+  border: 1px solid rgba(99,102,241,.2);
+}
+.kin-carbs {
+  background: rgba(34,197,94,.12); color: #16a34a;
+  border: 1px solid rgba(34,197,94,.2);
+}
+.kin-roc {
+  border: 1px solid transparent;
+}
+.kin-arrow { font-size: 1.1rem; }
+.kin-roc-up     { background: rgba(249,115,22,.12); color: #ea580c; border-color: rgba(249,115,22,.2); }
+.kin-roc-down   { background: rgba(239,68,68,.12);  color: #dc2626; border-color: rgba(239,68,68,.2); }
+.kin-roc-stable { background: rgba(34,197,94,.10);  color: #16a34a; border-color: rgba(34,197,94,.2); }
+.kin-iob-effect {
+  background: rgba(245,158,11,.10); color: #b45309;
+  border: 1px solid rgba(245,158,11,.2);
+}
+.kin-more {
+  font-size: .76rem; font-weight: 600; color: var(--text-muted);
+  text-decoration: none; white-space: nowrap;
+  padding: .2rem .5rem; border-radius: 8px;
+  border: 1px solid var(--border);
+  transition: background .15s, color .15s;
+}
+.kin-more:hover { background: var(--surface2); color: var(--text); }
+@media (max-width: 576px) {
+  .kinetics-bar { padding: .5rem .75rem; gap: .4rem; }
+  .kin-label    { width: 100%; }
+  .kin-more     { width: 100%; text-align: center; }
 }
 </style>
 

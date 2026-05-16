@@ -557,6 +557,14 @@ def _dashboard_insights():
     isf, n_isf = _calcular_isf_personal(days=90)
     icr, n_icr = _calcular_icr_personal(days=90)
 
+    # ── IOB / COB / ROC (cinética activa) ────────────────────────────────────
+    kinetics = {}
+    try:
+        from utils.kinetics import get_kinetics_snapshot
+        kinetics = get_kinetics_snapshot(hours_lookback=6)
+    except Exception:
+        pass
+
     return {
         'tir7':        tir7,
         'tir7_delta':  tir7_delta,
@@ -566,4 +574,5 @@ def _dashboard_insights():
         'isf_n':       n_isf,
         'icr':         icr,
         'icr_n':       n_icr,
+        'kinetics':    kinetics,
     }

@@ -18,6 +18,24 @@
   </a>
 </div>
 
+{# IOB / COB context banner #}
+{% if kinetics and (kinetics.iob > 0.05 or kinetics.cob > 1) %}
+<div class="ql-kinetics-banner mb-3">
+  <i class="bi bi-activity me-1"></i>
+  <strong>Contexto activo:</strong>
+  {% if kinetics.iob > 0.05 %}
+    <span class="kin-tag kin-tag-insulin">{{ "%.1f"|format(kinetics.iob) }} U IOB</span>
+  {% endif %}
+  {% if kinetics.cob > 1 %}
+    <span class="kin-tag kin-tag-carbs">{{ kinetics.cob | int }}g COB</span>
+  {% endif %}
+  {% if kinetics.roc is not none %}
+    <span class="kin-tag kin-tag-roc">{{ kinetics.arrow }} glucosa</span>
+  {% endif %}
+  <span class="kin-hint">— consideralo al calcular el bolo</span>
+</div>
+{% endif %}
+
 <form method="POST" action="{{ url_for('quicklog') }}" id="quicklog-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
@@ -421,6 +439,24 @@
     margin-bottom: 2rem;
   }
 }
+
+/* Kinetics context banner */
+.ql-kinetics-banner {
+  display: flex; align-items: center; flex-wrap: wrap; gap: .4rem;
+  background: rgba(99,102,241,.07);
+  border: 1px solid rgba(99,102,241,.2);
+  border-radius: 10px; padding: .55rem .85rem;
+  font-size: .82rem; color: var(--text-muted);
+}
+.kin-tag {
+  display: inline-flex; align-items: center;
+  padding: .15rem .5rem; border-radius: 12px;
+  font-weight: 700; font-size: .78rem;
+}
+.kin-tag-insulin { background: rgba(99,102,241,.15); color: #6366f1; }
+.kin-tag-carbs   { background: rgba(34,197,94,.15);  color: #16a34a; }
+.kin-tag-roc     { background: rgba(245,158,11,.15); color: #d97706; }
+.kin-hint        { font-style: italic; opacity: .75; }
 </style>
 
 <script>
