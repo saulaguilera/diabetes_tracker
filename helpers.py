@@ -450,6 +450,122 @@ def _calcular_isf_personal(days=60):
     return None, len(muestras)
 
 
+_ISF_BLOCK_LABELS = {
+    0:  "00–04h",
+    4:  "04–08h",
+    8:  "08–12h",
+    12: "12–16h",
+    16: "16–20h",
+    20: "20–24h",
+}
+
+
+def _calcular_isf_circadiano(days=90):
+    """
+    Calcula el ISF personal por bloque horario (6 bloques de 4h).
+
+    Usa las mismas correcciones que _calcular_isf_personal pero las agrupa
+    por hora del día para detectar variación circadiana (ej. fenómeno del alba).
+
+    Carga datos en batch (2 queries) para no hacer N queries por evento.
+
+    Retorna dict:
+        {
+          0:  {"isf": float|None, "n": int, "label": "00–04h", "cv": float|None},
+          4:  {...},
+          ...
+          20: {...},
+        }
+    """
+    desde = datetime.now() - timedelta(days=days)
+
+    # Batch load: todas las correcciones candidatas
+    bolus_list = InsulinDose.query.filter(
+        InsulinDose.type == "bolus",
+        InsulinDose.timestamp >= desde,
+    ).order_by(InsulinDose.timestamp).all()
+
+    # Batch load: meal timestamps para filtrar confundidos
+    meal_times = [
+        m.timestamp for m in
+        Meal.query.filter(Meal.timestamp >= desde - timedelta(hours=2)).all()
+    ]
+
+    # Batch load: todas las glucemias del período + ventana post-bolus
+    all_readings = GlucoseReading.query.filter(
+        GlucoseReading.timestamp >= desde - timedelta(minutes=30),
+    ).order_by(GlucoseReading.timestamp).all()
+
+    blocks: dict = {b: [] for b in _ISF_BLOCK_LABELS}
+
+    for d in bolus_list:
+        is_labeled = d.purpose == "correccion"
+
+        if not is_labeled:
+            confounded = any(
+                abs((mt - d.timestamp).total_seconds()) < 90 * 60
+                for mt in meal_times
+            )
+            if confounded:
+                continue
+
+        bt = d.timestamp
+
+        pre_list  = [r for r in all_readings
+                     if bt - timedelta(minutes=30) <= r.timestamp <= bt + timedelta(minutes=15)]
+        post_list = [r for r in all_readings
+                     if bt + timedelta(minutes=30) < r.timestamp <= bt + timedelta(hours=3)]
+
+        if not pre_list or not post_list or d.units <= 0:
+            continue
+
+        pre   = pre_list[-1].value_mgdl
+        nadir = min(r.value_mgdl for r in post_list)
+
+        if nadir >= pre:
+            continue
+
+        isf_val = (pre - nadir) / d.units
+        if 10 <= isf_val <= 200:
+            block = (bt.hour // 4) * 4
+            blocks[block].append(round(isf_val, 1))
+
+    result = {}
+    for block, values in blocks.items():
+        n = len(values)
+        if n >= 2:
+            mean = round(sum(values) / n, 1)
+            variance = sum((v - mean) ** 2 for v in values) / (n - 1) if n > 1 else 0
+            cv = round(100 * variance ** 0.5 / mean, 0) if mean > 0 else None
+        else:
+            mean = None
+            cv   = None
+        result[block] = {
+            "isf":   mean,
+            "n":     n,
+            "label": _ISF_BLOCK_LABELS[block],
+            "cv":    cv,
+        }
+    return result
+
+
+def _isf_para_hora(hora: int, isf_circ: dict, isf_global=None):
+    """
+    Devuelve el ISF más apropiado para una hora dada (0–23).
+    Prioridad: bloque circadiano con datos ≥ 2 → ISF global → None.
+    También retorna el label del bloque y la fuente.
+    """
+    block = (hora // 4) * 4
+    bloque_data = isf_circ.get(block, {}) if isf_circ else {}
+    isf_bloque  = bloque_data.get("isf")
+
+    if isf_bloque:
+        return isf_bloque, bloque_data.get("label", ""), "circadiano"
+    if isf_global:
+        return isf_global, "global", "global"
+    return None, "", "sin_datos"
+
+
 def _calcular_icr_personal(days=90):
     """
     Estima el ratio Insulina:Carbohidratos (ICR) personal.
@@ -573,6 +689,15 @@ def _dashboard_insights():
     isf, n_isf = _calcular_isf_personal(days=90)
     icr, n_icr = _calcular_icr_personal(days=90)
 
+    # ISF circadiano — para mostrar el valor apropiado a la hora actual
+    isf_circ = {}
+    try:
+        isf_circ = _calcular_isf_circadiano(days=90)
+    except Exception:
+        pass
+    hora_actual = now.hour
+    isf_ahora, bloque_label, fuente_isf_ahora = _isf_para_hora(hora_actual, isf_circ, isf)
+
     # ── IOB / COB / ROC (cinética activa) ────────────────────────────────────
     kinetics = {}
     try:
@@ -586,9 +711,12 @@ def _dashboard_insights():
         'tir7_delta':  tir7_delta,
         'tir7_color':  tir7_color,
         'top_rec':     top_rec,
-        'isf':         isf,
-        'isf_n':       n_isf,
-        'icr':         icr,
-        'icr_n':       n_icr,
-        'kinetics':    kinetics,
+        'isf':              isf,
+        'isf_n':            n_isf,
+        'isf_ahora':        isf_ahora,
+        'bloque_label':     bloque_label,
+        'fuente_isf_ahora': fuente_isf_ahora,
+        'icr':              icr,
+        'icr_n':            n_icr,
+        'kinetics':         kinetics,
     }

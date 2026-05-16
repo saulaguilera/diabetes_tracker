@@ -108,6 +108,95 @@
     </div>
   </div>
 
+  <!-- ── ISF Circadiano ── -->
+  <div class="col-12">
+    <div class="chart-box">
+      <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+          <h6 class="fw-semibold mb-0">
+            <i class="bi bi-sun me-2 text-warning"></i>ISF por hora del día
+          </h6>
+          <small class="text-muted">
+            Sensibilidad a la insulina varía según el momento — el cálculo usa el bloque actual
+          </small>
+        </div>
+        {% if isf_ahora %}
+        <div class="text-end">
+          <div style="font-size:.72rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em;">
+            Ahora ({{ bloque_label }})
+          </div>
+          <div style="font-size:1.4rem; font-weight:800; color:
+            {% if fuente_isf_ahora == 'circadiano' %}#6366f1{% else %}var(--text-muted){% endif %};">
+            {{ isf_ahora }}
+            <span style="font-size:.8rem; font-weight:500;">mg/dL·U</span>
+          </div>
+          {% if fuente_isf_ahora == 'circadiano' %}
+            <div style="font-size:.7rem; color:#6366f1;">
+              <i class="bi bi-cpu me-1"></i>circadiano
+            </div>
+          {% else %}
+            <div style="font-size:.7rem; color:var(--text-muted);">global (sin datos de este bloque)</div>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+
+      {# Gráfico de barras circadiano #}
+      <div class="circ-chart-wrap">
+        {% set isf_vals = isf_circ.values() | selectattr('isf') | map(attribute='isf') | list %}
+        {% set isf_max  = isf_vals | max if isf_vals else 60 %}
+        {% set hora_block = (hora_actual // 4) * 4 %}
+
+        {% for block, data in isf_circ.items() %}
+        {% set is_current = block == hora_block %}
+        <div class="circ-bar-col {{ 'circ-bar-current' if is_current }}">
+          <div class="circ-bar-value">
+            {% if data.isf %}{{ data.isf | int }}{% else %}—{% endif %}
+          </div>
+          <div class="circ-bar-outer">
+            <div class="circ-bar-fill
+              {{ 'circ-bar-fill-current' if is_current else 'circ-bar-fill-normal' }}
+              {{ 'circ-bar-fill-empty' if not data.isf }}"
+              style="height: {{ ((data.isf or 0) / isf_max * 100) | int if isf_max else 0 }}%">
+            </div>
+          </div>
+          <div class="circ-bar-label">{{ data.label }}</div>
+          <div class="circ-bar-n">n={{ data.n }}</div>
+        </div>
+        {% endfor %}
+      </div>
+
+      {# Alerta de variación significativa #}
+      {% if isf_vals | length >= 3 %}
+        {% set isf_min_val = isf_vals | min %}
+        {% set isf_max_val = isf_vals | max %}
+        {% set variacion = ((isf_max_val - isf_min_val) / isf_max_val * 100) | int %}
+        {% if variacion >= 20 %}
+        <div class="alert alert-warning border-0 mt-3 mb-0 py-2"
+             style="font-size:.82rem; background:rgba(245,158,11,.1);">
+          <i class="bi bi-exclamation-triangle-fill me-1 text-warning"></i>
+          <strong>Variación circadiana detectada: {{ variacion }}%</strong>
+          — tu sensibilidad varía de {{ isf_min_val | int }} a {{ isf_max_val | int }} mg/dL·U
+          según la hora. Usar un ISF único subestima el bolo en algunos momentos.
+        </div>
+        {% endif %}
+      {% elif isf_vals | length > 0 %}
+      <div class="text-muted mt-2" style="font-size:.78rem;">
+        <i class="bi bi-info-circle me-1"></i>
+        Necesitás al menos 2 correcciones por bloque horario para activar el ISF circadiano.
+        Actualmente hay datos en {{ isf_vals | length }} de 6 bloques.
+      </div>
+      {% else %}
+      <div class="text-muted mt-2" style="font-size:.78rem;">
+        <i class="bi bi-info-circle me-1"></i>
+        Sin correcciones suficientes aún. Registrá correcciones etiquetadas como
+        <strong>"Corrección"</strong> para activar el ISF circadiano.
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+
   <!-- ── Cálculo ── -->
   <div class="col-lg-6">
     <div class="chart-box">
@@ -280,6 +369,52 @@
 {% endblock %}
 
 {% block scripts %}
+<style>
+/* ── Circadian ISF chart ────────────────────────────────────────────────────── */
+.circ-chart-wrap {
+  display: flex; gap: .5rem; align-items: flex-end;
+  height: 120px; padding: .5rem 0;
+}
+.circ-bar-col {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; gap: 2px;
+}
+.circ-bar-value {
+  font-size: .72rem; font-weight: 700; color: var(--text-muted);
+  height: 18px; display: flex; align-items: center;
+}
+.circ-bar-current .circ-bar-value { color: #6366f1; }
+
+.circ-bar-outer {
+  flex: 1; width: 100%; border-radius: 6px 6px 0 0;
+  background: var(--surface2);
+  display: flex; align-items: flex-end; overflow: hidden;
+  min-height: 10px;
+}
+.circ-bar-fill {
+  width: 100%; border-radius: 6px 6px 0 0;
+  transition: height .4s ease;
+}
+.circ-bar-fill-normal  { background: rgba(100,116,139,.4); }
+.circ-bar-fill-current { background: #6366f1; }
+.circ-bar-fill-empty   { background: var(--surface2); height: 4px !important; }
+
+.circ-bar-col.circ-bar-current .circ-bar-outer {
+  background: rgba(99,102,241,.1);
+  outline: 2px solid rgba(99,102,241,.3);
+  border-radius: 6px 6px 0 0;
+}
+.circ-bar-label {
+  font-size: .65rem; color: var(--text-muted); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+  text-align: center;
+}
+.circ-bar-current .circ-bar-label { color: #6366f1; font-weight: 600; }
+.circ-bar-n {
+  font-size: .6rem; color: var(--text-muted); opacity: .7;
+}
+</style>
+
 <script>
   // ── Configuración ─────────────────────────────────────────────────────────
   function setObjetivo(val) {
@@ -397,8 +532,20 @@
       return;
     }
 
-    const isfLabel = d.fuente_isf === 'calculado'
-      ? `ISF calculado (${d.n_isf} muestras)` : 'ISF configurado manualmente';
+    let isfLabel;
+    if (d.fuente_isf === 'manual')       isfLabel = 'ISF manual';
+    else if (d.fuente_isf === 'guardado') isfLabel = 'ISF configurado';
+    else if (d.fuente_isf === 'circadiano')
+      isfLabel = `ISF circadiano ${d.bloque_label} (${d.n_isf} muestras)`;
+    else isfLabel = `ISF global calculado (${d.n_isf} muestras)`;
+
+    const isfDiff = (d.isf_bloque && d.isf_global && d.fuente_isf === 'circadiano')
+      ? Math.round(d.isf_bloque - d.isf_global) : 0;
+    const isfDiffNote = isfDiff
+      ? ` <span style="font-size:.7rem; color:${isfDiff > 0 ? '#16a34a' : '#dc2626'}">
+          ${isfDiff > 0 ? '+' : ''}${isfDiff} vs global
+        </span>` : '';
+
     const icrLabel = d.icr && d.fuente_icr === 'calculado'
       ? `I:CH estimado (${d.n_icr} comidas)` : 'I:CH configurado manualmente';
 
@@ -449,7 +596,10 @@
 
       <!-- Fuentes -->
       <div class="d-flex flex-wrap gap-1 justify-content-center">
-        <span class="badge bg-secondary" style="font-size:.7rem;">${isfLabel}</span>
+        <span class="badge ${d.fuente_isf === 'circadiano' ? '' : 'bg-secondary'}"
+              style="font-size:.7rem;${d.fuente_isf === 'circadiano' ? 'background:rgba(99,102,241,.15);color:#6366f1;' : ''}">
+          ${isfLabel}${isfDiffNote}
+        </span>
         ${d.icr ? `<span class="badge bg-secondary" style="font-size:.7rem;">${icrLabel}</span>` : ''}
         ${d.iob_actual > 0.05 ? `<span class="badge" style="font-size:.7rem;background:rgba(99,102,241,.15);color:#6366f1;">IOB ${d.iob_actual.toFixed(1)} U descontado</span>` : ''}
       </div>`;

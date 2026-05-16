@@ -5,6 +5,7 @@ from helpers import (
     parse_datetime, _auto_categorizar, _save_meal_components,
     _get_setting, _set_setting,
     _calcular_isf_personal, _calcular_icr_personal,
+    _calcular_isf_circadiano, _isf_para_hora,
 )
 from utils.recommendations import generate_recommendations
 
@@ -21,6 +22,15 @@ def calculadora():
     icr_guardado      = _get_setting("icr")
     isf_manual_guard  = _get_setting("isf_manual")
     objetivo_guardado = _get_setting("objetivo", "100")
+
+    # ISF circadiano
+    isf_circ = _calcular_isf_circadiano(days=90)
+
+    # ISF recomendado para la hora actual
+    hora_actual = datetime.now().hour
+    isf_ahora, bloque_label, fuente_isf_ahora = _isf_para_hora(
+        hora_actual, isf_circ, isf_personal
+    )
 
     # IOB actual para descontar de la dosis sugerida
     kinetics = {}
@@ -40,6 +50,11 @@ def calculadora():
         objetivo_guardado=objetivo_guardado,
         ultima=ultima,
         kinetics=kinetics,
+        isf_circ=isf_circ,
+        isf_ahora=isf_ahora,
+        bloque_label=bloque_label,
+        fuente_isf_ahora=fuente_isf_ahora,
+        hora_actual=hora_actual,
     )
 
 
@@ -50,15 +65,30 @@ def api_calculadora_correccion():
     isf_manual = request.args.get("isf",       type=float)
     carbs      = request.args.get("carbs",     type=float)
     icr_manual = request.args.get("icr",       type=float)
+    hora       = request.args.get("hora",      type=int)   # 0-23, default = ahora
 
     # Usar configuración guardada como fallback
     if objetivo is None:
         objetivo = float(_get_setting("objetivo", 100))
+    if hora is None:
+        hora = datetime.now().hour
 
     isf_personal, n_isf = _calcular_isf_personal()
     icr_personal, n_icr = _calcular_icr_personal()
 
-    isf = isf_manual or (float(_get_setting("isf_manual")) if _get_setting("isf_manual") else None) or isf_personal
+    # ISF: manual > guardado > circadiano para la hora actual > global calculado
+    isf_guardado  = float(_get_setting("isf_manual")) if _get_setting("isf_manual") else None
+    isf_circ      = _calcular_isf_circadiano(days=90)
+    isf_bloque, bloque_label, fuente_circ = _isf_para_hora(hora, isf_circ, isf_personal)
+
+    isf = isf_manual or isf_guardado or isf_bloque or isf_personal
+    isf_fuente = (
+        "manual"      if isf_manual  else
+        "guardado"    if isf_guardado else
+        "circadiano"  if (isf_bloque and fuente_circ == "circadiano") else
+        "calculado"
+    )
+
     icr = icr_manual or (float(_get_setting("icr")) if _get_setting("icr") else None) or icr_personal
 
     if not glucemia or glucemia <= 0:
@@ -114,10 +144,14 @@ def api_calculadora_correccion():
         "isf":         isf,
         "icr":         icr,
         "carbs":       carbs or 0,
-        "n_isf":       n_isf,
-        "n_icr":       n_icr,
-        "fuente_isf":  "manual" if isf_manual else ("guardado" if _get_setting("isf_manual") else "calculado"),
-        "fuente_icr":  "manual" if icr_manual else ("guardado" if _get_setting("icr") else "calculado"),
+        "n_isf":        n_isf,
+        "n_icr":        n_icr,
+        "fuente_isf":   isf_fuente,
+        "fuente_icr":   "manual" if icr_manual else ("guardado" if _get_setting("icr") else "calculado"),
+        "isf_bloque":   isf_bloque,
+        "isf_global":   isf_personal,
+        "bloque_label": bloque_label,
+        "hora":         hora,
         "resultado_esperado": resultado_esperado,
     })
 
