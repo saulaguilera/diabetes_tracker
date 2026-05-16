@@ -54,6 +54,11 @@
       <i class="bi bi-capsule-pill"></i>
       <span>Insulina</span>
     </button>
+    <button type="button" class="ql-chip" id="chip-actividad"
+            onclick="toggleCard('actividad')">
+      <i class="bi bi-bicycle"></i>
+      <span>Actividad</span>
+    </button>
   </div>
 
   {# Mensaje inicial si nada seleccionado #}
@@ -153,6 +158,68 @@
     </div>
   </div>
 
+  {# ── Card: Actividad ──────────────────────────────────────────────────── #}
+  <div class="ql-card mb-3" id="card-actividad" style="display:none;">
+    <input type="hidden" name="reg_actividad" value="1">
+    <div class="ql-card-head">
+      <div class="ql-card-icon" style="background:rgba(139,92,246,.12);">
+        <i class="bi bi-bicycle" style="color:#7c3aed;"></i>
+      </div>
+      <span class="ql-card-title">Actividad física</span>
+      <button type="button" class="ql-card-close" onclick="toggleCard('actividad')">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    <div class="ql-card-body">
+
+      {# Actividades comunes #}
+      <div class="ql-act-chips mb-2" id="act-tipo-chips">
+        {% for act in [('Caminata','bi-person-walking'),('Ciclismo','bi-bicycle'),
+                       ('Natación','bi-water'),('Pesas','bi-trophy'),
+                       ('Fútbol','bi-dribbble'),('Trote','bi-lightning-charge')] %}
+        <button type="button" class="ql-act-chip" onclick="setActTipo('{{ act[0] }}')">
+          <i class="bi {{ act[1] }}"></i> {{ act[0] }}
+        </button>
+        {% endfor %}
+      </div>
+
+      {# Nombre libre #}
+      <input type="text" name="actividad_tipo" id="actividad_tipo"
+             class="form-control form-control-sm mb-3"
+             placeholder="Otra actividad...">
+
+      {# Duración #}
+      <div class="ql-big-row mb-2">
+        <div class="ql-big-input">
+          <input type="number" name="actividad_duracion" id="actividad_duracion"
+                 class="ql-big-num" placeholder="—" min="5" max="300" step="5">
+          <span class="ql-big-unit">min</span>
+        </div>
+      </div>
+      <div class="ql-chips-row mb-3">
+        {% for m in [15, 20, 30, 45, 60, 90] %}
+        <button type="button" class="ql-val-chip"
+                onclick="setActDur({{ m }})">{{ m }}min</button>
+        {% endfor %}
+      </div>
+
+      {# Intensidad #}
+      <div class="ql-timing-label mb-1">Intensidad</div>
+      <div class="ql-purpose-row">
+        {% for val, label, icon in [('baja','Suave','bi-heart'),
+                                     ('media','Moderada','bi-heart-half'),
+                                     ('alta','Intensa','bi-heart-fill')] %}
+        <label class="ql-purpose-chip ql-int-chip">
+          <input type="radio" name="actividad_intensidad" value="{{ val }}"
+                 {{ 'checked' if val == 'media' }}>
+          <span><i class="bi {{ icon }}"></i> {{ label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+
+    </div>
+  </div>
+
   {# ── Bolo sugerido (aparece entre comida e insulina) ────────────────────── #}
   <div class="ql-bolo-banner mb-3" id="bolo-banner" style="display:none;">
     <div class="ql-bolo-left">
@@ -241,7 +308,7 @@
 
 /* Selector chips */
 .ql-selector-row {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: .5rem;
 }
 .ql-chip {
   display: flex; flex-direction: column; align-items: center; gap: .35rem;
@@ -254,9 +321,10 @@
 .ql-chip.active {
   border-color: #6366f1; background: rgba(99,102,241,.08); color: #6366f1;
 }
-#chip-glucemia.active { border-color:#3b82f6; background:rgba(59,130,246,.08); color:#3b82f6; }
-#chip-comida.active   { border-color:#22c55e; background:rgba(34,197,94,.08);  color:#16a34a; }
-#chip-insulina.active { border-color:#f59e0b; background:rgba(245,158,11,.08); color:#d97706; }
+#chip-glucemia.active  { border-color:#3b82f6; background:rgba(59,130,246,.08); color:#3b82f6; }
+#chip-comida.active    { border-color:#22c55e; background:rgba(34,197,94,.08);  color:#16a34a; }
+#chip-insulina.active  { border-color:#f59e0b; background:rgba(245,158,11,.08); color:#d97706; }
+#chip-actividad.active { border-color:#8b5cf6; background:rgba(139,92,246,.08); color:#7c3aed; }
 
 /* Hint */
 .ql-hint {
@@ -452,6 +520,28 @@
   animation: qlSlideIn .18s ease;
 }
 .ql-submit:hover { background: #4f46e5; }
+
+/* Activity chips */
+.ql-act-chips { display: flex; flex-wrap: wrap; gap: .35rem; }
+.ql-act-chip {
+  display: inline-flex; align-items: center; gap: .3rem;
+  padding: .28rem .65rem; border-radius: 20px; font-size: .78rem; font-weight: 500;
+  border: 1.5px solid var(--border); color: var(--text-muted);
+  background: var(--surface2); cursor: pointer; transition: all .12s;
+}
+.ql-act-chip:hover,
+.ql-act-chip.selected {
+  border-color: #8b5cf6; background: rgba(139,92,246,.1); color: #7c3aed; font-weight: 700;
+}
+.ql-int-chip:has(input[value="baja"]:checked) span  {
+  border-color:#22c55e; background:rgba(34,197,94,.1);  color:#16a34a; font-weight:700;
+}
+.ql-int-chip:has(input[value="media"]:checked) span {
+  border-color:#f59e0b; background:rgba(245,158,11,.1); color:#d97706; font-weight:700;
+}
+.ql-int-chip:has(input[value="alta"]:checked) span  {
+  border-color:#ef4444; background:rgba(239,68,68,.1);  color:#dc2626; font-weight:700;
+}
 
 /* Context banner */
 .ql-ctx-banner {
@@ -774,6 +864,19 @@ function recalcTotals() {
   sugerirBolo();
 }
 
+/* ── Actividad ──────────────────────────────────────────────────────────── */
+function setActTipo(nombre) {
+  document.getElementById('actividad_tipo').value = nombre;
+  document.querySelectorAll('.ql-act-chip').forEach(b =>
+    b.classList.toggle('selected', b.textContent.trim() === nombre));
+}
+
+function setActDur(min) {
+  document.getElementById('actividad_duracion').value = min;
+  document.querySelectorAll('#card-actividad .ql-val-chip').forEach(b =>
+    b.classList.toggle('selected', parseInt(b.textContent) === min));
+}
+
 /* ── Helpers ────────────────────────────────────────────────────────────── */
 function escH(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
@@ -795,11 +898,13 @@ document.getElementById('ql-form').addEventListener('submit', function(e) {
   }
   // Desactivar cards no abiertas para no enviar sus hidden inputs
   if (!activeCards.has('glucemia'))
-    document.querySelector('[name=reg_glucemia]').disabled = true;
+    document.querySelector('[name=reg_glucemia]').disabled  = true;
   if (!activeCards.has('comida'))
-    document.querySelector('[name=reg_comida]').disabled = true;
+    document.querySelector('[name=reg_comida]').disabled    = true;
   if (!activeCards.has('insulina'))
-    document.querySelector('[name=reg_insulina]').disabled = true;
+    document.querySelector('[name=reg_insulina]').disabled  = true;
+  if (!activeCards.has('actividad'))
+    document.querySelector('[name=reg_actividad]').disabled = true;
 });
 </script>
 {% endblock %}

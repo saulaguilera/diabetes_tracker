@@ -260,6 +260,23 @@ def quicklog():
 
                 guardados.append(f"Comida {nombre} ({detalle})")
 
+        # Actividad física
+        if request.form.get("reg_actividad"):
+            tipo      = request.form.get("actividad_tipo", "").strip()
+            duracion  = request.form.get("actividad_duracion", type=int)
+            intensidad = request.form.get("actividad_intensidad", "media")
+            if tipo and duracion and duracion > 0:
+                from models import Activity
+                db.session.add(Activity(
+                    timestamp=ts,
+                    activity_type=tipo,
+                    duration_min=duracion,
+                    intensity=intensidad,
+                    exercise_type=None,
+                    notes="",
+                ))
+                guardados.append(f"Actividad {tipo} {duracion}min ({intensidad})")
+
         # Insulina bolus
         if request.form.get("reg_insulina"):
             units = request.form.get("insulina_units", type=float)
