@@ -188,6 +188,111 @@
   </div>
 </div>
 
+{# ── Insights 7d ──────────────────────────────────────────────────────────── #}
+{% if insights and insights.tir7 is not none %}
+<div class="row g-2 mb-3">
+
+  {# TIR 7 días + tendencia #}
+  <div class="col-12 col-sm-4">
+    <div class="insight-chip insight-{{ insights.tir7_color }}">
+      <div class="ic-icon-wrap">
+        <i class="bi bi-bullseye"></i>
+      </div>
+      <div class="ic-body">
+        <div class="ic-label">TIR — últimos 7 días</div>
+        <div class="ic-value">
+          {{ insights.tir7 }}<span class="ic-unit">%</span>
+          {% if insights.tir7_delta is not none %}
+            <span class="ic-delta {% if insights.tir7_delta >= 0 %}ic-up{% else %}ic-down{% endif %}">
+              {{ '+' if insights.tir7_delta > 0 }}{{ insights.tir7_delta }}%
+              <span class="ic-delta-label">vs sem ant</span>
+            </span>
+          {% endif %}
+        </div>
+        <div class="ic-sub">
+          {% if insights.tir7 >= 70 %}✓ Meta alcanzada (≥70%)
+          {% elif insights.tir7 >= 50 %}Mejorando — meta: 70%
+          {% else %}Por debajo del objetivo
+          {% endif %}
+        </div>
+      </div>
+      <a href="{{ url_for('agp') }}" class="ic-link" title="Ver AGP">
+        <i class="bi bi-chevron-right"></i>
+      </a>
+    </div>
+  </div>
+
+  {# Recomendación más urgente #}
+  {% if insights.top_rec %}
+  <div class="col-12 col-sm-4">
+    <a href="{{ url_for('recomendaciones') }}" class="insight-chip insight-{{ insights.top_rec.color }} text-decoration-none">
+      <div class="ic-icon-wrap">
+        <i class="bi {{ insights.top_rec.icon }}"></i>
+      </div>
+      <div class="ic-body">
+        <div class="ic-label">
+          <span class="ic-priority-badge ic-pbadge-{{ insights.top_rec.priority }}">
+            {{ insights.top_rec.priority | capitalize }}
+          </span>
+        </div>
+        <div class="ic-value ic-value-text">{{ insights.top_rec.title }}</div>
+      </div>
+      <div class="ic-link">
+        <i class="bi bi-chevron-right"></i>
+      </div>
+    </a>
+  </div>
+  {% else %}
+  <div class="col-12 col-sm-4">
+    <div class="insight-chip insight-success">
+      <div class="ic-icon-wrap">
+        <i class="bi bi-check-circle-fill"></i>
+      </div>
+      <div class="ic-body">
+        <div class="ic-label">Recomendaciones</div>
+        <div class="ic-value ic-value-text">Sin alertas activas</div>
+        <div class="ic-sub">Todo en orden en los últimos 30 días</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ISF / ICR personal #}
+  <div class="col-12 col-sm-4">
+    <a href="{{ url_for('calculadora') }}" class="insight-chip insight-info text-decoration-none">
+      <div class="ic-icon-wrap">
+        <i class="bi bi-calculator-fill"></i>
+      </div>
+      <div class="ic-body">
+        <div class="ic-label">ISF · ICR personal calculado</div>
+        <div class="ic-value ic-value-text">
+          {% if insights.isf %}
+            ISF <strong>{{ insights.isf }}</strong> mg/dL·U
+          {% else %}
+            ISF <span class="text-muted">—</span>
+          {% endif %}
+          &nbsp;·&nbsp;
+          {% if insights.icr %}
+            1U : <strong>{{ insights.icr }}</strong>g CH
+          {% else %}
+            ICR <span class="text-muted">—</span>
+          {% endif %}
+        </div>
+        <div class="ic-sub">
+          {% if insights.isf %}{{ insights.isf_n }} correcciones · {% endif %}
+          {% if insights.icr %}{{ insights.icr_n }} comidas analizadas{% endif %}
+          {% if not insights.isf and not insights.icr %}Sin suficientes datos aún{% endif %}
+        </div>
+      </div>
+      <div class="ic-link">
+        <i class="bi bi-chevron-right"></i>
+      </div>
+    </a>
+  </div>
+
+</div>
+{% endif %}
+
 {# ── Últimos registros ─────────────────────────────────────────────────────── #}
 <div class="row g-3 mb-3">
 
@@ -519,6 +624,72 @@
 }
 .fab-badge-danger  { background: #ef4444; color: #fff; }
 .fab-badge-warning { background: #f59e0b; color: #fff; }
+
+/* ── Insight chips ──────────────────────────────────────────────────────────── */
+.insight-chip {
+  display: flex; align-items: center; gap: .8rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: .85rem 1rem;
+  height: 100%; transition: border-color .15s, box-shadow .15s;
+  border-left-width: 4px;
+}
+a.insight-chip:hover {
+  box-shadow: 0 2px 12px rgba(0,0,0,.08); border-color: var(--border);
+  text-decoration: none;
+}
+.insight-success { border-left-color: #22c55e; }
+.insight-warning { border-left-color: #f59e0b; }
+.insight-danger  { border-left-color: #ef4444; }
+.insight-info    { border-left-color: #3b82f6; }
+.insight-secondary { border-left-color: var(--border); }
+
+.ic-icon-wrap {
+  width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem; background: var(--surface2);
+}
+.insight-success .ic-icon-wrap { background: rgba(34,197,94,.12);  color: #16a34a; }
+.insight-warning .ic-icon-wrap { background: rgba(245,158,11,.12); color: #d97706; }
+.insight-danger  .ic-icon-wrap { background: rgba(239,68,68,.12);  color: #dc2626; }
+.insight-info    .ic-icon-wrap { background: rgba(59,130,246,.12); color: #2563eb; }
+
+.ic-body { flex: 1; min-width: 0; }
+.ic-label {
+  font-size: .68rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-muted); margin-bottom: .2rem;
+  display: flex; align-items: center; gap: .35rem;
+}
+.ic-value {
+  font-size: 1.5rem; font-weight: 800; line-height: 1.1;
+  letter-spacing: -0.5px; color: var(--text);
+}
+.ic-value-text { font-size: .9rem; font-weight: 600; letter-spacing: 0; }
+.ic-unit { font-size: .85rem; font-weight: 500; color: var(--text-muted); margin-left: .1rem; }
+.ic-sub {
+  font-size: .72rem; color: var(--text-muted); margin-top: .2rem;
+}
+.ic-delta {
+  display: inline-flex; align-items: center; gap: .15rem;
+  font-size: .7rem; font-weight: 700; margin-left: .4rem;
+  padding: .1em .4em; border-radius: 6px;
+}
+.ic-up   { background: rgba(34,197,94,.12);  color: #16a34a; }
+.ic-down { background: rgba(239,68,68,.12);  color: #dc2626; }
+.ic-delta-label { font-weight: 400; opacity: .8; }
+
+.ic-link {
+  color: var(--text-muted); font-size: .95rem; flex-shrink: 0;
+  padding: .2rem;
+}
+
+/* Priority badges inside insight */
+.ic-priority-badge {
+  display: inline-block; padding: .1em .5em; border-radius: 6px;
+  font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+}
+.ic-pbadge-urgente    { background: rgba(239,68,68,.15);  color: #dc2626; }
+.ic-pbadge-importante { background: rgba(245,158,11,.15); color: #d97706; }
+.ic-pbadge-informativo{ background: rgba(59,130,246,.15); color: #2563eb; }
 
 /* dark mode tweaks */
 [data-theme="dark"] .glucose-hero-card::before {

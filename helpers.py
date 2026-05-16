@@ -497,3 +497,73 @@ def _calcular_icr_personal(days=90):
     if len(muestras) >= 3:
         return round(sum(muestras) / len(muestras), 1), len(muestras)
     return None, len(muestras)
+
+
+# ─── Insights para dashboard ──────────────────────────────────────────────────
+
+def _dashboard_insights():
+    """
+    Calcula los tres bloques de insight del dashboard:
+      - tir7: TIR de los últimos 7 días + delta vs semana anterior
+      - top_rec: recomendación más urgente (excluyendo "pocos datos")
+      - isf / icr: valores personales calculados
+    Todas las queries están agrupadas aquí para minimizar round-trips.
+    """
+    now = datetime.now()
+
+    # ── TIR 7d y tendencia ───────────────────────────────────────────────────
+    hace_7d  = now - timedelta(days=7)
+    hace_14d = now - timedelta(days=14)
+
+    r7   = GlucoseReading.query.filter(GlucoseReading.timestamp >= hace_7d).all()
+    rprev = GlucoseReading.query.filter(
+        GlucoseReading.timestamp >= hace_14d,
+        GlucoseReading.timestamp <  hace_7d,
+    ).all()
+
+    def _tir(readings):
+        if not readings:
+            return None
+        vals = [r.value_mgdl for r in readings]
+        return round(len([v for v in vals if 70 <= v <= 180]) / len(vals) * 100, 1)
+
+    tir7   = _tir(r7)
+    tir7_prev = _tir(rprev)
+    tir7_delta = round(tir7 - tir7_prev, 1) if (tir7 is not None and tir7_prev is not None) else None
+
+    if tir7 is None:
+        tir7_color = 'secondary'
+    elif tir7 >= 70:
+        tir7_color = 'success'
+    elif tir7 >= 50:
+        tir7_color = 'warning'
+    else:
+        tir7_color = 'danger'
+
+    # ── Recomendación más urgente ────────────────────────────────────────────
+    top_rec = None
+    try:
+        from utils.recommendations import generate_recommendations
+        recs = generate_recommendations(days=30)
+        # Excluir el placeholder de "pocos datos"
+        recs_reales = [r for r in recs if r.get('category') != 'habitos'
+                       or 'suficientes datos' not in r.get('title', '')]
+        if recs_reales:
+            top_rec = recs_reales[0]   # ya viene ordenado por prioridad
+    except Exception:
+        pass
+
+    # ── ISF / ICR personal ───────────────────────────────────────────────────
+    isf, n_isf = _calcular_isf_personal(days=90)
+    icr, n_icr = _calcular_icr_personal(days=90)
+
+    return {
+        'tir7':        tir7,
+        'tir7_delta':  tir7_delta,
+        'tir7_color':  tir7_color,
+        'top_rec':     top_rec,
+        'isf':         isf,
+        'isf_n':       n_isf,
+        'icr':         icr,
+        'icr_n':       n_icr,
+    }

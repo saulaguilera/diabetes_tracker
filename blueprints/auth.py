@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from werkzeug.security import check_password_hash
 import os
 
-from helpers import stats_resumen, _detectar_patrones, _get_setting
+from helpers import stats_resumen, _detectar_patrones, _get_setting, _dashboard_insights
 from utils.charts import chart_glucose_timeline
 
 bp = Blueprint("auth", __name__)
@@ -81,5 +81,8 @@ def dashboard():
         except Exception:
             pass
 
+    insights = _dashboard_insights()
+
     return render_template("dashboard.html", stats=stats, chart=chart, alertas=alertas,
-                           libre_configured=libre_configured, ultima_sync=ultima_sync)
+                           libre_configured=libre_configured, ultima_sync=ultima_sync,
+                           insights=insights)
