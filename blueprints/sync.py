@@ -84,6 +84,22 @@ def _do_libre_sync(email: str, password: str) -> dict:
         except Exception:
             pass
 
+        # Re-estimar magnitud del fenómeno del alba (máx 1 vez cada 24h)
+        # Requiere datos CGM nocturnos suficientes (≥ 45 días de historia)
+        try:
+            dawn_last = _get_setting("dawn_last_estimated")
+            needs_dawn = True
+            if dawn_last:
+                hours_since = (datetime.now() - datetime.fromisoformat(dawn_last)).total_seconds() / 3600
+                needs_dawn  = hours_since >= 24
+            if needs_dawn:
+                from utils.kinetics import estimate_dawn_magnitude
+                result = estimate_dawn_magnitude(days=45)
+                if result.get("ok"):
+                    _set_setting("dawn_last_estimated", datetime.now().isoformat())
+        except Exception:
+            pass
+
     # Guardar timestamp de última sync exitosa
     _set_setting("libre_last_sync", datetime.now().isoformat())
     _set_setting("libre_last_sync_ok", "1")
@@ -692,6 +708,7 @@ def api_predict_glucose():
         from utils.kinetics import (
             get_kinetics_snapshot, exercise_sensitivity_factor,
             current_iob, current_cob, current_basal_iob,
+            dawn_roc_mgdl_min,
             _DEFAULT_PEAK_MIN, _DEFAULT_DIA_MIN,
         )
 
@@ -753,6 +770,12 @@ def api_predict_glucose():
         if isf_ef is None:
             return jsonify({"ok": False, "error": "Sin ISF configurado — ingresalo en Configuración"})
 
+        # ── Fenómeno del alba ─────────────────────────────────────────────────
+        # Cortisol + GH secretan glucosa hepática entre las 3–8am.
+        # Se suma al ROC efectivo como componente independiente.
+        dawn_roc    = dawn_roc_mgdl_min(at_time=now)
+        dawn_active = dawn_roc > 0.05   # activo si > umbral mínimo
+
         # ── Proyección IOB e COB en t+30 y t+60 ──────────────────────────
         cutoff_iob = now - timedelta(minutes=dia_min)
         boluses    = InsulinDose.query.filter(
@@ -798,16 +821,19 @@ def api_predict_glucose():
             roc_effect      = (roc or 0) * roc_eff_min * cob_suppression
             insulin_effect  = d_iob * isf_ef
             carb_effect     = (d_cob * isf_ef / icr) if icr else 0.0
+            # Fenómeno del alba: efecto independiente del ROC del CGM
+            # (secreción hepática de glucosa, no suprimida por COB)
+            dawn_effect_total = dawn_roc * roc_eff_min
 
             # Estimación puntual (referencia para tooltip y feedback)
-            g_pred_pt = g_actual + roc_effect - insulin_effect + carb_effect
+            g_pred_pt = g_actual + roc_effect - insulin_effect + carb_effect + dawn_effect_total
 
             # ── Monte Carlo — propaga incertidumbre de todos los parámetros ──
             # El bias se aplica desplazando g_actual: toda la distribución se
             # corre el mismo offset sin afectar la forma (incertidumbre).
             bias_val = bias_map[delta_min]
             mc = run_monte_carlo(
-                g_actual        = g_actual + bias_val,
+                g_actual        = g_actual + bias_val + dawn_effect_total,
                 roc             = roc,
                 roc_eff_min     = roc_eff_min,
                 cob_suppression = cob_suppression,
@@ -863,11 +889,12 @@ def api_predict_glucose():
                 "n_sim":          mc["n_sim"],
                 # Componentes del modelo (para tooltip diagnóstico)
                 "componentes": {
-                    "roc_effect":      round(roc_effect,      1),
-                    "insulin_effect":  round(-insulin_effect, 1),
-                    "carb_effect":     round(carb_effect,     1),
-                    "roc_eff_min":     round(roc_eff_min,     1),
-                    "cob_suppression": round(cob_suppression, 2),
+                    "roc_effect":      round(roc_effect,        1),
+                    "insulin_effect":  round(-insulin_effect,   1),
+                    "carb_effect":     round(carb_effect,       1),
+                    "dawn_effect":     round(dawn_effect_total, 1),
+                    "roc_eff_min":     round(roc_eff_min,       1),
+                    "cob_suppression": round(cob_suppression,   2),
                 },
                 # Contribución del modelo AR
                 "ar": {
@@ -925,6 +952,10 @@ def api_predict_glucose():
             "confianza_baja": confianza_baja,
             "bias":           bias,
             "accuracy":       accuracy,
+            "dawn": {
+                "active":       dawn_active,
+                "roc_mgdl_min": round(dawn_roc, 4),
+            },
             "kalman": {
                 "active":   kalman_active,
                 "G":        round(kalman["G"], 1)      if kalman_active else None,

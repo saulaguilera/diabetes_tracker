@@ -23,6 +23,7 @@ DIA  — Estimated from correction-bolus events: find how long each
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -37,6 +38,31 @@ _GI_ABSORPTION: dict[str, int] = {
     "high":    75,   # GI > 70
 }
 _DEFAULT_ABSORPTION_MIN = 120   # used when GI is unknown
+
+# ── 2-compartment absorption constants ───────────────────────────────────────
+# Stomach → Gut → Blood model (Dalla Man et al. 2007, simplified)
+#   dS/dt = -k_a * S                  (gastric emptying)
+#   dI/dt =  k_a * S - k_g * I        (gut absorption)
+#   COB(t) = S(t) + I(t)              (total still in GI tract)
+#
+# k_a: gastric emptying rate — depends on GI, fat, fiber
+# k_g: gut→blood transfer rate — roughly constant for mixed meals
+_K_GUT     = 0.025   # min⁻¹, intestinal absorption rate (half-life ~28 min)
+_K_A_HIGH  = 0.030   # min⁻¹, high GI  (>70) — half-life ~23 min
+_K_A_MED   = 0.020   # min⁻¹, medium GI (55-70) — half-life ~35 min
+_K_A_LOW   = 0.013   # min⁻¹, low GI   (<55)  — half-life ~53 min
+_K_A_DEF   = 0.020   # default when GI unknown
+
+# ── Dawn phenomenon constants ─────────────────────────────────────────────────
+# Cortisol + GH secretion pulse 3–8am causes hepatic glucose output.
+# Modelled as a Gaussian bell on the glucose ROC.
+# Ref: Bolli et al. (1984) NEJM; Perriello et al. (1997) Diabetes.
+_DAWN_PEAK_H    = 5.5    # peak at 05:30 local time
+_DAWN_SIGMA_H   = 1.3    # Gaussian width (σ); 2σ ≈ 3am–8am window
+_DAWN_H_START   = 3.0    # earliest hour where effect applies
+_DAWN_H_END     = 8.5    # latest hour where effect applies
+_DAWN_MAG_DEF   = 0.45   # default peak magnitude (mg/dL/min) — conservative
+_DAWN_MAG_KEY   = "dawn_magnitude"   # UserSettings key for personalised value
 
 # ── Exercise sensitivity model ────────────────────────────────────────────────
 # Clinical basis:
@@ -409,16 +435,81 @@ def _absorption_time_for_meal(meal) -> int:
 
 
 def _cob_fraction_linear(elapsed_min: float, absorption_min: int) -> float:
-    """
-    Fraction of meal carbs still unabsorbed at `elapsed_min` post-meal.
-    Simple linear model (adequate for practical use).
-    Returns value in [0, 1].
-    """
+    """Linear fallback — kept for fat/protein extended absorption."""
     if elapsed_min <= 0:
         return 1.0
     if elapsed_min >= absorption_min:
         return 0.0
     return 1.0 - elapsed_min / absorption_min
+
+
+def _ka_for_meal(meal) -> float:
+    """
+    Estimate gastric-emptying rate k_a (min⁻¹) for a Meal object.
+
+    Higher GI → faster emptying → larger k_a.
+    Fat and fiber slow gastric emptying (clinically established).
+    Ref: Horowitz et al. (2002) Diabetes Care.
+    """
+    gi_values   = []
+    fiber_total = 0.0
+    fat_total   = getattr(meal, "fat_g", 0) or 0.0
+
+    if hasattr(meal, "components") and meal.components:
+        for comp in meal.components:
+            if comp.glycemic_index:
+                gi_values.append(float(comp.glycemic_index))
+            fiber_total += float(getattr(comp, "fiber_g", 0) or 0)
+
+    avg_gi = sum(gi_values) / len(gi_values) if gi_values else None
+
+    if avg_gi is None:
+        k_a_base = _K_A_DEF
+    elif avg_gi > 70:
+        k_a_base = _K_A_HIGH
+    elif avg_gi >= 55:
+        k_a_base = _K_A_MED
+    else:
+        k_a_base = _K_A_LOW
+
+    # Fat slows gastric emptying: each 10g fat adds ~15 min to half-life
+    fat_factor   = 1.0 / (1.0 + fat_total   * 0.015)
+    # Fiber slows absorption: each 5g fiber adds ~12 min to half-life
+    fiber_factor = 1.0 / (1.0 + fiber_total * 0.040)
+
+    return k_a_base * fat_factor * fiber_factor
+
+
+def _cob_fraction_2comp(elapsed_min: float, k_a: float,
+                         k_g: float = _K_GUT) -> float:
+    """
+    2-compartment carbohydrate absorption model.
+
+    Returns the fraction of ingested carbs still in the GI tract
+    (stomach S + intestine I) at elapsed_min post-ingestion.
+
+    Analytical solution (Dalla Man et al. 2007, simplified):
+        S(t) = e^(-k_a * t)
+        I(t) = k_a / (k_g - k_a) * (e^(-k_a*t) - e^(-k_g*t))
+        COB_fraction = S(t) + I(t)
+
+    Differences from linear model
+    ─────────────────────────────
+    • Pico de absorción más tardío (carbos llegan a sangre con demora)
+    • Cola más larga (el intestino libera gradualmente)
+    • Sensible al IG: alto IG → k_a grande → pico anterior y más agudo
+    """
+    if elapsed_min <= 0:
+        return 1.0
+
+    # Avoid numerical singularity when k_a ≈ k_g
+    if abs(k_a - k_g) < 5e-4:
+        k_a = k_a + 0.001
+
+    S = math.exp(-k_a * elapsed_min)
+    I = k_a / (k_g - k_a) * (math.exp(-k_a * elapsed_min) -
+                               math.exp(-k_g * elapsed_min))
+    return max(0.0, S + I)
 
 
 def fat_protein_glucose_equiv(fat_g: float, protein_g: float) -> float:
@@ -513,11 +604,11 @@ def current_cob_detailed(
         if elapsed_min < 0:
             continue
 
-        # Fast carbs
+        # Fast carbs — modelo 2 compartimentos (gástrico → intestinal → sangre)
         carbs_cob = 0.0
         if carbs > 0:
-            abs_min   = _absorption_time_for_meal(meal)
-            carbs_cob = carbs * _cob_fraction_linear(elapsed_min, abs_min)
+            k_a       = _ka_for_meal(meal)
+            carbs_cob = carbs * _cob_fraction_2comp(elapsed_min, k_a)
 
         # Fat glucose equivalent
         fat_equiv = fat_g * _FAT_TO_GLUCOSE_FRAC
@@ -551,6 +642,111 @@ def current_cob_detailed(
         "total_cob":    round(carbs_cob + fp_cob, 1),
         "has_extended": fp_cob >= 2.0,
         "meals_detail": meals_detail,
+    }
+
+
+# ── Dawn phenomenon (fenómeno del alba) ──────────────────────────────────────
+
+def dawn_roc_mgdl_min(at_time: datetime | None = None) -> float:
+    """
+    Returns the dawn phenomenon glucose ROC component (mg/dL/min) at at_time.
+
+    Physiological basis
+    ───────────────────
+    Cortisol and growth hormone secretion peaks 3–8am, stimulating hepatic
+    glucose output. The effect is modelled as a Gaussian bell centred at
+    05:30 local time. Magnitude is personalised from the user's CGM history
+    (stored in UserSettings under 'dawn_magnitude'); falls back to a
+    conservative default (0.45 mg/dL/min) if not yet estimated.
+
+    References: Bolli et al. (1984) NEJM; Perriello et al. (1997) Diabetes.
+    """
+    if at_time is None:
+        at_time = datetime.now()
+
+    hour = at_time.hour + at_time.minute / 60.0
+    if hour < _DAWN_H_START or hour > _DAWN_H_END:
+        return 0.0
+
+    try:
+        from helpers import _get_setting
+        mag_raw   = _get_setting(_DAWN_MAG_KEY)
+        magnitude = float(mag_raw) if mag_raw else _DAWN_MAG_DEF
+    except Exception:
+        magnitude = _DAWN_MAG_DEF
+
+    effect = magnitude * math.exp(
+        -0.5 * ((hour - _DAWN_PEAK_H) / _DAWN_SIGMA_H) ** 2
+    )
+    return round(max(0.0, effect), 4)
+
+
+def estimate_dawn_magnitude(days: int = 45) -> dict:
+    """
+    Estimate the user's personal dawn phenomenon magnitude from CGM history.
+
+    Method
+    ──────
+    1. Compute per-interval ROC for all readings in the last `days` days.
+    2. Separate into two cohorts:
+       • dawn_window (3–8am): dawn ROC expected
+       • baseline   (0–3am): no dawn effect, used as overnight reference
+    3. magnitude = max(0, mean_dawn_ROC − mean_baseline_ROC)
+    4. Persist result in UserSettings['dawn_magnitude'].
+
+    Requires ≥ 20 intervals in each cohort for a reliable estimate.
+    """
+    from models import GlucoseReading
+    from helpers import _set_setting
+
+    cutoff   = datetime.now() - timedelta(days=days)
+    readings = (
+        GlucoseReading.query
+        .filter(GlucoseReading.timestamp >= cutoff,
+                GlucoseReading.value_mgdl > 20)
+        .order_by(GlucoseReading.timestamp)
+        .all()
+    )
+
+    if len(readings) < 50:
+        return {"ok": False, "error": "Menos de 50 lecturas disponibles"}
+
+    roc_dawn, roc_baseline = [], []
+
+    for i in range(1, len(readings)):
+        r1, r2   = readings[i - 1], readings[i]
+        dt_min   = (r2.timestamp - r1.timestamp).total_seconds() / 60.0
+        if dt_min <= 0 or dt_min > 25:   # ignorar brechas (cambio de sensor, etc.)
+            continue
+        roc  = (r2.value_mgdl - r1.value_mgdl) / dt_min
+        hour = r1.timestamp.hour + r1.timestamp.minute / 60.0
+
+        if _DAWN_H_START <= hour <= _DAWN_H_END:
+            roc_dawn.append(roc)
+        elif 0.0 <= hour < _DAWN_H_START:
+            roc_baseline.append(roc)
+
+    if len(roc_dawn) < 20 or len(roc_baseline) < 10:
+        return {
+            "ok":    False,
+            "error": f"Datos nocturnos insuficientes (alba: {len(roc_dawn)}, baseline: {len(roc_baseline)})",
+        }
+
+    avg_dawn     = sum(roc_dawn)     / len(roc_dawn)
+    avg_baseline = sum(roc_baseline) / len(roc_baseline)
+    magnitude    = round(max(0.0, avg_dawn - avg_baseline), 4)
+
+    _set_setting(_DAWN_MAG_KEY, magnitude)
+
+    return {
+        "ok":              True,
+        "magnitude":       magnitude,
+        "avg_dawn_roc":    round(avg_dawn,     4),
+        "avg_baseline_roc": round(avg_baseline, 4),
+        "n_dawn":          len(roc_dawn),
+        "n_baseline":      len(roc_baseline),
+        "days_used":       days,
+        "estimated_at":    datetime.now().isoformat(),
     }
 
 
