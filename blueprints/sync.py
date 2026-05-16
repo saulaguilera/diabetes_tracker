@@ -1,3 +1,4 @@
+import math as _math
 import os
 from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, request, redirect, url_for, flash, session
@@ -448,6 +449,14 @@ def api_predict_glucose():
         fat_cutoff = now - timedelta(hours=8)
         meals_ext  = Meal.query.filter(Meal.timestamp >= fat_cutoff).all()
 
+        # ── Constante de amortiguación del ROC ────────────────────────────
+        # El ritmo de cambio actual (ROC) no persiste de forma lineal:
+        # la glucosa tiende a revertir a la media por mecanismos fisiológicos.
+        # Usamos decaimiento exponencial con τ=30 min (ver Sparacino 2007):
+        #   roc_eff_min = τ × (1 − e^(−Δt/τ))
+        # Ejemplo: τ=30, Δt=60 → roc_eff=25.9 min (vs. 60 lineal = 2.3× exagerado)
+        _TAU_ROC = 30.0  # minutos
+
         predictions = {}
         for delta_min in (30, 60):
             t_fut    = now + timedelta(minutes=delta_min)
@@ -456,8 +465,12 @@ def api_predict_glucose():
             d_iob    = iob_now  - iob_fut   # insulina que se "consume" en Δt (positivo → baja glucosa)
             d_cob    = cob_now  - cob_fut   # carbos que se absorben en Δt   (positivo → sube glucosa)
 
-            # Efecto neto del ROC
-            roc_effect = (roc or 0) * delta_min
+            # Efecto ROC con decaimiento exponencial
+            # Cuando hay COB activo, el ROC ya refleja el alza de la comida → suprimirlo
+            # evita contarlo dos veces con carb_effect (mismo fenómeno, distinta variable).
+            roc_eff_min    = _TAU_ROC * (1.0 - _math.exp(-delta_min / _TAU_ROC))
+            cob_suppression = max(0.15, 1.0 - (cob_now / 35.0))   # suprime hasta 85 % con ≥35 g COB
+            roc_effect     = (roc or 0) * roc_eff_min * cob_suppression
 
             # Efecto insulina residual
             insulin_effect = d_iob * isf_ef
@@ -477,9 +490,11 @@ def api_predict_glucose():
                 "estado":         estado_pred,
                 "delta_min":      delta_min,
                 "componentes": {
-                    "roc_effect":     round(roc_effect,     1),
+                    "roc_effect":     round(roc_effect,      1),
                     "insulin_effect": round(-insulin_effect, 1),   # negativo = baja glucosa
-                    "carb_effect":    round(carb_effect,    1),
+                    "carb_effect":    round(carb_effect,     1),
+                    "roc_eff_min":    round(roc_eff_min,     1),   # minutos efectivos del ROC
+                    "cob_suppression": round(cob_suppression, 2),  # factor de supresión COB
                 },
                 "iob_fut":  round(iob_fut, 2),
                 "cob_fut":  round(cob_fut, 1),
