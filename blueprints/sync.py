@@ -277,6 +277,232 @@ def api_kinetics():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@bp.route("/api/backfill/insulin-labels", methods=["POST"], endpoint="api_backfill_insulin_labels")
+def api_backfill_insulin_labels():
+    """
+    Etiqueta automáticamente boluses históricos sin purpose usando correlación
+    temporal con comidas:
+
+    - purpose='comida'    si hay una comida en los 90 min siguientes al bolus
+                          pre_meal_min = minutos entre bolus y comida
+    - purpose='correccion' si no hay ninguna comida en ±90 min
+    - purpose='mixto'     si hay comida simultánea (±15 min) Y la glucemia
+                          previa era >180 mg/dL (corrección + cobertura)
+    - Boluses ya etiquetados: se saltan (no se sobreescriben)
+    """
+    from models import InsulinDose, Meal, GlucoseReading
+
+    # Cargar todo en memoria para evitar N+1
+    boluses_sin_label = InsulinDose.query.filter(
+        InsulinDose.type == "bolus",
+        InsulinDose.purpose.is_(None),
+    ).all()
+
+    if not boluses_sin_label:
+        return jsonify({"ok": True, "procesados": 0, "mensaje": "No hay boluses sin etiquetar."})
+
+    # Rango: desde el más antiguo hasta ahora
+    ts_min = min(b.timestamp for b in boluses_sin_label)
+    meals  = Meal.query.filter(Meal.timestamp >= ts_min - timedelta(hours=2)).all()
+
+    # Lecturas de glucosa para detectar hiperglucemia previa al bolus
+    readings = GlucoseReading.query.filter(
+        GlucoseReading.timestamp >= ts_min - timedelta(hours=1)
+    ).order_by(GlucoseReading.timestamp).all()
+
+    stats = {"comida": 0, "correccion": 0, "mixto": 0, "sin_clasificar": 0}
+
+    for bolus in boluses_sin_label:
+        bt = bolus.timestamp
+
+        # Buscar comida más cercana DESPUÉS del bolus (ventana 0–90 min)
+        comidas_post = [
+            m for m in meals
+            if 0 <= (m.timestamp - bt).total_seconds() / 60 <= 90
+        ]
+        # Buscar comida simultánea (bolus dado ≤15 min DESPUÉS de comer)
+        comidas_simul = [
+            m for m in meals
+            if -15 <= (m.timestamp - bt).total_seconds() / 60 <= 15
+        ]
+        # Glucemia previa al bolus (última lectura en los 30 min anteriores)
+        pre_readings = [r for r in readings if bt - timedelta(minutes=30) <= r.timestamp <= bt]
+        glucemia_pre = pre_readings[-1].value_mgdl if pre_readings else None
+
+        if comidas_post or comidas_simul:
+            # Comida más cercana (puede ser simultánea o pre-bolo)
+            todas_cercanas = comidas_post + comidas_simul
+            comida_ref     = min(todas_cercanas, key=lambda m: abs((m.timestamp - bt).total_seconds()))
+            diff_min       = (comida_ref.timestamp - bt).total_seconds() / 60
+
+            # Si hay hiperglucemia previa Y hay comida → mixto (corrección + cobertura)
+            if glucemia_pre and glucemia_pre > 180 and abs(diff_min) <= 30:
+                bolus.purpose      = "mixto"
+                bolus.pre_meal_min = max(0, round(diff_min))
+                stats["mixto"] += 1
+            else:
+                bolus.purpose      = "comida"
+                bolus.pre_meal_min = max(0, round(diff_min))
+                stats["comida"] += 1
+        else:
+            # Sin comida en ±90 min → corrección pura
+            bolus.purpose      = "correccion"
+            bolus.pre_meal_min = None
+            stats["correccion"] += 1
+
+    db.session.commit()
+
+    total = sum(stats.values())
+    return jsonify({
+        "ok":        True,
+        "procesados": total,
+        "etiquetas":  stats,
+        "mensaje": (
+            f"{total} boluses etiquetados: "
+            f"{stats['comida']} comida, "
+            f"{stats['correccion']} corrección, "
+            f"{stats['mixto']} mixto."
+        ),
+    })
+
+
+@bp.route("/api/predict/glucose", endpoint="api_predict_glucose")
+def api_predict_glucose():
+    """
+    Predice la glucemia a +30 y +60 minutos usando:
+      1. Glucemia actual + tendencia (ROC × Δt)
+      2. IOB residual × ISF  (cuánto baja la insulina activa)
+      3. COB residual / absorción (cuánto sube la comida restante)
+      4. Factor de ejercicio (ajuste de sensibilidad)
+
+    Modelo lineal de primer orden (suficiente para ventanas cortas):
+      G(t+Δt) = G_actual
+                + ROC × Δt                          (tendencia CGM)
+                - ΔIOB(Δt) × ISF_efectivo            (efecto insulina)
+                + ΔCOB(Δt) × (ISF / ICR)             (efecto comida)
+
+    donde ΔIOB y ΔCOB son los cambios proyectados en la ventana Δt.
+    """
+    try:
+        from models import InsulinDose, Meal, GlucoseReading, Activity
+        from helpers import (
+            _get_setting, _calcular_isf_personal, _calcular_icr_personal,
+            _calcular_isf_circadiano, _isf_para_hora,
+        )
+        from utils.kinetics import (
+            get_kinetics_snapshot, exercise_sensitivity_factor,
+            current_iob, current_cob,
+            _DEFAULT_PEAK_MIN, _DEFAULT_DIA_MIN,
+        )
+
+        now  = datetime.now()
+        hora = now.hour
+
+        # ── Parámetros del modelo ─────────────────────────────────────────
+        saved_dia = _get_setting("dia_min")
+        dia_min   = int(saved_dia) if saved_dia else _DEFAULT_DIA_MIN
+        peak_min  = _DEFAULT_PEAK_MIN
+
+        isf_personal, n_isf = _calcular_isf_personal()
+        icr_personal, n_icr = _calcular_icr_personal()
+        isf_guardado = float(_get_setting("isf_manual")) if _get_setting("isf_manual") else None
+        icr_guardado = float(_get_setting("icr"))        if _get_setting("icr")        else None
+        isf_circ = _calcular_isf_circadiano(days=90)
+        isf_bloque, bloque_label, _ = _isf_para_hora(hora, isf_circ, isf_personal)
+        isf_base = isf_guardado or isf_bloque or isf_personal
+        icr      = icr_guardado or icr_personal
+
+        # Factor de ejercicio
+        act_cutoff = now - timedelta(hours=24)
+        activities = Activity.query.filter(Activity.timestamp >= act_cutoff).all()
+        ex_factor  = exercise_sensitivity_factor(activities, at_time=now)
+        isf_ef     = round((isf_base or 0) * ex_factor, 1) if isf_base else None
+
+        # ── Datos actuales ────────────────────────────────────────────────
+        snap = get_kinetics_snapshot(hours_lookback=6, dia_min=dia_min, peak_min=peak_min)
+        g_actual = snap["last_glucose"]
+        roc      = snap["roc"]    # mg/dL/min
+        iob_now  = snap["iob"]
+        cob_now  = snap["cob"]
+
+        if g_actual is None:
+            return jsonify({"ok": False, "error": "Sin lecturas de glucosa recientes"})
+        if isf_ef is None:
+            return jsonify({"ok": False, "error": "Sin ISF configurado — ingresalo en Configuración"})
+
+        # ── Proyección IOB e COB en t+30 y t+60 ──────────────────────────
+        cutoff_iob = now - timedelta(minutes=dia_min)
+        boluses    = InsulinDose.query.filter(
+            InsulinDose.type == "bolus",
+            InsulinDose.timestamp >= cutoff_iob,
+        ).all()
+        fat_cutoff = now - timedelta(hours=8)
+        meals_ext  = Meal.query.filter(Meal.timestamp >= fat_cutoff).all()
+
+        predictions = {}
+        for delta_min in (30, 60):
+            t_fut    = now + timedelta(minutes=delta_min)
+            iob_fut  = current_iob(boluses,   at_time=t_fut, peak_min=peak_min, dia_min=dia_min)
+            cob_fut  = current_cob(meals_ext, at_time=t_fut)
+            d_iob    = iob_now  - iob_fut   # insulina que se "consume" en Δt (positivo → baja glucosa)
+            d_cob    = cob_now  - cob_fut   # carbos que se absorben en Δt   (positivo → sube glucosa)
+
+            # Efecto neto del ROC
+            roc_effect = (roc or 0) * delta_min
+
+            # Efecto insulina residual
+            insulin_effect = d_iob * isf_ef
+
+            # Efecto carbohidratos (gl ≈ g_COB × ISF/ICR → mg/dL)
+            carb_effect = (d_cob * isf_ef / icr) if icr else 0
+
+            g_pred = g_actual + roc_effect - insulin_effect + carb_effect
+
+            # Clasificar estado predicho
+            if g_pred < 70:    estado_pred = "hipo"
+            elif g_pred > 180: estado_pred = "hiper"
+            else:              estado_pred = "rango"
+
+            predictions[f"+{delta_min}min"] = {
+                "glucemia_pred":  round(g_pred),
+                "estado":         estado_pred,
+                "delta_min":      delta_min,
+                "componentes": {
+                    "roc_effect":     round(roc_effect,     1),
+                    "insulin_effect": round(-insulin_effect, 1),   # negativo = baja glucosa
+                    "carb_effect":    round(carb_effect,    1),
+                },
+                "iob_fut":  round(iob_fut, 2),
+                "cob_fut":  round(cob_fut, 1),
+            }
+
+        # Confianza: baja si sin ROC, sin ISF personal, o con pocos datos
+        confianza_baja = []
+        if roc is None:                 confianza_baja.append("sin tendencia CGM")
+        if n_isf < 5:                   confianza_baja.append(f"ISF con solo {n_isf} muestras")
+        if icr is None:                 confianza_baja.append("sin ICR")
+        if not activities:              confianza_baja.append("ejercicio desconocido")
+
+        return jsonify({
+            "ok":            True,
+            "g_actual":      g_actual,
+            "roc":           roc,
+            "arrow":         snap["arrow"],
+            "iob_now":       iob_now,
+            "cob_now":       cob_now,
+            "isf_ef":        isf_ef,
+            "icr":           icr,
+            "ex_factor":     ex_factor,
+            "predictions":   predictions,
+            "confianza_baja": confianza_baja,
+            "timestamp":     now.strftime("%H:%M:%S"),
+        })
+
+    except Exception as e:
+        import traceback
+        return jsonify({"ok": False, "error": str(e), "trace": traceback.format_exc()}), 500
+
+
 @bp.route("/api/diagnostico", endpoint="api_diagnostico")
 def api_diagnostico():
     """

@@ -16,7 +16,13 @@ def insulina():
         .order_by(InsulinDose.timestamp.desc())
         .paginate(page=page, per_page=30, error_out=False)
     )
-    return render_template("insulina.html", dosis=dosis_list, dias=dias)
+    # Cuántos boluses históricos NO tienen etiqueta (para mostrar banner)
+    sin_etiqueta = InsulinDose.query.filter(
+        InsulinDose.type == "bolus",
+        InsulinDose.purpose.is_(None),
+    ).count()
+    return render_template("insulina.html", dosis=dosis_list, dias=dias,
+                           sin_etiqueta=sin_etiqueta)
 
 
 @bp.route("/insulina/nueva", methods=["GET", "POST"], endpoint="insulina_nueva")

@@ -16,6 +16,23 @@
   </a>
 </div>
 
+{% if sin_etiqueta > 0 %}
+<div class="alert border d-flex align-items-center gap-3 mb-3"
+     style="background:rgba(99,102,241,.06); border-color:rgba(99,102,241,.25)!important;
+            font-size:.85rem;">
+  <i class="bi bi-tag-fill" style="color:#6366f1; font-size:1.3rem; flex-shrink:0;"></i>
+  <div style="flex:1;">
+    <strong style="color:#6366f1;">{{ sin_etiqueta }} bolus sin etiquetar</strong>
+    — el modelo puede inferir automáticamente si cada dosis fue de
+    <em>comida</em> o <em>corrección</em> comparando con tus comidas registradas.
+  </div>
+  <button class="btn btn-sm btn-outline-primary" style="white-space:nowrap;"
+          onclick="etiquetar(this)">
+    <i class="bi bi-cpu me-1"></i>Etiquetar histórico
+  </button>
+</div>
+{% endif %}
+
 <!-- Filtro días -->
 <div class="range-selector mb-3">
   {% for d, lbl in [(3,'3d'),(7,'7d'),(14,'14d'),(30,'30d')] %}
@@ -134,4 +151,32 @@
 .insulin-val { font-size: 1.6rem; font-weight: 800; line-height: 1; color: var(--text); }
 .insulin-u   { font-size: .8rem; font-weight: 600; color: var(--text-muted); }
 </style>
+<script>
+async function etiquetar(btn) {
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" style="width:.75rem;height:.75rem;"></span>Procesando…';
+  try {
+    const r = await fetch('/api/backfill/insulin-labels', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      btn.closest('.alert').innerHTML = `
+        <i class="bi bi-check-circle-fill text-success" style="font-size:1.3rem; flex-shrink:0;"></i>
+        <div>
+          <strong class="text-success">${d.mensaje}</strong><br>
+          <span class="text-muted" style="font-size:.8rem;">
+            Recargá la página para ver los cambios. El modelo usará estas etiquetas
+            para mejorar el cálculo de ISF, ICR y predicciones.
+          </span>
+        </div>`;
+    } else {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-cpu me-1"></i>Reintentar';
+      alert('Error: ' + (d.error || 'desconocido'));
+    }
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-cpu me-1"></i>Reintentar';
+  }
+}
+</script>
 {% endblock %}

@@ -312,6 +312,8 @@ _ENDPOINT_ALIASES = [
     ("sync.api_kinetics",           "api_kinetics"),
     ("sync.api_dia_estimate",       "api_dia_estimate"),
     ("sync.api_diagnostico",        "api_diagnostico"),
+    ("sync.api_backfill_insulin_labels", "api_backfill_insulin_labels"),
+    ("sync.api_predict_glucose",    "api_predict_glucose"),
 ]
 
 for _bp_endpoint, _flat_name in _ENDPOINT_ALIASES:
