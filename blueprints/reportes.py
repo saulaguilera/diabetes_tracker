@@ -421,17 +421,29 @@ def reporte_semanal_pdf():
 
 @bp.route("/api/settings/save", methods=["POST"], endpoint="api_settings_save")
 def api_settings_save():
-    """Guarda configuración personal (ICR, ISF manual, objetivo)."""
+    """Guarda configuración personal (ICR, ISF manual, objetivo, basal)."""
     data = request.get_json() or {}
     guardados = []
-    for key in ("icr", "isf_manual", "objetivo"):
+
+    # Campos numéricos (deben ser > 0)
+    for key in ("icr", "isf_manual", "objetivo", "basal_dose_u", "basal_hora"):
         val = data.get(key)
         if val is not None and val != "":
             try:
                 fval = float(val)
-                if fval > 0:
-                    _set_setting(key, fval)
+                if fval >= 0:                 # basal_dose_u = 0 → limpiar
+                    if fval == 0:
+                        _set_setting(key, "")
+                    else:
+                        _set_setting(key, fval)
                     guardados.append(key)
             except (ValueError, TypeError):
                 pass
+
+    # Campo de texto: tipo de insulina basal
+    basal_tipo = data.get("basal_tipo")
+    if basal_tipo and basal_tipo.strip():
+        _set_setting("basal_tipo", basal_tipo.strip().lower())
+        guardados.append("basal_tipo")
+
     return jsonify({"ok": True, "guardados": guardados})

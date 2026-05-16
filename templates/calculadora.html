@@ -100,6 +100,72 @@
         </div>
 
       </div>
+
+      {# ── Insulina basal ── #}
+      <div class="row g-3 mt-1">
+        <div class="col-12">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-moon-stars text-secondary"></i>
+            <span style="font-size:.82rem; font-weight:600;">Insulina basal (acción prolongada)</span>
+            <span class="text-muted" style="font-size:.75rem;">
+              — configura para mejorar las predicciones nocturnas y en ayunas
+            </span>
+          </div>
+        </div>
+
+        <!-- Tipo -->
+        <div class="col-md-3">
+          <label class="form-label mb-1" style="font-size:.82rem;">Tipo</label>
+          <select id="cfg-basal-tipo" class="form-select form-select-sm">
+            <option value=""          {% if not basal_dose_guard %}selected{% endif %}>— Sin basal —</option>
+            <option value="glargina"  {% if basal_tipo_guard == 'glargina'  %}selected{% endif %}>Glargina (Lantus / Basaglar) 24h</option>
+            <option value="toujeo"    {% if basal_tipo_guard == 'toujeo'    %}selected{% endif %}>Toujeo (Glargina U-300) 36h</option>
+            <option value="detemir"   {% if basal_tipo_guard == 'detemir'   %}selected{% endif %}>Detemir (Levemir) 16h</option>
+            <option value="degludec"  {% if basal_tipo_guard == 'degludec'  %}selected{% endif %}>Degludec (Tresiba) 42h</option>
+            <option value="nph"       {% if basal_tipo_guard == 'nph'       %}selected{% endif %}>NPH 12h</option>
+          </select>
+        </div>
+
+        <!-- Dosis -->
+        <div class="col-md-3">
+          <label class="form-label mb-1" style="font-size:.82rem;">Dosis diaria</label>
+          <div class="input-group input-group-sm">
+            <input type="number" id="cfg-basal-dosis" class="form-control"
+                   min="0" max="150" step="0.5"
+                   placeholder="ej. 12"
+                   value="{{ basal_dose_guard or '' }}">
+            <span class="input-group-text text-muted">U</span>
+          </div>
+        </div>
+
+        <!-- Hora -->
+        <div class="col-md-3">
+          <label class="form-label mb-1" style="font-size:.82rem;">Hora de aplicación</label>
+          <div class="input-group input-group-sm">
+            <input type="number" id="cfg-basal-hora" class="form-control"
+                   min="0" max="23" step="1"
+                   placeholder="22"
+                   value="{{ basal_hora_guard }}">
+            <span class="input-group-text text-muted">h</span>
+          </div>
+        </div>
+
+        <!-- IOB basal actual -->
+        <div class="col-md-3 d-flex align-items-end">
+          {% if basal_dose_guard %}
+          <div class="alert alert-secondary mb-0 py-1 px-2 w-100" style="font-size:.78rem;">
+            <i class="bi bi-cpu me-1"></i>
+            IOB basal ahora:<br>
+            <strong id="iob-basal-display">calculando…</strong>
+          </div>
+          {% else %}
+          <div class="text-muted" style="font-size:.75rem; padding:.4rem 0;">
+            <i class="bi bi-info-circle me-1"></i>Sin basal configurada — el modelo asume 0 U basal activa
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
       <div class="mt-3">
         <button class="btn btn-outline-primary btn-sm" onclick="guardarConfig()">
           <i class="bi bi-floppy me-1"></i>Guardar configuración
@@ -519,10 +585,18 @@
   }
 
   async function guardarConfig() {
+    const basalTipo  = document.getElementById('cfg-basal-tipo')?.value  || '';
+    const basalDosis = document.getElementById('cfg-basal-dosis')?.value || '';
+    const basalHora  = document.getElementById('cfg-basal-hora')?.value  || '22';
+
     const payload = {
-      isf_manual: document.getElementById('cfg-isf').value || null,
-      icr:        document.getElementById('cfg-icr').value  || null,
-      objetivo:   document.getElementById('cfg-objetivo').value || 100,
+      isf_manual:    document.getElementById('cfg-isf').value     || null,
+      icr:           document.getElementById('cfg-icr').value      || null,
+      objetivo:      document.getElementById('cfg-objetivo').value || 100,
+      // Basal: enviar solo si hay tipo y dosis seleccionados
+      basal_tipo:    basalTipo  || null,
+      basal_dose_u:  basalDosis ? parseFloat(basalDosis) : 0,  // 0 = limpiar
+      basal_hora:    basalHora  ? parseInt(basalHora)    : 22,
     };
     await fetch('/api/settings/save', {
       method: 'POST',
@@ -532,7 +606,25 @@
     const badge = document.getElementById('settings-badge');
     badge.style.display = '';
     setTimeout(() => badge.style.display = 'none', 2500);
+
+    // Actualizar display de IOB basal después de guardar
+    actualizarIOBBasal();
   }
+
+  async function actualizarIOBBasal() {
+    const display = document.getElementById('iob-basal-display');
+    if (!display) return;
+    try {
+      const r = await fetch('/api/predict/glucose');
+      const d = await r.json();
+      if (d.ok && d.iob_basal !== undefined) {
+        display.textContent = `${d.iob_basal.toFixed(2)} U`;
+      }
+    } catch(e) { /* silencioso */ }
+  }
+
+  // Cargar IOB basal al abrir la página
+  document.addEventListener('DOMContentLoaded', actualizarIOBBasal);
 
   // ── Alerta fat+protein en tiempo real ────────────────────────────────────
   function onMacroChange() {

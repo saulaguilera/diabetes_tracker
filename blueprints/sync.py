@@ -401,7 +401,7 @@ def api_predict_glucose():
         )
         from utils.kinetics import (
             get_kinetics_snapshot, exercise_sensitivity_factor,
-            current_iob, current_cob,
+            current_iob, current_cob, current_basal_iob,
             _DEFAULT_PEAK_MIN, _DEFAULT_DIA_MIN,
         )
 
@@ -430,10 +430,11 @@ def api_predict_glucose():
 
         # ── Datos actuales ────────────────────────────────────────────────
         snap = get_kinetics_snapshot(hours_lookback=6, dia_min=dia_min, peak_min=peak_min)
-        g_actual = snap["last_glucose"]
-        roc      = snap["roc"]    # mg/dL/min
-        iob_now  = snap["iob"]
-        cob_now  = snap["cob"]
+        g_actual       = snap["last_glucose"]
+        roc            = snap["roc"]        # mg/dL/min
+        iob_now        = snap["iob"]        # total: bolus + basal
+        iob_basal_now  = snap["iob_basal"]  # solo basal (para desglose)
+        cob_now        = snap["cob"]
 
         if g_actual is None:
             return jsonify({"ok": False, "error": "Sin lecturas de glucosa recientes"})
@@ -471,7 +472,10 @@ def api_predict_glucose():
             t_fut    = now + timedelta(minutes=delta_min)
             iob_fut  = current_iob(boluses,   at_time=t_fut, peak_min=peak_min, dia_min=dia_min)
             cob_fut  = current_cob(meals_ext, at_time=t_fut)
-            d_iob    = iob_now - iob_fut   # insulina consumida en Δt (> 0 → baja glucosa)
+            # ΔIOB total = bolo + basal
+            # El basal decae lentamente (lineal): Δbasal = dose × Δt/dia_basal
+            iob_basal_fut = current_basal_iob(at_time=t_fut)
+            d_iob    = (iob_now - iob_fut) + (iob_basal_now - iob_basal_fut)
             d_cob    = cob_now - cob_fut   # carbos absorbidos en Δt  (> 0 → sube glucosa)
 
             # ROC con decaimiento exponencial + supresión por COB activo
@@ -566,6 +570,7 @@ def api_predict_glucose():
             "roc":            roc,
             "arrow":          snap["arrow"],
             "iob_now":        iob_now,
+            "iob_basal":      iob_basal_now,   # componente basal del IOB
             "cob_now":        cob_now,
             "isf_ef":         isf_ef,
             "icr":            icr,

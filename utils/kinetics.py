@@ -308,6 +308,68 @@ def current_iob(
     return round(total_iob, 2)
 
 
+# ── Basal insulin (long-acting analogs) ──────────────────────────────────────
+#
+# Long-acting insulins (glargina, detemir, degludec) have a peakless flat
+# activity profile — appropriate for a linear decay model (no triangular peak).
+#
+# IOB_basal(t) = dose × max(0, 1 − elapsed_min / dia_min)
+#
+# This is simpler than the bolus bilinear model because there is no pronounced
+# peak; the full dose starts acting at injection and decays linearly to zero.
+
+_BASAL_DIA_MIN: dict = {
+    "glargina":   1440,   # 24 h — Lantus, Basaglar, Semglee
+    "toujeo":     2160,   # 36 h — Glargina U-300
+    "detemir":     960,   # 16 h — Levemir (average across dose range)
+    "degludec":   2520,   # 42 h — Tresiba
+    "nph":         720,   # 12 h — Insulina NPH / isofánica
+}
+_BASAL_DIA_DEFAULT = 1440  # glargina como fallback
+
+
+def current_basal_iob(at_time: Optional[datetime] = None) -> float:
+    """
+    Computa el IOB de insulina basal en `at_time` a partir de la configuración
+    guardada en UserSettings (basal_dose_u, basal_hora, basal_tipo).
+
+    Modelo: decaimiento lineal peakless:
+        iob_fraction(t) = max(0, 1 − elapsed_min / dia_min)
+
+    No requiere que el usuario registre cada inyección basal; basta configurar
+    la dosis diaria y la hora habitual de aplicación una sola vez.
+
+    Retorna 0.0 si no hay basal configurada.
+    """
+    from helpers import _get_setting
+
+    dose_str = _get_setting("basal_dose_u")
+    if not dose_str:
+        return 0.0
+    try:
+        dose = float(dose_str)
+    except (ValueError, TypeError):
+        return 0.0
+    if dose <= 0:
+        return 0.0
+
+    hora = int(_get_setting("basal_hora") or 22)
+    tipo = (_get_setting("basal_tipo") or "glargina").lower().strip()
+    dia  = _BASAL_DIA_MIN.get(tipo, _BASAL_DIA_DEFAULT)
+
+    if at_time is None:
+        at_time = datetime.now()
+
+    # Última inyección antes de at_time (misma hora del día anterior si aún no llegó)
+    inj = at_time.replace(hour=hora, minute=0, second=0, microsecond=0)
+    if inj > at_time:
+        inj -= timedelta(days=1)
+
+    elapsed = (at_time - inj).total_seconds() / 60.0
+    frac    = max(0.0, 1.0 - elapsed / dia)
+    return round(dose * frac, 2)
+
+
 # ── Public: current COB ───────────────────────────────────────────────────────
 
 def _absorption_time_for_meal(meal) -> int:
@@ -752,7 +814,9 @@ def get_kinetics_snapshot(
     activities = Activity.query.filter(Activity.timestamp >= act_cutoff).all()
 
     # Compute
-    iob         = current_iob(boluses, at_time=now, peak_min=peak_min, dia_min=dia_min)
+    iob_bolus   = current_iob(boluses, at_time=now, peak_min=peak_min, dia_min=dia_min)
+    iob_basal   = current_basal_iob(at_time=now)
+    iob         = round(iob_bolus + iob_basal, 2)
     cob_data    = current_cob_detailed(meals_extended, at_time=now)
     slope       = glucose_roc(cgm_readings, window_min=20)
     arrow       = roc_arrow(slope)
@@ -782,7 +846,9 @@ def get_kinetics_snapshot(
     context = "  ·  ".join(parts) if parts else "Sin insulina ni carbohidratos activos"
 
     return {
-        "iob":             iob,
+        "iob":             iob,           # total (bolus + basal)
+        "iob_bolus":       iob_bolus,
+        "iob_basal":       iob_basal,
         "cob":             cob_data["carbs_cob"],
         "cob_detail":      cob_data,
         "roc":             slope,

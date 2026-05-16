@@ -19,9 +19,12 @@ def calculadora():
     ultima = GlucoseReading.query.order_by(GlucoseReading.timestamp.desc()).first()
 
     # Configuración guardada por el usuario
-    icr_guardado      = _get_setting("icr")
-    isf_manual_guard  = _get_setting("isf_manual")
-    objetivo_guardado = _get_setting("objetivo", "100")
+    icr_guardado       = _get_setting("icr")
+    isf_manual_guard   = _get_setting("isf_manual")
+    objetivo_guardado  = _get_setting("objetivo", "100")
+    basal_dose_guard   = _get_setting("basal_dose_u")
+    basal_hora_guard   = _get_setting("basal_hora") or "22"
+    basal_tipo_guard   = _get_setting("basal_tipo") or "glargina"
 
     # ISF circadiano
     isf_circ = _calcular_isf_circadiano(days=90)
@@ -48,6 +51,9 @@ def calculadora():
         icr_guardado=icr_guardado,
         isf_manual_guardado=isf_manual_guard,
         objetivo_guardado=objetivo_guardado,
+        basal_dose_guard=basal_dose_guard,
+        basal_hora_guard=basal_hora_guard,
+        basal_tipo_guard=basal_tipo_guard,
         ultima=ultima,
         kinetics=kinetics,
         isf_circ=isf_circ,
