@@ -221,18 +221,53 @@
         {% endif %}
       </div>
 
-      <!-- Carbohidratos (opcional) -->
-      <div class="mb-4">
-        <label class="form-label fw-semibold">
-          Carbohidratos a comer
+      <!-- Macros de la comida -->
+      <div class="mb-1">
+        <label class="form-label fw-semibold">Macros de la comida
           <span class="badge bg-secondary ms-1" style="font-size:.68rem;">opcional</span>
         </label>
-        <div class="input-group">
-          <input type="number" id="inp-carbs" class="form-control form-control-lg"
-                 min="0" max="500" step="1" placeholder="0">
-          <span class="input-group-text">g CH</span>
+      </div>
+      <div class="row g-2 mb-1">
+        <div class="col-4">
+          <label class="form-label mb-1" style="font-size:.78rem; color:var(--text-muted);">
+            CH (g)
+          </label>
+          <input type="number" id="inp-carbs" class="form-control"
+                 min="0" max="500" step="1" placeholder="0"
+                 oninput="onMacroChange()">
         </div>
-        <div class="form-text">Dejá en 0 si solo querés calcular una corrección.</div>
+        <div class="col-4">
+          <label class="form-label mb-1" style="font-size:.78rem; color:var(--text-muted);">
+            Grasa (g)
+          </label>
+          <input type="number" id="inp-fat" class="form-control"
+                 min="0" max="200" step="1" placeholder="0"
+                 oninput="onMacroChange()">
+        </div>
+        <div class="col-4">
+          <label class="form-label mb-1" style="font-size:.78rem; color:var(--text-muted);">
+            Proteína (g)
+          </label>
+          <input type="number" id="inp-protein" class="form-control"
+                 min="0" max="200" step="1" placeholder="0"
+                 oninput="onMacroChange()">
+        </div>
+      </div>
+
+      <!-- Alerta de efecto extendido (grasa/proteína) -->
+      <div id="fp-alert" class="fp-alert mb-3" style="display:none;">
+        <div class="fp-alert-icon">🍕</div>
+        <div class="fp-alert-body">
+          <div class="fp-alert-title">Efecto retardado detectado</div>
+          <div class="fp-alert-text" id="fp-alert-text"></div>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <div class="form-text">
+          Grasa y proteína elevan la glucosa 3–5h después. Si las ingresás,
+          la calculadora sugerirá un <strong>bolo diferido</strong>.
+        </div>
       </div>
 
       <button class="btn btn-info btn-lg w-100 text-white fw-semibold" id="btn-calcular"
@@ -370,6 +405,42 @@
 
 {% block scripts %}
 <style>
+/* ── Fat+protein alert ──────────────────────────────────────────────────────── */
+.fp-alert {
+  display: flex; align-items: flex-start; gap: .6rem;
+  background: rgba(249,115,22,.08);
+  border: 1px solid rgba(249,115,22,.3);
+  border-radius: 10px; padding: .65rem .85rem;
+  font-size: .82rem;
+}
+.fp-alert-icon { font-size: 1.4rem; flex-shrink: 0; line-height: 1; }
+.fp-alert-body { flex: 1; }
+.fp-alert-title { font-weight: 700; color: #ea580c; margin-bottom: .15rem; }
+.fp-alert-text  { color: var(--text-muted); line-height: 1.4; }
+
+/* ── Split bolus card ───────────────────────────────────────────────────────── */
+.split-bolus-card {
+  border: 1.5px solid rgba(249,115,22,.35);
+  border-radius: 12px; overflow: hidden;
+  background: rgba(249,115,22,.05);
+}
+.split-bolus-header {
+  display: flex; align-items: center; gap: .65rem;
+  padding: .75rem 1rem;
+}
+.split-bolus-icon { font-size: 1.5rem; flex-shrink: 0; }
+.split-bolus-title { font-weight: 700; font-size: .9rem; color: #ea580c; }
+.split-bolus-sub   { font-size: .75rem; color: var(--text-muted); }
+.split-bolus-units {
+  margin-left: auto; font-size: 1.6rem; font-weight: 800;
+  color: #ea580c; white-space: nowrap;
+}
+.split-bolus-detail {
+  padding: .5rem 1rem .75rem;
+  font-size: .76rem; color: var(--text-muted); line-height: 1.5;
+  border-top: 1px solid rgba(249,115,22,.15);
+}
+
 /* ── Circadian ISF chart ────────────────────────────────────────────────────── */
 .circ-chart-wrap {
   display: flex; gap: .5rem; align-items: flex-end;
@@ -441,10 +512,40 @@
     setTimeout(() => badge.style.display = 'none', 2500);
   }
 
+  // ── Alerta fat+protein en tiempo real ────────────────────────────────────
+  function onMacroChange() {
+    const fat     = parseFloat(document.getElementById('inp-fat').value)     || 0;
+    const protein = parseFloat(document.getElementById('inp-protein').value) || 0;
+    const fpAlert = document.getElementById('fp-alert');
+    const fpText  = document.getElementById('fp-alert-text');
+
+    const FAT_THRESH  = 25;
+    const PROT_THRESH = 40;
+    const FAT_FRAC    = 0.10;
+    const PROT_FRAC   = 0.50;
+
+    const fpEquiv = fat * FAT_FRAC + protein * PROT_FRAC;
+    const needsAlert = fat > FAT_THRESH || protein > PROT_THRESH;
+
+    if (needsAlert && fpEquiv >= 3) {
+      const trigger = fat > FAT_THRESH && protein > PROT_THRESH ? 'grasa y proteína elevada'
+                    : fat > FAT_THRESH ? `${fat}g de grasa`
+                    : `${protein}g de proteína`;
+      fpText.textContent =
+        `${trigger} → ~${Math.round(fpEquiv)}g de glucosa equivalente se liberarán en 3–5h.
+         La calculadora sugerirá un bolo diferido.`;
+      fpAlert.style.display = 'flex';
+    } else {
+      fpAlert.style.display = 'none';
+    }
+  }
+
   // ── Calcular bolo ─────────────────────────────────────────────────────────
   async function calcular() {
     const glucemia = document.getElementById('inp-glucemia').value;
-    const carbs    = document.getElementById('inp-carbs').value || 0;
+    const carbs    = document.getElementById('inp-carbs').value    || 0;
+    const fat      = document.getElementById('inp-fat').value      || 0;
+    const protein  = document.getElementById('inp-protein').value  || 0;
     const isf      = document.getElementById('cfg-isf').value;
     const icr      = document.getElementById('cfg-icr').value;
     const objetivo = document.getElementById('cfg-objetivo').value || 100;
@@ -460,7 +561,7 @@
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Calculando...';
 
-    let url = `/api/calculadora/correccion?glucemia=${glucemia}&objetivo=${objetivo}&carbs=${carbs}`;
+    let url = `/api/calculadora/correccion?glucemia=${glucemia}&objetivo=${objetivo}&carbs=${carbs}&fat=${fat}&protein=${protein}`;
     if (isf) url += `&isf=${isf}`;
     if (icr) url += `&icr=${icr}`;
 
@@ -585,6 +686,24 @@
 
       <!-- Desglose -->
       <div class="mb-3">${desglose}${iobRow}</div>
+
+      <!-- Bolo diferido (fat+protein) -->
+      ${d.deferred_units > 0 ? `
+      <div class="split-bolus-card mb-3">
+        <div class="split-bolus-header">
+          <span class="split-bolus-icon">🍕</span>
+          <div>
+            <div class="split-bolus-title">Bolo diferido sugerido</div>
+            <div class="split-bolus-sub">por ${d.fp_trigger === 'ambos' ? 'grasa y proteína' : d.fp_trigger} — darlo ${d.deferred_at}</div>
+          </div>
+          <div class="split-bolus-units">${d.deferred_units} U</div>
+        </div>
+        <div class="split-bolus-detail">
+          ~${d.fp_glucose_equiv}g glucosa equivalente (grasa×10% + proteína×50%)
+          se liberan lentamente. Sin este bolo diferido, podés tener hiperglucemia
+          a partir de las ${new Date(Date.now() + 2.5*60*60*1000).toLocaleTimeString('es', {hour:'2-digit',minute:'2-digit'})}h.
+        </div>
+      </div>` : ''}
 
       <!-- Resultado esperado -->
       <div class="text-center p-2 rounded mb-3" style="background:var(--surface2);">

@@ -38,6 +38,25 @@ _GI_ABSORPTION: dict[str, int] = {
 }
 _DEFAULT_ABSORPTION_MIN = 120   # used when GI is unknown
 
+# ── Fat + Protein glucose-equivalent model ────────────────────────────────────
+# Clinical basis:
+#   • Wolpert et al. (2013) Diabetes Care: 50g fat → ~50–90 mg/dL glucose rise
+#     over 5–8h in T1D. Effect peaks ~4–5h post-meal.
+#   • Smart et al. (2013) Diabetes Care: >75g protein raises glucose significantly
+#     independent of carbs, peaking ~3–4h post-meal.
+#   • Conversion fractions (conservative clinical approximation):
+#       Fat:     ~10% converts to glucose equivalent (glycerol → gluconeogenesis)
+#       Protein: ~50% converts to glucose equivalent (glucogenic amino acids)
+#   These are intentionally conservative to avoid hypoglycemia from over-bolusing.
+_FAT_TO_GLUCOSE_FRAC   = 0.10   # 10 % of fat → glucose equivalent
+_PROT_TO_GLUCOSE_FRAC  = 0.50   # 50 % of protein → glucose equivalent
+_FAT_ABSORPTION_MIN    = 300    # peak glucose effect ~5h after meal
+_PROT_ABSORPTION_MIN   = 240    # peak glucose effect ~4h after meal
+
+# Thresholds that trigger clinically significant delayed rise
+_FAT_THRESHOLD_G  = 25   # > 25g fat in a meal → extended bolus consideration
+_PROT_THRESHOLD_G = 40   # > 40g protein → extended bolus consideration
+
 # Nadir ratio — for rapid-acting insulins, glucose nadir occurs at roughly
 # 60 % of DIA from injection time (OpenAPS empirical data).
 _NADIR_RATIO = 0.60
@@ -195,35 +214,137 @@ def _cob_fraction_linear(elapsed_min: float, absorption_min: int) -> float:
     return 1.0 - elapsed_min / absorption_min
 
 
+def fat_protein_glucose_equiv(fat_g: float, protein_g: float) -> float:
+    """
+    Glucose-equivalent grams from fat and protein (Wolpert / Smart model).
+    Returns the total glucose-equivalent contribution (g) from fat+protein.
+    """
+    return round(fat_g * _FAT_TO_GLUCOSE_FRAC + protein_g * _PROT_TO_GLUCOSE_FRAC, 1)
+
+
+def extended_bolus_recommendation(fat_g: float, protein_g: float, icr: float) -> Optional[dict]:
+    """
+    If fat+protein is clinically significant, return a split-bolus recommendation.
+
+    Returns dict or None:
+        fp_glucose_equiv : float (g glucose equivalent)
+        deferred_units   : float (U to give 2–3h later)
+        deferred_at      : str  ("2–3 horas después de comer")
+        trigger          : str  ("grasa" | "proteina" | "ambos")
+    """
+    if not icr or icr <= 0:
+        return None
+    fat_g   = fat_g   or 0
+    protein_g = protein_g or 0
+    fp_equiv = fat_protein_glucose_equiv(fat_g, protein_g)
+    if fp_equiv < 5:
+        return None
+
+    trigger = (
+        "ambos"    if fat_g > _FAT_THRESHOLD_G and protein_g > _PROT_THRESHOLD_G else
+        "grasa"    if fat_g > _FAT_THRESHOLD_G else
+        "proteina" if protein_g > _PROT_THRESHOLD_G else
+        None
+    )
+    if trigger is None:
+        return None
+
+    deferred_units = round(fp_equiv / icr * 2) / 2  # round to 0.5U
+    return {
+        "fp_glucose_equiv": fp_equiv,
+        "deferred_units":   deferred_units,
+        "deferred_at":      "2–3 horas después de comer",
+        "trigger":          trigger,
+    }
+
+
 def current_cob(
     meal_list,
     at_time: Optional[datetime] = None,
 ) -> float:
     """
     Compute total active carbohydrates (grams) at `at_time`.
+    Includes only fast carbohydrate absorption (legacy compatible).
+    For full fat+protein picture use current_cob_detailed().
+    """
+    return current_cob_detailed(meal_list, at_time)["carbs_cob"]
 
-    Parameters
-    ----------
-    meal_list : list of Meal model objects
-    at_time   : datetime to evaluate at (default: now)
+
+def current_cob_detailed(
+    meal_list,
+    at_time: Optional[datetime] = None,
+) -> dict:
+    """
+    Full COB breakdown including fat+protein glucose equivalent.
 
     Returns
     -------
-    float — total COB in grams (≥ 0)
+    dict:
+        carbs_cob     : float  — fast carbs still absorbing (g)
+        fat_cob       : float  — glucose equiv from fat still releasing (g)
+        prot_cob      : float  — glucose equiv from protein still releasing (g)
+        fp_cob        : float  — fat+protein combined (g)
+        total_cob     : float  — carbs + fat/prot equiv (g)
+        has_extended  : bool   — True if fp_cob > 2 g
+        peak_fat_min  : int|None — minutes until fat glucose peak from now
+        meals_detail  : list   — per-meal breakdown
     """
     if at_time is None:
         at_time = datetime.now()
 
-    total_cob = 0.0
+    total_carbs = 0.0
+    total_fat   = 0.0
+    total_prot  = 0.0
+    meals_detail = []
+
     for meal in meal_list:
-        carbs = getattr(meal, "carbs_g", 0) or 0
-        if carbs <= 0:
-            continue
-        absorption_min = _absorption_time_for_meal(meal)
+        carbs   = getattr(meal, "carbs_g",   0) or 0
+        fat_g   = getattr(meal, "fat_g",     0) or 0
+        prot_g  = getattr(meal, "protein_g", 0) or 0
+
         elapsed_min = (at_time - meal.timestamp).total_seconds() / 60.0
-        frac = _cob_fraction_linear(elapsed_min, absorption_min)
-        total_cob += carbs * frac
-    return round(total_cob, 1)
+        if elapsed_min < 0:
+            continue
+
+        # Fast carbs
+        carbs_cob = 0.0
+        if carbs > 0:
+            abs_min   = _absorption_time_for_meal(meal)
+            carbs_cob = carbs * _cob_fraction_linear(elapsed_min, abs_min)
+
+        # Fat glucose equivalent
+        fat_equiv = fat_g * _FAT_TO_GLUCOSE_FRAC
+        fat_cob   = fat_equiv * _cob_fraction_linear(elapsed_min, _FAT_ABSORPTION_MIN)
+
+        # Protein glucose equivalent
+        prot_equiv = prot_g * _PROT_TO_GLUCOSE_FRAC
+        prot_cob   = prot_equiv * _cob_fraction_linear(elapsed_min, _PROT_ABSORPTION_MIN)
+
+        total_carbs += carbs_cob
+        total_fat   += fat_cob
+        total_prot  += prot_cob
+
+        if carbs_cob > 0.5 or fat_cob > 0.5 or prot_cob > 0.5:
+            meals_detail.append({
+                "name":       meal.name,
+                "elapsed_h":  round(elapsed_min / 60, 1),
+                "carbs_cob":  round(carbs_cob, 1),
+                "fat_cob":    round(fat_cob,   1),
+                "prot_cob":   round(prot_cob,  1),
+            })
+
+    fp_cob    = round(total_fat + total_prot, 1)
+    carbs_cob = round(total_carbs, 1)
+
+    return {
+        "carbs_cob":    carbs_cob,
+        "fat_cob":      round(total_fat,  1),
+        "prot_cob":     round(total_prot, 1),
+        "fp_cob":       fp_cob,
+        "total_cob":    round(carbs_cob + fp_cob, 1),
+        "has_extended": fp_cob >= 2.0,
+        "meals_detail": meals_detail,
+    }
 
 
 # ── Public: glucose rate of change ───────────────────────────────────────────
@@ -479,11 +600,15 @@ def get_kinetics_snapshot(
         GlucoseReading.timestamp >= roc_cutoff,
     ).order_by(GlucoseReading.timestamp).all()
 
+    # Meals lookback for fat+protein needs longer window (up to 8h)
+    fat_cutoff = now - timedelta(hours=max(hours_lookback, 8))
+    meals_extended = Meal.query.filter(Meal.timestamp >= fat_cutoff).all()
+
     # Compute
-    iob   = current_iob(boluses, at_time=now, peak_min=peak_min, dia_min=dia_min)
-    cob   = current_cob(meals, at_time=now)
-    slope = glucose_roc(cgm_readings, window_min=20)
-    arrow = roc_arrow(slope)
+    iob      = current_iob(boluses, at_time=now, peak_min=peak_min, dia_min=dia_min)
+    cob_data = current_cob_detailed(meals_extended, at_time=now)
+    slope    = glucose_roc(cgm_readings, window_min=20)
+    arrow    = roc_arrow(slope)
 
     last_glucose = cgm_readings[-1].value_mgdl if cgm_readings else None
 
@@ -491,15 +616,18 @@ def get_kinetics_snapshot(
     parts = []
     if iob > 0.1:
         parts.append(f"IOB {iob:.1f} U")
-    if cob > 1:
-        parts.append(f"COB {cob:.0f} g")
+    if cob_data["carbs_cob"] > 1:
+        parts.append(f"COB {cob_data['carbs_cob']:.0f}g CH")
+    if cob_data["fp_cob"] >= 2:
+        parts.append(f"+{cob_data['fp_cob']:.0f}g grasa/prot")
     if slope is not None:
         parts.append(f"{arrow} {abs(slope * 10):.0f} mg/dL·10min")
     context = "  ·  ".join(parts) if parts else "Sin insulina ni carbohidratos activos"
 
     return {
         "iob":          iob,
-        "cob":          cob,
+        "cob":          cob_data["carbs_cob"],
+        "cob_detail":   cob_data,
         "roc":          slope,
         "arrow":        arrow,
         "last_glucose": last_glucose,

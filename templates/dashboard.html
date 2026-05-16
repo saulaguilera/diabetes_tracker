@@ -114,8 +114,17 @@
     {% if kin.cob > 1 %}
     <div class="kin-pill kin-carbs" title="Carbs On Board — carbohidratos aún absorbiéndose">
       <i class="bi bi-egg-fried"></i>
-      <span class="kin-val">{{ kin.cob | int }} g</span>
+      <span class="kin-val">{{ kin.cob | int }} g CH</span>
       <span class="kin-sublabel">COB</span>
+    </div>
+    {% endif %}
+
+    {% if kin.cob_detail and kin.cob_detail.fp_cob >= 2 %}
+    <div class="kin-pill kin-fat-prot"
+         title="Glucosa equivalente de grasa+proteína aún liberándose (efecto retardado)">
+      <i class="bi bi-clock-history"></i>
+      <span class="kin-val">~{{ kin.cob_detail.fp_cob | int }} g</span>
+      <span class="kin-sublabel">grasa/prot</span>
     </div>
     {% endif %}
 
@@ -809,6 +818,10 @@ a.insight-chip:hover {
 .kin-iob-effect {
   background: rgba(245,158,11,.10); color: #b45309;
   border: 1px solid rgba(245,158,11,.2);
+}
+.kin-fat-prot {
+  background: rgba(249,115,22,.10); color: #c2410c;
+  border: 1px solid rgba(249,115,22,.25);
 }
 .kin-more {
   font-size: .76rem; font-weight: 600; color: var(--text-muted);

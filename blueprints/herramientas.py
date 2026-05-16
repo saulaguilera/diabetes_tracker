@@ -64,6 +64,8 @@ def api_calculadora_correccion():
     objetivo   = request.args.get("objetivo",  type=float)
     isf_manual = request.args.get("isf",       type=float)
     carbs      = request.args.get("carbs",     type=float)
+    fat        = request.args.get("fat",       type=float, default=0)
+    protein    = request.args.get("protein",   type=float, default=0)
     icr_manual = request.args.get("icr",       type=float)
     hora       = request.args.get("hora",      type=int)   # 0-23, default = ahora
 
@@ -109,6 +111,15 @@ def api_calculadora_correccion():
             return jsonify({"error": "Sin I:CH — ingresalo en Configuración"})
         bolo_comida_exacto = carbs / icr
 
+    # ── Fat + protein split-bolus recommendation ─────────────────────────────
+    split_rec = None
+    if (fat or 0) > 0 or (protein or 0) > 0:
+        try:
+            from utils.kinetics import extended_bolus_recommendation
+            split_rec = extended_bolus_recommendation(fat or 0, protein or 0, icr)
+        except Exception:
+            pass
+
     # ── IOB deduction ────────────────────────────────────────────────────────
     iob_actual = 0.0
     try:
@@ -153,6 +164,13 @@ def api_calculadora_correccion():
         "bloque_label": bloque_label,
         "hora":         hora,
         "resultado_esperado": resultado_esperado,
+        # Fat+protein split bolus
+        "fat":              fat or 0,
+        "protein":          protein or 0,
+        "fp_glucose_equiv": split_rec["fp_glucose_equiv"] if split_rec else 0,
+        "deferred_units":   split_rec["deferred_units"]   if split_rec else 0,
+        "deferred_at":      split_rec["deferred_at"]      if split_rec else "",
+        "fp_trigger":       split_rec["trigger"]          if split_rec else "",
     })
 
 
