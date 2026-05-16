@@ -277,12 +277,6 @@ def stats_resumen():
     }
 
 
-# ── Filtro Jinja para color de categoría ──────────────────────────────────────
-@app.template_filter("categoria_color")
-def categoria_color_filter(cat):
-    return CATEGORIA_COLORES.get(cat, "secondary")
-
-
 # ── Filtro Jinja para timestamps en hora local del usuario ─────────────────────
 # Uso: {{ obj.timestamp | local_ts }}          → "14/05 11:10"
 #      {{ obj.timestamp | local_ts('hm') }}    → "11:10"
@@ -510,56 +504,7 @@ def api_sync_libre_reset():
     return jsonify({"ok": True, "mensaje": "Caché borrado. Apretá ↺ para hacer login fresco."})
 
 
-@app.route("/api/debug/time")
-def api_debug_time():
-    """Debug: muestra timestamps del servidor y de la DB."""
-    import time as _time
-    now_utc   = datetime.now(timezone.utc)
-    now_naive = datetime.now()
-    meals     = Meal.query.order_by(Meal.timestamp.desc()).limit(3).all()
-    glucose   = GlucoseReading.query.order_by(GlucoseReading.timestamp.desc()).limit(3).all()
-    return jsonify({
-        "server_utc":       now_utc.isoformat(),
-        "server_naive_now": now_naive.isoformat(),
-        "server_tz_name":   _time.tzname,
-        "meals_raw": [{"id": m.id, "ts": m.timestamp.isoformat(), "name": m.name} for m in meals],
-        "glucose_raw": [{"id": r.id, "ts": r.timestamp.isoformat(), "val": r.value_mgdl} for r in glucose],
-        "tz_offset_received": request.args.get("tz_offset", "not_sent"),
-    })
-
-
-@app.route("/api/fix-utc-timestamps", methods=["POST"])
-@login_required
-def api_fix_utc_timestamps():
-    """
-    Migración one-shot: corrige lecturas de LibreLink que quedaron guardadas
-    en UTC durante la ventana en que se usó FactoryTimestamp (commit 5931baa
-    → 5cab76e): entre 2026-05-14 04:55 y 2026-05-15 01:20 UTC.
-    Esas lecturas tienen timestamp 4h adelantado respecto a la hora local.
-    """
-    # Ventana exacta del bug (datetime strings, sin tzinfo)
-    ventana_ini = datetime(2026, 5, 14,  4, 55)
-    ventana_fin = datetime(2026, 5, 15,  1, 20)
-
-    afectadas = GlucoseReading.query.filter(
-        GlucoseReading.source == "cgm_libre",
-        GlucoseReading.timestamp >= ventana_ini,
-        GlucoseReading.timestamp <= ventana_fin,
-    ).all()
-
-    count = 0
-    for r in afectadas:
-        r.timestamp = r.timestamp - timedelta(hours=4)
-        count += 1
-
-    if count:
-        db.session.commit()
-
-    return jsonify({
-        "corregidas": count,
-        "ventana": f"{ventana_ini} → {ventana_fin}",
-        "now_servidor": datetime.now().isoformat(),
-    })
+# (endpoints de mantenimiento one-shot eliminados: api_debug_time, api_fix_utc_timestamps)
 
 
 @app.route("/api/backfill-fiber-gi", methods=["POST"])
@@ -753,7 +698,7 @@ def _iniciar_scheduler():
                     except Exception:
                         pass
 
-            scheduler = BackgroundScheduler(timezone="America/Argentina/Buenos_Aires")
+            scheduler = BackgroundScheduler(timezone=_tz)  # usa TZ del entorno (America/Santiago)
             scheduler.add_job(_sync_job, "interval", minutes=5, id="libre_sync")
             scheduler.start()
             # Sync inicial al arrancar
@@ -898,19 +843,72 @@ def glucemia_eliminar(id):
 
 # ─── Comidas ──────────────────────────────────────────────────────────────────
 
-def _glucosa_impacto(meal):
-    """Calcula pre/pico/delta glucémico de una comida. Devuelve None si no hay datos."""
-    pre = (GlucoseReading.query
-           .filter(GlucoseReading.timestamp >= meal.timestamp - timedelta(minutes=30),
-                   GlucoseReading.timestamp <= meal.timestamp)
-           .order_by(GlucoseReading.timestamp.desc()).first())
-    posts = (GlucoseReading.query
-             .filter(GlucoseReading.timestamp > meal.timestamp,
-                     GlucoseReading.timestamp <= meal.timestamp + timedelta(hours=2))
-             .all())
-    if not pre or not posts:
+# ── Helpers de precarga batch (eliminan N+1 queries) ─────────────────────────
+
+def _precargar_glucosa(comidas, horas_post=5):
+    """
+    Carga TODAS las lecturas de glucosa relevantes para una lista de comidas
+    en UNA sola query — en lugar de 2 queries por comida.
+
+    Retorna lista ordenada por timestamp (apta para búsqueda en memoria).
+    """
+    if not comidas:
+        return []
+    ts_min = min(c.timestamp for c in comidas) - timedelta(minutes=30)
+    ts_max = max(c.timestamp for c in comidas) + timedelta(hours=horas_post)
+    return (GlucoseReading.query
+            .filter(GlucoseReading.timestamp >= ts_min,
+                    GlucoseReading.timestamp <= ts_max)
+            .order_by(GlucoseReading.timestamp)
+            .all())
+
+
+def _precargar_bolus(comidas):
+    """
+    Carga TODOS los bolus relevantes para una lista de comidas en UNA sola query.
+    Retorna lista ordenada por timestamp.
+    """
+    if not comidas:
+        return []
+    ts_min = min(c.timestamp for c in comidas) - timedelta(hours=1)
+    ts_max = max(c.timestamp for c in comidas) + timedelta(minutes=30)
+    return (InsulinDose.query
+            .filter(InsulinDose.type == "bolus",
+                    InsulinDose.timestamp >= ts_min,
+                    InsulinDose.timestamp <= ts_max)
+            .order_by(InsulinDose.timestamp)
+            .all())
+
+
+def _glucosa_impacto(meal, readings=None):
+    """
+    Pre/pico/delta glucémico de una comida.
+
+    - Si se pasa `readings` (lista pre-cargada con _precargar_glucosa),
+      opera completamente en memoria: 0 queries adicionales.
+    - Sin `readings`: hace 2 queries a la DB (modo legacy, evitar en bucles).
+    """
+    t0     = meal.timestamp
+    t_pre  = t0 - timedelta(minutes=30)
+    t_post = t0 + timedelta(hours=2)
+
+    if readings is not None:
+        pre_list  = [r for r in readings if t_pre  <= r.timestamp <= t0]
+        post_list = [r for r in readings if t0     <  r.timestamp <= t_post]
+        pre = pre_list[-1] if pre_list else None   # más reciente antes de comer
+    else:
+        pre = (GlucoseReading.query
+               .filter(GlucoseReading.timestamp >= t_pre,
+                       GlucoseReading.timestamp <= t0)
+               .order_by(GlucoseReading.timestamp.desc()).first())
+        post_list = (GlucoseReading.query
+                     .filter(GlucoseReading.timestamp > t0,
+                             GlucoseReading.timestamp <= t_post)
+                     .all())
+
+    if not pre or not post_list:
         return None
-    pico = max(r.value_mgdl for r in posts)
+    pico = max(r.value_mgdl for r in post_list)
     return {"pre": int(pre.value_mgdl), "pico": int(pico), "delta": round(pico - pre.value_mgdl, 0)}
 
 
@@ -922,10 +920,11 @@ def comidas_grupos():
     desde = datetime.now() - timedelta(days=dias)
     comidas = Meal.query.filter(Meal.timestamp >= desde).order_by(Meal.timestamp.desc()).all()
 
-    # ── Pre-calcular impacto glucémico de cada comida ─────────────────────
+    # ── Pre-calcular impacto glucémico (1 query batch, sin N+1) ──────────
+    all_readings = _precargar_glucosa(comidas, horas_post=2)
     impacto_por_meal = {}
     for c in comidas:
-        imp = _glucosa_impacto(c)
+        imp = _glucosa_impacto(c, readings=all_readings)
         if imp:
             impacto_por_meal[c.id] = imp
 
@@ -1736,47 +1735,29 @@ def _tabla_impacto_comidas(days):
     desde = datetime.now() - timedelta(days=days)
     comidas = Meal.query.filter(Meal.timestamp >= desde).order_by(Meal.timestamp.desc()).all()
 
+    # Precarga batch: 2 queries en lugar de 3N ──────────────────────────────
+    all_readings = _precargar_glucosa(comidas, horas_post=2)
+    all_bolus    = _precargar_bolus(comidas)
+
     filas = []
     for c in comidas:
-        pre = (
-            GlucoseReading.query
-            .filter(
-                GlucoseReading.timestamp >= c.timestamp - timedelta(minutes=30),
-                GlucoseReading.timestamp <= c.timestamp,
-            )
-            .order_by(GlucoseReading.timestamp.desc())
-            .first()
-        )
-        posts = (
-            GlucoseReading.query
-            .filter(
-                GlucoseReading.timestamp > c.timestamp,
-                GlucoseReading.timestamp <= c.timestamp + timedelta(hours=2),
-            )
-            .all()
-        )
-        if not pre or not posts:
-            continue
-        pico = max(r.value_mgdl for r in posts)
-        delta = round(pico - pre.value_mgdl, 0)
-        if pico > 180:
-            estado = "hiper"
-        elif pico < 70:
-            estado = "hipo"
-        else:
-            estado = "rango"
+        t0 = c.timestamp
+        # Pre-comida en memoria
+        pre_list  = [r for r in all_readings if t0 - timedelta(minutes=30) <= r.timestamp <= t0]
+        post_list = [r for r in all_readings if t0 < r.timestamp <= t0 + timedelta(hours=2)]
+        pre = pre_list[-1] if pre_list else None
 
-        # Buscar dosis de insulina rápida (bolus) en ventana -60min a +30min de la comida
-        dosis_cercanas = (
-            InsulinDose.query
-            .filter(
-                InsulinDose.type == "bolus",
-                InsulinDose.timestamp >= c.timestamp - timedelta(hours=1),
-                InsulinDose.timestamp <= c.timestamp + timedelta(minutes=30),
-            )
-            .order_by(InsulinDose.timestamp)
-            .all()
-        )
+        if not pre or not post_list:
+            continue
+        pico  = max(r.value_mgdl for r in post_list)
+        delta = round(pico - pre.value_mgdl, 0)
+        estado = "hiper" if pico > 180 else ("hipo" if pico < 70 else "rango")
+
+        # Bolus en memoria
+        dosis_cercanas = [
+            d for d in all_bolus
+            if t0 - timedelta(hours=1) <= d.timestamp <= t0 + timedelta(minutes=30)
+        ]
         insulina = []
         for d in dosis_cercanas:
             diff_min = int((d.timestamp - c.timestamp).total_seconds() / 60)
@@ -2478,23 +2459,21 @@ def _analisis_ratio_insulina(days=30):
         Meal.carbs_g > 5,
     ).all()
 
+    # Precarga batch ─────────────────────────────────────────────────────────
+    all_readings = _precargar_glucosa(comidas, horas_post=3)
+    all_bolus    = _precargar_bolus(comidas)
+
     datos = []
     for c in comidas:
-        pre = (GlucoseReading.query
-               .filter(GlucoseReading.timestamp >= c.timestamp - timedelta(minutes=30),
-                       GlucoseReading.timestamp <= c.timestamp)
-               .order_by(GlucoseReading.timestamp.desc()).first())
-        posts = (GlucoseReading.query
-                 .filter(GlucoseReading.timestamp > c.timestamp + timedelta(minutes=60),
-                         GlucoseReading.timestamp <= c.timestamp + timedelta(hours=3))
-                 .all())
-        bolus = (InsulinDose.query
-                 .filter(InsulinDose.type == "bolus",
-                         InsulinDose.timestamp >= c.timestamp - timedelta(hours=1),
-                         InsulinDose.timestamp <= c.timestamp + timedelta(minutes=30))
-                 .all())
+        t0 = c.timestamp
+        pre_list  = [r for r in all_readings if t0 - timedelta(minutes=30) <= r.timestamp <= t0]
+        post_list = [r for r in all_readings
+                     if t0 + timedelta(minutes=60) < r.timestamp <= t0 + timedelta(hours=3)]
+        bolus     = [d for d in all_bolus
+                     if t0 - timedelta(hours=1) <= d.timestamp <= t0 + timedelta(minutes=30)]
+        pre = pre_list[-1] if pre_list else None
 
-        if not pre or not posts or not bolus:
+        if not pre or not post_list or not bolus:
             continue
 
         total_bolus = sum(d.units for d in bolus)
@@ -2502,7 +2481,7 @@ def _analisis_ratio_insulina(days=30):
             continue
 
         # Glucosa más cercana a las 2h post-comida
-        post = min(posts, key=lambda r: abs((r.timestamp - c.timestamp).total_seconds() - 7200))
+        post = min(post_list, key=lambda r: abs((r.timestamp - c.timestamp).total_seconds() - 7200))
         delta   = round(post.value_mgdl - pre.value_mgdl, 0)
         ratio   = round(c.carbs_g / total_bolus, 1)
         hora    = c.timestamp.hour
@@ -2572,12 +2551,15 @@ def _iauc_trapezoidal(baseline, readings_timed):
     return round(iauc, 1)
 
 
-def _impacto_v2(meal, horas=3):
+def _impacto_v2(meal, horas=3, readings=None):
     """
     Métricas postprandiales basadas en iAUC para una comida.
 
     Requiere ≥3 lecturas de glucosa en la ventana postprandial.
     La glucosa pre-comida sirve de referencia (baseline).
+
+    - Si se pasa `readings` (lista pre-cargada con _precargar_glucosa),
+      opera en memoria: 0 queries adicionales.
 
     Retorna:
     - pre          : glucosa pre-comida (mg/dL)
@@ -2588,18 +2570,27 @@ def _impacto_v2(meal, horas=3):
     - n_readings   : nº lecturas postprandiales
     - curva        : [(min, Δ_sobre_baseline), ...] para promedios inter-comidas
     """
-    pre = (GlucoseReading.query
-           .filter(GlucoseReading.timestamp >= meal.timestamp - timedelta(minutes=30),
-                   GlucoseReading.timestamp <= meal.timestamp + timedelta(minutes=5))
-           .order_by(GlucoseReading.timestamp.desc()).first())
-    if not pre:
-        return None
+    t0       = meal.timestamp
+    t_pre    = t0 - timedelta(minutes=30)
+    t_pre_ok = t0 + timedelta(minutes=5)   # pequeño margen para lectura simultánea
+    t_post   = t0 + timedelta(hours=horas)
 
-    posts = (GlucoseReading.query
-             .filter(GlucoseReading.timestamp > meal.timestamp,
-                     GlucoseReading.timestamp <= meal.timestamp + timedelta(hours=horas))
-             .order_by(GlucoseReading.timestamp).all())
-    if len(posts) < 3:
+    if readings is not None:
+        pre_list  = [r for r in readings if t_pre <= r.timestamp <= t_pre_ok]
+        pre       = pre_list[-1] if pre_list else None
+        posts     = sorted([r for r in readings if t0 < r.timestamp <= t_post],
+                           key=lambda r: r.timestamp)
+    else:
+        pre = (GlucoseReading.query
+               .filter(GlucoseReading.timestamp >= t_pre,
+                       GlucoseReading.timestamp <= t_pre_ok)
+               .order_by(GlucoseReading.timestamp.desc()).first())
+        posts = (GlucoseReading.query
+                 .filter(GlucoseReading.timestamp > t0,
+                         GlucoseReading.timestamp <= t_post)
+                 .order_by(GlucoseReading.timestamp).all())
+
+    if not pre or len(posts) < 3:
         return None
 
     baseline = pre.value_mgdl
@@ -2645,9 +2636,12 @@ def _analisis_postprandial(days=60):
     desde   = datetime.now() - timedelta(days=days)
     comidas = Meal.query.filter(Meal.timestamp >= desde, Meal.carbs_g > 0).all()
 
+    # Precarga batch: 1 query para todas las lecturas (3h ventana post-comida)
+    all_readings = _precargar_glucosa(comidas, horas_post=3)
+
     datos = []
     for c in comidas:
-        imp = _impacto_v2(c)
+        imp = _impacto_v2(c, readings=all_readings)
         if not imp:
             continue
         if not (60 <= imp["pre"] <= 260):   # descartar hipoglucemia/crisis previas
@@ -2862,10 +2856,11 @@ def _sensibilidad_horaria(days=60):
     comidas = Meal.query.filter(Meal.timestamp >= desde, Meal.carbs_g > 5).all()
 
     from collections import defaultdict
+    all_readings = _precargar_glucosa(comidas, horas_post=2)
     por_bloque: dict = defaultdict(list)
 
     for c in comidas:
-        imp = _glucosa_impacto(c)
+        imp = _glucosa_impacto(c, readings=all_readings)
         if imp is None:
             continue
         bloque = c.timestamp.hour // 4   # 0–3h, 4–7h, 8–11h, 12–15h, 16–19h, 20–23h
