@@ -485,26 +485,37 @@ def api_predict_glucose():
                 "cob_fut":  round(cob_fut, 1),
             }
 
-        # ── Bias adaptivo: corregir desvío sistemático histórico ─────────
+        # ── Bias adaptivo + incertidumbre ────────────────────────────────
         from utils.prediction_feedback import (
             save_prediction, get_adaptive_bias, get_model_accuracy,
+            get_prediction_sigma, prediction_probabilities,
         )
-        bias = get_adaptive_bias()
+        bias  = get_adaptive_bias()
+        sigma_info = get_prediction_sigma(n=30)
+
         bias_30 = bias["bias_30"] if bias["confiable"] else 0.0
         bias_60 = bias["bias_60"] if bias["confiable"] else 0.0
 
-        # Aplicar bias a las predicciones (bias = mean(real-pred), positivo = modelo subestimó)
-        g_pred_30_raw = predictions["+30min"]["glucemia_pred"]
-        g_pred_60_raw = predictions["+60min"]["glucemia_pred"]
-        g_pred_30_adj = round(g_pred_30_raw + bias_30)
-        g_pred_60_adj = round(g_pred_60_raw + bias_60)
+        # Aplicar bias y calcular probabilidades por horizonte
+        for key, bias_val, sigma_val in [
+            ("+30min", bias_30, sigma_info["sigma_30"]),
+            ("+60min", bias_60, sigma_info["sigma_60"]),
+        ]:
+            raw = predictions[key]["glucemia_pred"]
+            adj = round(raw + bias_val)
+            probs = prediction_probabilities(adj, sigma_val)
 
-        for key, adj in [("+30min", g_pred_30_adj), ("+60min", g_pred_60_adj)]:
-            predictions[key]["glucemia_pred_raw"] = predictions[key]["glucemia_pred"]
+            predictions[key]["glucemia_pred_raw"] = raw
             predictions[key]["glucemia_pred"]     = adj
-            estado = "hipo" if adj < 70 else "hiper" if adj > 180 else "rango"
-            predictions[key]["estado"] = estado
-            predictions[key]["bias_aplicado"] = bias_30 if key == "+30min" else bias_60
+            predictions[key]["bias_aplicado"]     = bias_val
+            predictions[key]["sigma"]             = sigma_val
+            predictions[key]["data_based_sigma"]  = sigma_info["data_based"]
+            predictions[key]["p_hipo"]            = probs["p_hipo"]
+            predictions[key]["p_rango"]           = probs["p_rango"]
+            predictions[key]["p_hiper"]           = probs["p_hiper"]
+            predictions[key]["estado"]            = probs["estado"]
+            predictions[key]["ci_68"]             = probs["ci_68"]
+            predictions[key]["ci_90"]             = probs["ci_90"]
 
         # ── Guardar predicción en BD para feedback posterior ──────────────
         try:

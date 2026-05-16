@@ -22,6 +22,7 @@ No es ML — es una corrección de offset lineal simple y explicable.
 """
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -236,4 +237,99 @@ def get_adaptive_bias() -> dict:
         "bias_30":    b30,
         "bias_60":    b60,
         "confiable":  ok30 or ok60,
+    }
+
+
+# ── Incertidumbre y probabilidades ────────────────────────────────────────────
+
+# Sigma por defecto de la literatura para modelos lineales de primer orden
+# sobre datos CGM (Cobelli et al. 2009; Hovorka et al. 2004)
+_DEFAULT_SIGMA_30 = 22.0   # mg/dL — horizonte +30min
+_DEFAULT_SIGMA_60 = 35.0   # mg/dL — horizonte +60min
+
+
+def _normal_cdf(x: float, mu: float, sigma: float) -> float:
+    """P(X ≤ x) para X ~ N(mu, sigma²) usando math.erf (stdlib, sin scipy)."""
+    if sigma <= 0:
+        return 1.0 if x >= mu else 0.0
+    return 0.5 * (1.0 + math.erf((x - mu) / (sigma * math.sqrt(2.0))))
+
+
+def get_prediction_sigma(n: int = 30) -> dict:
+    """
+    Devuelve la desviación estándar (σ) del error de predicción estimada
+    desde las últimas `n` predicciones resueltas.
+
+    Usa valores de literatura si hay menos de 5 muestras.
+
+    Returns:
+        sigma_30   : float — σ del error a +30min (mg/dL)
+        sigma_60   : float — σ del error a +60min (mg/dL)
+        data_based : bool  — True si viene de datos reales (≥5 muestras)
+        n_30, n_60 : int   — cantidad de muestras usadas
+    """
+    from models import GlucosePrediction
+
+    def _sigma_from(attr, resolved_field):
+        items = GlucosePrediction.query.filter(
+            resolved_field == True,
+            getattr(GlucosePrediction, attr).isnot(None),
+        ).order_by(GlucosePrediction.predicted_at.desc()).limit(n).all()
+        errs = [getattr(i, attr) for i in items]
+        if len(errs) < 5:
+            return None, len(errs)
+        mean = sum(errs) / len(errs)
+        var  = sum((e - mean) ** 2 for e in errs) / max(len(errs) - 1, 1)
+        return round(var ** 0.5, 1), len(errs)
+
+    s30, n30 = _sigma_from("error_30", GlucosePrediction.resolved_30)
+    s60, n60 = _sigma_from("error_60", GlucosePrediction.resolved_60)
+
+    return {
+        "sigma_30":   s30 or _DEFAULT_SIGMA_30,
+        "sigma_60":   s60 or _DEFAULT_SIGMA_60,
+        "data_based": s30 is not None or s60 is not None,
+        "n_30":       n30,
+        "n_60":       n60,
+    }
+
+
+def prediction_probabilities(
+    g_pred: float,
+    sigma:  float,
+    hipo_thresh:  float = 70.0,
+    hiper_thresh: float = 180.0,
+) -> dict:
+    """
+    Dado un valor predicho y su incertidumbre, calcula:
+    - P(hipo)  : P(X < 70)
+    - P(rango) : P(70 ≤ X ≤ 180)
+    - P(hiper) : P(X > 180)
+    - ci_68    : intervalo al 68% (±1σ)
+    - ci_90    : intervalo al 90% (±1.645σ)
+
+    La distribución del error se modela como N(g_pred, sigma²).
+    Supuesto: el bias ya fue corregido antes de llamar a esta función.
+    """
+    p_below_hipo  = _normal_cdf(hipo_thresh,  g_pred, sigma)
+    p_below_hiper = _normal_cdf(hiper_thresh, g_pred, sigma)
+
+    p_hipo  = round(p_below_hipo * 100)
+    p_hiper = round((1.0 - p_below_hiper) * 100)
+    p_rango = max(0, 100 - p_hipo - p_hiper)
+
+    # Estado dominante (el de mayor probabilidad)
+    estado = max(
+        [("hipo", p_hipo), ("rango", p_rango), ("hiper", p_hiper)],
+        key=lambda x: x[1],
+    )[0]
+
+    return {
+        "p_hipo":   p_hipo,
+        "p_rango":  p_rango,
+        "p_hiper":  p_hiper,
+        "estado":   estado,             # estado más probable
+        "ci_68":    [round(g_pred - sigma),         round(g_pred + sigma)],
+        "ci_90":    [round(g_pred - 1.645 * sigma), round(g_pred + 1.645 * sigma)],
+        "sigma":    sigma,
     }

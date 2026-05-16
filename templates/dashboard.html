@@ -874,6 +874,16 @@ a.insight-chip:hover {
 .pred-pill.pred-hipo  .pred-val { color: #dc2626; }
 .pred-unit  { font-size: .68rem; color: var(--text-muted); }
 
+/* Probability bar inside pred-pill */
+.pred-pill  { align-items: center; }          /* override baseline — pill now has block children */
+.pred-detail { display:flex; flex-direction:column; align-items:flex-start; gap:1px; }
+.pred-prob-bar { display:flex; width:100%; height:3px; border-radius:2px; overflow:hidden; margin:.1rem 0; }
+.pred-seg    { height:100%; }
+.pred-seg-hipo  { background:#ef4444; }
+.pred-seg-rango { background:#22c55e; }
+.pred-seg-hiper { background:#f97316; }
+.pred-dom    { font-size:.63rem; color:var(--text-muted); white-space:nowrap; }
+
 @media (max-width: 576px) {
   .pred-bar   { padding: .5rem .75rem; gap: .4rem; }
   .pred-bar-label { width: 100%; }
@@ -891,23 +901,63 @@ a.insight-chip:hover {
       const d = await r.json();
       if (!d.ok) return;
 
-      const estados = { rango: 'pred-rango', hiper: 'pred-hiper', hipo: 'pred-hipo' };
-
       for (const [key, p] of Object.entries(d.predictions)) {
         const mins = key.replace('+','').replace('min','').trim();
         const el   = document.getElementById(`pred-${mins}`);
-        const val  = document.getElementById(`pred-${mins}-val`);
-        if (!el || !val) continue;
-        val.textContent = p.glucemia_pred;
+        if (!el) continue;
+
+        const estadoClass = { rango: 'pred-rango', hiper: 'pred-hiper', hipo: 'pred-hipo' };
         el.classList.remove('pred-rango', 'pred-hiper', 'pred-hipo');
-        el.classList.add(estados[p.estado] || '');
-        el.title = `+${mins}min: ${p.glucemia_pred} mg/dL (${p.estado})\n` +
-          `tendencia ${p.componentes.roc_effect > 0 ? '+' : ''}${p.componentes.roc_effect} ` +
-          `· insulina ${p.componentes.insulin_effect} ` +
-          `· comida +${p.componentes.carb_effect}`;
+        el.classList.add(estadoClass[p.estado] || '');
+
+        // Probabilidad dominante y barra de 3 colores
+        const pHipo  = p.p_hipo  || 0;
+        const pRango = p.p_rango || 0;
+        const pHiper = p.p_hiper || 0;
+        const sigma  = p.sigma   || '?';
+
+        // Estado dominante en texto corto
+        const domLabel = p.estado === 'rango' ? `${pRango}% rango`
+                       : p.estado === 'hiper' ? `${pHiper}% hiper`
+                       : `${pHipo}% hipo`;
+
+        el.innerHTML = `
+          <span class="pred-time">+${mins}min</span>
+          <span class="pred-val">${p.glucemia_pred}</span>
+          <div class="pred-detail">
+            <div class="pred-prob-bar" title="Hipo ${pHipo}% · Rango ${pRango}% · Hiper ${pHiper}%">
+              <div class="pred-seg pred-seg-hipo"  style="width:${pHipo}%"></div>
+              <div class="pred-seg pred-seg-rango" style="width:${pRango}%"></div>
+              <div class="pred-seg pred-seg-hiper" style="width:${pHiper}%"></div>
+            </div>
+            <span class="pred-dom">${domLabel}</span>
+          </div>`;
+
+        el.title =
+          `+${mins}min: ~${p.glucemia_pred} mg/dL (±${sigma} mg/dL)\n` +
+          `Hipo ${pHipo}% · Rango ${pRango}% · Hiper ${pHiper}%\n` +
+          `IC 90%: ${p.ci_90 ? p.ci_90[0]+' – '+p.ci_90[1] : '?'} mg/dL\n` +
+          `tendencia ${p.componentes.roc_effect >= 0 ? '+' : ''}${p.componentes.roc_effect}` +
+          ` · insulina ${p.componentes.insulin_effect}` +
+          ` · comida +${p.componentes.carb_effect}`;
+      }
+
+      // Mostrar advertencia si σ viene de defaults (sin datos históricos)
+      const anyPred = Object.values(d.predictions)[0];
+      if (anyPred && !anyPred.data_based_sigma) {
+        const bar = document.getElementById('pred-bar');
+        if (bar && !bar.querySelector('.pred-sigma-note')) {
+          const note = document.createElement('span');
+          note.className = 'pred-sigma-note text-muted';
+          note.style.cssText = 'font-size:.65rem; white-space:nowrap;';
+          note.textContent = '± est. literatura';
+          note.title = 'La incertidumbre usa valores de literatura (±22/35 mg/dL). ' +
+            'Se actualizará automáticamente cuando el modelo acumule predicciones resueltas.';
+          bar.querySelector('.kin-more')?.before(note);
+        }
       }
     } catch(e) {
-      // fallo silencioso — no romper el dashboard
+      // fallo silencioso
     }
   }
   document.addEventListener('DOMContentLoaded', cargarPrediccion);
