@@ -1,16 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Patrones Alimenticios — DiabetesTracker{% endblock %}
+{% block title %}Calibración del modelo — DiabetesTracker{% endblock %}
 
 {% block content %}
 <div class="list-page-header">
   <div>
     <h1 class="list-page-title">
       <span class="list-icon-wrap" style="background:rgba(99,102,241,.15)">
-        <i class="bi bi-graph-up-arrow" style="color:#6366f1"></i>
+        <i class="bi bi-cpu-fill" style="color:#6366f1"></i>
       </span>
-      Patrones Alimenticios
+      Calibración del modelo
     </h1>
-    <p class="list-page-sub">Ratio insulina · Análisis postprandial (iAUC) · Sensibilidad horaria</p>
+    <p class="list-page-sub">Parámetros que alimentan la predicción · ISF · ICR · Respuesta postprandial por tipo de comida</p>
   </div>
   <div class="range-selector">
     {% for d, lbl in [(14,'14d'),(30,'30d'),(60,'60d'),(90,'90d')] %}
