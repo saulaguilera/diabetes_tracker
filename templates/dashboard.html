@@ -989,7 +989,7 @@ a.insight-chip:hover {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:.75rem;height:.75rem;"></span>';
     try {
-      const r = await fetch('/api/sync/libre');
+      const r = await fetch('/api/sync/libre?force=1');
       const d = await r.json();
 
       if (d.rate_limited) {

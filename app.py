@@ -310,6 +310,7 @@ _ENDPOINT_ALIASES = [
     ("sync.api_sync_libre_reset",   "api_sync_libre_reset"),
     ("sync.api_backfill_fiber_gi",  "api_backfill_fiber_gi"),
     ("sync.api_sync_libre_debug",   "api_sync_libre_debug"),
+    ("sync.api_sync_status",        "api_sync_status"),
     ("sync.api_sync_libre",         "api_sync_libre"),
     ("sync.sync_libre_manual",      "sync_libre_manual"),
     ("comidas.comidas_grupos",      "comidas_grupos"),

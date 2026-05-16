@@ -109,9 +109,74 @@ def api_sync_libre_reset():
     if not session.get("logged_in"):
         return jsonify({"error": "No autorizado"}), 401
     for key in ("libre_token", "libre_base_url", "libre_token_expiry",
-                "libre_account_id", "libre_last_sync"):
+                "libre_account_id", "libre_last_sync", "libre_rate_limited_at"):
         _set_setting(key, "")
     return jsonify({"ok": True, "mensaje": "Caché borrado. Apretá ↺ para hacer login fresco."})
+
+
+@bp.route("/api/sync/status", endpoint="api_sync_status")
+def api_sync_status():
+    """
+    Estado actual del sistema de sync — sin llamar a Abbott.
+    Diagnóstico rápido para entender por qué no llegan lecturas.
+    """
+    if not session.get("logged_in"):
+        return jsonify({"error": "No autorizado"}), 401
+
+    from models import GlucoseReading
+
+    now           = datetime.now()
+    last_sync_str = _get_setting("libre_last_sync")
+    rl_at_str     = _get_setting("libre_rate_limited_at")
+    token         = _get_setting("libre_token")
+    base_url      = _get_setting("libre_base_url")
+
+    ultima_lectura = GlucoseReading.query.order_by(
+        GlucoseReading.timestamp.desc()
+    ).first()
+
+    # Calcular minutos desde última sync y última lectura
+    mins_desde_sync    = None
+    mins_desde_lectura = None
+    if last_sync_str:
+        try:
+            mins_desde_sync = round((now - datetime.fromisoformat(last_sync_str)).total_seconds() / 60, 1)
+        except Exception:
+            pass
+    if ultima_lectura:
+        mins_desde_lectura = round((now - ultima_lectura.timestamp).total_seconds() / 60, 1)
+
+    # Estado del rate-limit
+    rate_limit_activo = False
+    rate_limit_wait   = 0
+    if rl_at_str:
+        try:
+            rl_secs = (now - datetime.fromisoformat(rl_at_str)).total_seconds()
+            if rl_secs < 600:   # 10 min
+                rate_limit_activo = True
+                rate_limit_wait   = int(600 - rl_secs)
+        except Exception:
+            pass
+
+    return jsonify({
+        "ahora":              now.strftime("%H:%M:%S"),
+        "token_presente":     bool(token),
+        "base_url":           base_url or "(no configurada)",
+        "ultima_sync":        last_sync_str,
+        "mins_desde_sync":    mins_desde_sync,
+        "rate_limit_activo":  rate_limit_activo,
+        "rate_limit_wait_s":  rate_limit_wait,
+        "ultima_lectura_db":  ultima_lectura.timestamp.strftime("%H:%M %d/%m") if ultima_lectura else None,
+        "ultima_lectura_val": ultima_lectura.value_mgdl if ultima_lectura else None,
+        "mins_desde_lectura": mins_desde_lectura,
+        "diagnostico": (
+            "⚠️ Rate-limit Abbott activo"                 if rate_limit_activo else
+            "⚠️ Sin token — necesita login"               if not token else
+            f"⚠️ Sin lecturas hace {mins_desde_lectura:.0f} min — sync puede estar fallando"
+                                                          if mins_desde_lectura and mins_desde_lectura > 20 else
+            "✓ OK"
+        ),
+    })
 
 
 @bp.route("/api/backfill-fiber-gi", methods=["POST"], endpoint="api_backfill_fiber_gi")
@@ -249,16 +314,19 @@ def api_sync_libre():
         }), 400
 
     # ── Cooldown: no llamar a Abbott más seguido de cada 4 min ──────────────
-    _COOLDOWN_MIN  = 4    # mínimo entre syncs normales
-    _RATELIMIT_MIN = 8    # espera extra si el último intento fue 429
+    # El botón manual (?force=1) siempre bypasea el cooldown local.
+    # El rate-limit de Abbott (429) se respeta siempre.
+    _COOLDOWN_MIN  = 4    # mínimo entre syncs automáticas
+    _RATELIMIT_MIN = 10   # espera tras un 429 de Abbott (10 min)
 
-    now = datetime.now()
+    is_manual = request.args.get("force") == "1"
+    now       = datetime.now()
 
-    # Verificar si hay rate-limit activo de Abbott
+    # Rate-limit de Abbott: se respeta incluso en sync manual
     rl_at_str = _get_setting("libre_rate_limited_at")
     if rl_at_str:
         try:
-            rl_at = datetime.fromisoformat(rl_at_str)
+            rl_at         = datetime.fromisoformat(rl_at_str)
             secs_since_rl = (now - rl_at).total_seconds()
             if secs_since_rl < _RATELIMIT_MIN * 60:
                 wait = int(_RATELIMIT_MIN * 60 - secs_since_rl)
@@ -268,28 +336,29 @@ def api_sync_libre():
                     "rate_limited": True, "wait_seconds": wait,
                 })
         except (ValueError, TypeError):
-            pass
+            _set_setting("libre_rate_limited_at", "")   # timestamp corrupto → limpiar
 
-    # Cooldown normal entre syncs
-    last_sync_str = _get_setting("libre_last_sync")
-    if last_sync_str:
-        try:
-            last_sync = datetime.fromisoformat(last_sync_str)
-            secs_since = (now - last_sync).total_seconds()
-            if secs_since < _COOLDOWN_MIN * 60:
-                wait = int(_COOLDOWN_MIN * 60 - secs_since)
-                return jsonify({
-                    "insertadas": 0, "total": 0,
-                    "error": None,  # no es un error real — ya está actualizado
-                    "cooldown": True, "wait_seconds": wait,
-                    "mensaje": f"Ya sincronizaste hace {int(secs_since)}s. Próxima sync en {wait}s.",
-                })
-        except (ValueError, TypeError):
-            pass
+    # Cooldown normal: solo para syncs automáticas (no manual)
+    if not is_manual:
+        last_sync_str = _get_setting("libre_last_sync")
+        if last_sync_str:
+            try:
+                last_sync  = datetime.fromisoformat(last_sync_str)
+                secs_since = (now - last_sync).total_seconds()
+                if secs_since < _COOLDOWN_MIN * 60:
+                    wait = int(_COOLDOWN_MIN * 60 - secs_since)
+                    return jsonify({
+                        "insertadas": 0, "total": 0,
+                        "error": None,
+                        "cooldown": True, "wait_seconds": wait,
+                        "mensaje": f"Ya sincronizaste hace {int(secs_since)}s. Próxima sync en {wait}s.",
+                    })
+            except (ValueError, TypeError):
+                pass
 
     resultado = _do_libre_sync(email, password)
 
-    # Si el sync fue exitoso, limpiar el flag de rate-limit
+    # Limpiar rate-limit si el sync fue exitoso
     if not resultado.get("error") or "429" not in (resultado.get("error") or ""):
         _set_setting("libre_rate_limited_at", "")
 
