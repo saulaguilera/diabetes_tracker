@@ -55,10 +55,15 @@ def login_required(f):
 
 
 def _protect_all():
-    """Protege todas las rutas excepto login, logout y static."""
+    """Protege todas las rutas excepto login, logout, static y APIs con token válido."""
     exempt = {"login", "logout", "static"}
-    if request.endpoint not in exempt and not session.get("logged_in"):
-        return redirect(url_for("login", next=request.path))
+    if request.endpoint in exempt or session.get("logged_in"):
+        return
+    # Permitir llamadas de cron/API autenticadas con SYNC_TOKEN
+    token_param = request.args.get("token", "")
+    if _SYNC_TOKEN and token_param == _SYNC_TOKEN:
+        return
+    return redirect(url_for("login", next=request.path))
 
 app.before_request(_protect_all)
 
