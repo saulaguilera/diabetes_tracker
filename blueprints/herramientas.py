@@ -323,6 +323,67 @@ def quicklog():
     )
 
 
+@bp.route("/configuracion", endpoint="configuracion")
+def configuracion():
+    """Página central de configuración del modelo y parámetros personales."""
+    from utils.kinetics import _DEFAULT_DIA_MIN, _DEFAULT_PEAK_MIN
+    from utils.kinetics import estimate_dia_from_data
+
+    isf_personal, n_isf = _calcular_isf_personal()
+    icr_personal, n_icr = _calcular_icr_personal()
+    isf_circ            = _calcular_isf_circadiano(days=90)
+
+    # Valores guardados manualmente
+    isf_manual   = _get_setting("isf_manual")
+    icr_manual   = _get_setting("icr")
+    objetivo     = _get_setting("objetivo") or "100"
+    dia_min_raw  = _get_setting("dia_min")
+    basal_dose   = _get_setting("basal_dose_u") or ""
+    basal_hora   = _get_setting("basal_hora")   or "22"
+    basal_tipo   = _get_setting("basal_tipo")   or "glargina"
+
+    dia_min_guardado = int(float(dia_min_raw)) if dia_min_raw else None
+    dia_min_default  = _DEFAULT_DIA_MIN
+
+    # Estimación DIA desde datos reales
+    try:
+        dia_estimado = estimate_dia_from_data(days=90)
+    except Exception:
+        dia_estimado = None
+
+    # Bloques circadianos de ISF (para tabla informativa)
+    circ_bloques = []
+    for blk, data in sorted(isf_circ.items()):
+        circ_bloques.append({
+            "label": data["label"],
+            "isf":   data["isf"],
+            "n":     data["n"],
+        })
+
+    return render_template(
+        "configuracion.html",
+        # ISF
+        isf_personal=isf_personal,
+        n_isf=n_isf,
+        isf_manual=isf_manual,
+        circ_bloques=circ_bloques,
+        # ICR
+        icr_personal=icr_personal,
+        n_icr=n_icr,
+        icr_manual=icr_manual,
+        # Objetivo
+        objetivo=objetivo,
+        # DIA
+        dia_min_guardado=dia_min_guardado,
+        dia_min_default=dia_min_default,
+        dia_estimado=dia_estimado,
+        # Basal
+        basal_dose=basal_dose,
+        basal_hora=basal_hora,
+        basal_tipo=basal_tipo,
+    )
+
+
 @bp.route("/recomendaciones", endpoint="recomendaciones")
 def recomendaciones():
     dias = request.args.get("dias", 30, type=int)

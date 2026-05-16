@@ -425,20 +425,23 @@ def api_settings_save():
     data = request.get_json() or {}
     guardados = []
 
-    # Campos numéricos (deben ser > 0)
-    for key in ("icr", "isf_manual", "objetivo", "basal_dose_u", "basal_hora"):
+    # Campos numéricos (deben ser > 0; 0 = limpiar override)
+    for key in ("icr", "isf_manual", "objetivo", "basal_dose_u", "basal_hora", "dia_min"):
         val = data.get(key)
         if val is not None and val != "":
             try:
                 fval = float(val)
-                if fval >= 0:                 # basal_dose_u = 0 → limpiar
-                    if fval == 0:
-                        _set_setting(key, "")
-                    else:
-                        _set_setting(key, fval)
+                if fval >= 0:
+                    _set_setting(key, "" if fval == 0 else fval)
                     guardados.append(key)
             except (ValueError, TypeError):
                 pass
+
+    # Campos "limpiar" explícito (valor null en el JSON = borrar override)
+    for key in ("icr", "isf_manual", "dia_min"):
+        if data.get(key) is None and key in data:
+            _set_setting(key, "")
+            guardados.append(f"{key}_cleared")
 
     # Campo de texto: tipo de insulina basal
     basal_tipo = data.get("basal_tipo")

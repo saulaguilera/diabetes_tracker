@@ -324,6 +324,7 @@ _ENDPOINT_ALIASES = [
     ("comidas.comida_eliminar",     "comida_eliminar"),
     ("comidas.comida_editar",       "comida_editar"),
     ("herramientas.calculadora",            "calculadora"),
+    ("herramientas.configuracion",          "configuracion"),
     ("herramientas.api_calculadora_correccion", "api_calculadora_correccion"),
     ("herramientas.quicklog",               "quicklog"),
     ("herramientas.recomendaciones",        "recomendaciones"),

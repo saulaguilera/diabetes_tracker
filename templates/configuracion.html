@@ -1,0 +1,595 @@
+{% extends "base.html" %}
+{% block title %}Configuración — DiabetesTracker{% endblock %}
+
+{% block content %}
+<div class="list-page-header mb-4">
+  <div>
+    <h1 class="list-page-title">
+      <span class="list-icon-wrap" style="background:rgba(100,116,139,.15);">
+        <i class="bi bi-gear-fill" style="color:#64748b;"></i>
+      </span>
+      Configuración
+    </h1>
+    <p class="list-page-sub">Parámetros del modelo de predicción y cálculo de dosis</p>
+  </div>
+</div>
+
+{# Toast de confirmación #}
+<div id="cfg-toast" class="cfg-toast" style="display:none;">
+  <i class="bi bi-check-circle-fill"></i> <span id="cfg-toast-msg">Guardado</span>
+</div>
+
+{# ══════════════════════════════════════════════════════ ISF ══ #}
+<div class="cfg-card mb-3">
+  <div class="cfg-card-head">
+    <div class="cfg-icon" style="background:rgba(239,68,68,.12);">
+      <i class="bi bi-arrow-down-circle-fill" style="color:#ef4444;"></i>
+    </div>
+    <div>
+      <div class="cfg-title">ISF — Factor de Sensibilidad a la Insulina</div>
+      <div class="cfg-sub">Cuántos mg/dL baja 1 unidad de insulina</div>
+    </div>
+    {% if isf_manual %}
+    <span class="cfg-override-badge">Manual</span>
+    {% else %}
+    <span class="cfg-auto-badge">Automático</span>
+    {% endif %}
+  </div>
+  <div class="cfg-body">
+
+    {# Valor en uso #}
+    <div class="cfg-current-row">
+      <div class="cfg-current-val">
+        {{ (isf_manual | float | round(1)) if isf_manual else (isf_personal | round(1) if isf_personal else '—') }}
+        <span class="cfg-current-unit">mg/dL/U</span>
+      </div>
+      <div class="cfg-current-label">
+        {% if isf_manual %}
+          Valor manual (sobreescribe el calculado)
+        {% elif isf_personal %}
+          Calculado de {{ n_isf }} correcciones
+        {% else %}
+          Sin datos suficientes aún
+        {% endif %}
+      </div>
+    </div>
+
+    {# Override manual #}
+    <div class="cfg-field-row">
+      <label class="cfg-label">Sobreescribir manualmente</label>
+      <div class="cfg-input-group">
+        <input type="number" id="isf_manual" class="cfg-input"
+               value="{{ isf_manual or '' }}"
+               placeholder="{{ (isf_personal | round(1)) if isf_personal else 'ej. 45' }}"
+               min="5" max="200" step="0.5">
+        <span class="cfg-unit">mg/dL/U</span>
+        {% if isf_manual %}
+        <button class="cfg-clear-btn" onclick="clearSetting('isf_manual')"
+                title="Volver a automático">
+          <i class="bi bi-x-circle"></i> Usar automático
+        </button>
+        {% endif %}
+      </div>
+      <p class="cfg-hint">
+        Dejá vacío para usar el valor calculado automáticamente de tus correcciones históricas.
+      </p>
+    </div>
+
+    {# Bloques circadianos #}
+    {% if circ_bloques %}
+    <div class="cfg-circ-section">
+      <div class="cfg-circ-label">ISF por franja horaria (últimos 90 días)</div>
+      <div class="cfg-circ-row">
+        {% for b in circ_bloques %}
+        <div class="cfg-circ-block {{ 'cfg-circ-empty' if not b.isf }}">
+          <div class="cfg-circ-time">{{ b.label }}</div>
+          <div class="cfg-circ-val">{{ (b.isf | round(0) | int) if b.isf else '—' }}</div>
+          <div class="cfg-circ-n">{{ b.n }} datos</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════════════ ICR ══ #}
+<div class="cfg-card mb-3">
+  <div class="cfg-card-head">
+    <div class="cfg-icon" style="background:rgba(34,197,94,.12);">
+      <i class="bi bi-calculator-fill" style="color:#22c55e;"></i>
+    </div>
+    <div>
+      <div class="cfg-title">ICR — Relación Insulina:Carbohidratos</div>
+      <div class="cfg-sub">Gramos de carbohidratos que cubre 1 unidad</div>
+    </div>
+    {% if icr_manual %}
+    <span class="cfg-override-badge">Manual</span>
+    {% else %}
+    <span class="cfg-auto-badge">Automático</span>
+    {% endif %}
+  </div>
+  <div class="cfg-body">
+
+    <div class="cfg-current-row">
+      <div class="cfg-current-val">
+        1 U : {{ (icr_manual | float | round(1)) if icr_manual else (icr_personal | round(1) if icr_personal else '—') }}
+        <span class="cfg-current-unit">g CH</span>
+      </div>
+      <div class="cfg-current-label">
+        {% if icr_manual %}
+          Valor manual
+        {% elif icr_personal %}
+          Calculado de {{ n_icr }} comidas con bolo
+        {% else %}
+          Sin datos — registrá comidas con bolo para calcularlo
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="cfg-field-row">
+      <label class="cfg-label">Sobreescribir manualmente</label>
+      <div class="cfg-input-group">
+        <input type="number" id="icr" class="cfg-input"
+               value="{{ icr_manual or '' }}"
+               placeholder="{{ (icr_personal | round(1)) if icr_personal else 'ej. 12' }}"
+               min="1" max="60" step="0.5">
+        <span class="cfg-unit">g CH / U</span>
+        {% if icr_manual %}
+        <button class="cfg-clear-btn" onclick="clearSetting('icr')">
+          <i class="bi bi-x-circle"></i> Usar automático
+        </button>
+        {% endif %}
+      </div>
+      <p class="cfg-hint">
+        Dejá vacío para calcular automáticamente de la correlación comida→bolo→glucosa.
+      </p>
+    </div>
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════════ Objetivo ══ #}
+<div class="cfg-card mb-3">
+  <div class="cfg-card-head">
+    <div class="cfg-icon" style="background:rgba(99,102,241,.12);">
+      <i class="bi bi-bullseye" style="color:#6366f1;"></i>
+    </div>
+    <div>
+      <div class="cfg-title">Objetivo glucémico</div>
+      <div class="cfg-sub">Glucosa meta para el cálculo de correcciones</div>
+    </div>
+  </div>
+  <div class="cfg-body">
+    <div class="cfg-field-row">
+      <div class="cfg-input-group">
+        <input type="number" id="objetivo" class="cfg-input"
+               value="{{ objetivo }}"
+               min="70" max="140" step="1">
+        <span class="cfg-unit">mg/dL</span>
+      </div>
+      <div class="cfg-chips-row mt-2">
+        {% for v in [80, 90, 100, 110, 120] %}
+        <button type="button" class="cfg-chip-btn"
+                onclick="setObjetivo({{ v }})">{{ v }}</button>
+        {% endfor %}
+      </div>
+      <p class="cfg-hint">
+        Recomendación ADA: 80–130 mg/dL. El modelo calcula la corrección como
+        (glucemia actual − objetivo) ÷ ISF.
+      </p>
+    </div>
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════════════ DIA ══ #}
+<div class="cfg-card mb-3">
+  <div class="cfg-card-head">
+    <div class="cfg-icon" style="background:rgba(245,158,11,.12);">
+      <i class="bi bi-hourglass-split" style="color:#f59e0b;"></i>
+    </div>
+    <div>
+      <div class="cfg-title">DIA — Duración de Acción de la Insulina</div>
+      <div class="cfg-sub">Tiempo hasta que la insulina rápida deja de actuar</div>
+    </div>
+    {% if dia_min_guardado %}
+    <span class="cfg-override-badge">Manual</span>
+    {% else %}
+    <span class="cfg-auto-badge">Default</span>
+    {% endif %}
+  </div>
+  <div class="cfg-body">
+
+    <div class="cfg-current-row">
+      <div class="cfg-current-val">
+        {{ dia_min_guardado or dia_min_default }}
+        <span class="cfg-current-unit">min</span>
+        <span style="font-size:.85rem;font-weight:500;color:var(--text-muted);">
+          ({{ ((dia_min_guardado or dia_min_default) / 60) | round(1) }}h)
+        </span>
+      </div>
+      <div class="cfg-current-label">
+        {% if dia_min_guardado %}
+          Configurado manualmente
+        {% else %}
+          Default NovoRapid / Humalog
+        {% endif %}
+        {% if dia_estimado and dia_estimado.get('ok') %}
+          · Estimado de tus datos: <strong>{{ dia_estimado.dia_min_estimado }}min</strong>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="cfg-field-row">
+      <label class="cfg-label">Duración en minutos</label>
+      <div class="cfg-chips-row mb-2">
+        {% for m, label in [(180,'3h'),(210,'3.5h'),(240,'4h'),(270,'4.5h'),(300,'5h'),(360,'6h')] %}
+        <button type="button" class="cfg-chip-btn {{ 'cfg-chip-active' if (dia_min_guardado or dia_min_default) == m }}"
+                onclick="setDia({{ m }})">{{ label }}</button>
+        {% endfor %}
+      </div>
+      <div class="cfg-input-group">
+        <input type="number" id="dia_min" class="cfg-input"
+               value="{{ dia_min_guardado or dia_min_default }}"
+               min="120" max="480" step="15">
+        <span class="cfg-unit">min</span>
+        {% if dia_min_guardado %}
+        <button class="cfg-clear-btn" onclick="clearSetting('dia_min')">
+          <i class="bi bi-x-circle"></i> Default
+        </button>
+        {% endif %}
+      </div>
+      <p class="cfg-hint">
+        NovoRapid / Humalog: ~4h (240min). Fiasp: ~3h (180min). Toujeo / basal: configurar abajo.
+        Un DIA más corto → menos IOB residual → correcciones más agresivas.
+      </p>
+    </div>
+  </div>
+</div>
+
+{# ═══════════════════════════════════════════════ Insulina Basal ══ #}
+<div class="cfg-card mb-4">
+  <div class="cfg-card-head">
+    <div class="cfg-icon" style="background:rgba(14,165,233,.12);">
+      <i class="bi bi-capsule" style="color:#0ea5e9;"></i>
+    </div>
+    <div>
+      <div class="cfg-title">Insulina basal</div>
+      <div class="cfg-sub">Para incluir el IOB basal en las predicciones</div>
+    </div>
+    {% if basal_dose %}
+    <span class="cfg-override-badge">Configurada</span>
+    {% else %}
+    <span class="cfg-empty-badge">Sin configurar</span>
+    {% endif %}
+  </div>
+  <div class="cfg-body">
+    <div class="cfg-grid-2">
+
+      <div class="cfg-field-row">
+        <label class="cfg-label">Tipo de insulina</label>
+        <select id="basal_tipo" class="cfg-select">
+          {% for t, label in [('glargina','Glargina (Lantus) — 24h'),
+                               ('toujeo','Toujeo — 36h'),
+                               ('detemir','Detemir (Levemir) — 16h'),
+                               ('degludec','Degludec (Tresiba) — 42h'),
+                               ('nph','NPH — 12h')] %}
+          <option value="{{ t }}" {{ 'selected' if basal_tipo == t }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="cfg-field-row">
+        <label class="cfg-label">Dosis</label>
+        <div class="cfg-input-group">
+          <input type="number" id="basal_dose_u" class="cfg-input"
+                 value="{{ basal_dose }}" placeholder="0"
+                 min="0" max="100" step="1">
+          <span class="cfg-unit">U</span>
+        </div>
+        <p class="cfg-hint" style="margin-top:.3rem;">0 = sin basal configurada</p>
+      </div>
+
+      <div class="cfg-field-row">
+        <label class="cfg-label">Hora de aplicación</label>
+        <div class="cfg-input-group">
+          <input type="number" id="basal_hora" class="cfg-input"
+                 value="{{ basal_hora }}" min="0" max="23" step="1">
+          <span class="cfg-unit">h</span>
+        </div>
+        <div class="cfg-chips-row mt-1">
+          {% for h in [0, 8, 10, 22, 23] %}
+          <button type="button" class="cfg-chip-btn"
+                  onclick="setBasalHora({{ h }})">{{ '%02d'|format(h) }}:00</button>
+          {% endfor %}
+        </div>
+      </div>
+
+    </div>
+
+    {% if basal_dose %}
+    <div class="cfg-basal-preview" id="basal-preview">
+      <i class="bi bi-activity"></i>
+      IOB basal actual calculándose...
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{# ── Botón guardar ─────────────────────────────────────────────────────── #}
+<button class="cfg-save-btn" onclick="guardarTodo()">
+  <i class="bi bi-floppy-fill"></i> Guardar configuración
+</button>
+
+{% endblock %}
+
+{% block scripts %}
+{{ list_styles() }}
+<style>
+/* ── Configuración ──────────────────────────────────────────────────────── */
+.cfg-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; overflow: hidden;
+}
+.cfg-card-head {
+  display: flex; align-items: center; gap: .85rem;
+  padding: 1rem 1.1rem; border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+.cfg-icon {
+  width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+}
+.cfg-title { font-size: .95rem; font-weight: 700; }
+.cfg-sub   { font-size: .75rem; color: var(--text-muted); margin-top: .1rem; }
+.cfg-card-head > div:nth-child(2) { flex: 1; }
+
+.cfg-override-badge {
+  background: rgba(245,158,11,.12); color: #d97706;
+  font-size: .68rem; font-weight: 700; padding: .2em .6em;
+  border-radius: 20px; border: 1px solid rgba(245,158,11,.3);
+  white-space: nowrap;
+}
+.cfg-auto-badge {
+  background: rgba(34,197,94,.1); color: #16a34a;
+  font-size: .68rem; font-weight: 700; padding: .2em .6em;
+  border-radius: 20px; border: 1px solid rgba(34,197,94,.25);
+  white-space: nowrap;
+}
+.cfg-empty-badge {
+  background: rgba(100,116,139,.1); color: #64748b;
+  font-size: .68rem; font-weight: 700; padding: .2em .6em;
+  border-radius: 20px; border: 1px solid rgba(100,116,139,.2);
+  white-space: nowrap;
+}
+
+.cfg-body { padding: 1rem 1.1rem; }
+
+.cfg-current-row {
+  display: flex; align-items: baseline; gap: .75rem;
+  margin-bottom: 1rem; padding: .65rem .9rem;
+  background: var(--surface2); border-radius: 10px;
+  border: 1px solid var(--border);
+}
+.cfg-current-val {
+  font-size: 1.6rem; font-weight: 800; letter-spacing: -1px;
+  display: flex; align-items: baseline; gap: .3rem;
+}
+.cfg-current-unit { font-size: .75rem; font-weight: 600; color: var(--text-muted); }
+.cfg-current-label { font-size: .78rem; color: var(--text-muted); }
+
+.cfg-field-row { margin-bottom: .75rem; }
+.cfg-label {
+  display: block; font-size: .72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .05em;
+  color: var(--text-muted); margin-bottom: .35rem;
+}
+.cfg-input-group {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+}
+.cfg-input {
+  width: 110px; padding: .4rem .6rem; border-radius: 10px;
+  background: var(--surface2); border: 1.5px solid var(--border);
+  color: var(--text); font-size: 1rem; font-weight: 700;
+  outline: none; transition: border-color .15s;
+}
+.cfg-input:focus { border-color: #6366f1; }
+.cfg-unit { font-size: .78rem; color: var(--text-muted); font-weight: 600; white-space: nowrap; }
+.cfg-hint { font-size: .73rem; color: var(--text-muted); margin: .35rem 0 0; line-height: 1.4; }
+
+.cfg-clear-btn {
+  display: inline-flex; align-items: center; gap: .3rem;
+  background: none; border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text-muted); font-size: .75rem; font-weight: 600;
+  padding: .3rem .6rem; cursor: pointer; transition: all .12s;
+}
+.cfg-clear-btn:hover { border-color: #ef4444; color: #ef4444; }
+
+.cfg-chips-row { display: flex; flex-wrap: wrap; gap: .3rem; }
+.cfg-chip-btn {
+  padding: .25rem .55rem; border-radius: 8px; font-size: .78rem; font-weight: 600;
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text-muted); cursor: pointer; transition: all .12s;
+}
+.cfg-chip-btn:hover, .cfg-chip-active {
+  background: #6366f1; border-color: #6366f1; color: #fff;
+}
+
+/* Circadian ISF table */
+.cfg-circ-section { margin-top: .9rem; }
+.cfg-circ-label {
+  font-size: .7rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--text-muted); margin-bottom: .4rem;
+}
+.cfg-circ-row {
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: .3rem;
+}
+@media (max-width: 480px) { .cfg-circ-row { grid-template-columns: repeat(3, 1fr); } }
+.cfg-circ-block {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; padding: .4rem .3rem; text-align: center;
+}
+.cfg-circ-block.cfg-circ-empty { opacity: .45; }
+.cfg-circ-time { font-size: .62rem; color: var(--text-muted); }
+.cfg-circ-val  { font-size: 1rem; font-weight: 800; }
+.cfg-circ-n    { font-size: .6rem; color: var(--text-muted); }
+
+/* Grid 2 cols */
+.cfg-grid-2 {
+  display: grid; grid-template-columns: 1fr 1fr; gap: .75rem 1.25rem;
+}
+@media (max-width: 540px) { .cfg-grid-2 { grid-template-columns: 1fr; } }
+
+/* Select */
+.cfg-select {
+  width: 100%; padding: .4rem .6rem; border-radius: 10px;
+  background: var(--surface2); border: 1.5px solid var(--border);
+  color: var(--text); font-size: .88rem; outline: none;
+}
+
+/* Basal preview */
+.cfg-basal-preview {
+  margin-top: .75rem; background: rgba(14,165,233,.07);
+  border: 1px solid rgba(14,165,233,.2); border-radius: 10px;
+  padding: .55rem .85rem; font-size: .8rem; color: #0369a1;
+  display: flex; align-items: center; gap: .4rem;
+}
+
+/* Save button */
+.cfg-save-btn {
+  width: 100%; background: #6366f1; color: #fff; border: none;
+  border-radius: 14px; padding: .95rem; font-size: 1rem; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  gap: .5rem; transition: background .15s; margin-bottom: 1.5rem;
+}
+.cfg-save-btn:hover { background: #4f46e5; }
+.cfg-save-btn:disabled { background: #94a3b8; cursor: not-allowed; }
+
+/* Toast */
+.cfg-toast {
+  position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+  background: #1e293b; color: #fff; padding: .65rem 1.2rem;
+  border-radius: 12px; font-size: .85rem; font-weight: 600;
+  display: flex; align-items: center; gap: .5rem;
+  box-shadow: 0 4px 20px rgba(0,0,0,.25); z-index: 9999;
+  animation: toastIn .2s ease;
+}
+.cfg-toast i { color: #22c55e; }
+@keyframes toastIn {
+  from { opacity:0; transform: translateX(-50%) translateY(10px); }
+  to   { opacity:1; transform: translateX(-50%) translateY(0); }
+}
+</style>
+
+<script>
+/* ── Helpers ─────────────────────────────────────────────────────────────── */
+function setObjetivo(v) {
+  document.getElementById('objetivo').value = v;
+  document.querySelectorAll('#objetivo ~ .cfg-chips-row .cfg-chip-btn, .cfg-chips-row .cfg-chip-btn')
+    .forEach(b => b.classList.remove('cfg-chip-active'));
+}
+
+function setDia(min) {
+  document.getElementById('dia_min').value = min;
+  document.querySelectorAll('#dia_min').forEach(() => {});
+  document.querySelectorAll('.cfg-chip-btn[onclick*="setDia"]').forEach(b => {
+    b.classList.toggle('cfg-chip-active', parseInt(b.getAttribute('onclick').match(/\d+/)[0]) === min);
+  });
+}
+
+function setBasalHora(h) {
+  document.getElementById('basal_hora').value = h;
+}
+
+async function clearSetting(key) {
+  try {
+    const res = await fetch('/api/settings/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json',
+                 'X-CSRFToken': document.querySelector('[name=csrf_token]')?.value || '' },
+      body: JSON.stringify({ [key]: null }),
+    });
+    const d = await res.json();
+    if (d.ok) {
+      document.getElementById(key).value = '';
+      showToast(`${key} vuelto a automático`);
+      setTimeout(() => location.reload(), 800);
+    }
+  } catch(e) { showToast('Error al guardar', true); }
+}
+
+async function guardarTodo() {
+  const btn = document.querySelector('.cfg-save-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Guardando...';
+
+  const payload = {
+    isf_manual:   numOrNull('isf_manual'),
+    icr:          numOrNull('icr'),
+    objetivo:     numOrNull('objetivo'),
+    dia_min:      numOrNull('dia_min'),
+    basal_dose_u: numOrNull('basal_dose_u'),
+    basal_hora:   numOrNull('basal_hora'),
+    basal_tipo:   document.getElementById('basal_tipo')?.value || null,
+  };
+
+  try {
+    const res = await fetch('/api/settings/save', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': document.querySelector('meta[name=csrf-token]')?.content
+                    || '{{ csrf_token() }}',
+      },
+      body: JSON.stringify(payload),
+    });
+    const d = await res.json();
+    if (d.ok) {
+      showToast('Configuración guardada');
+      setTimeout(() => location.reload(), 900);
+    } else {
+      showToast('Error al guardar', true);
+    }
+  } catch(e) {
+    showToast('Error de red', true);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-floppy-fill"></i> Guardar configuración';
+  }
+}
+
+function numOrNull(id) {
+  const el = document.getElementById(id);
+  if (!el) return null;
+  const v = el.value.trim();
+  if (v === '') return null;
+  const n = parseFloat(v);
+  return isNaN(n) ? null : n;
+}
+
+function showToast(msg, error = false) {
+  const t = document.getElementById('cfg-toast');
+  document.getElementById('cfg-toast-msg').textContent = msg;
+  t.querySelector('i').style.color = error ? '#ef4444' : '#22c55e';
+  t.style.display = 'flex';
+  setTimeout(() => { t.style.display = 'none'; }, 2800);
+}
+
+/* ── IOB basal preview ──────────────────────────────────────────────────── */
+async function updateBasalPreview() {
+  const preview = document.getElementById('basal-preview');
+  if (!preview) return;
+  try {
+    const res  = await fetch('/api/kinetics');
+    const data = await res.json();
+    if (data.ok) {
+      preview.innerHTML =
+        `<i class="bi bi-activity"></i> IOB basal ahora: <strong>${data.iob} U</strong>` +
+        ` · Total IOB: <strong>${data.iob} U</strong>`;
+    }
+  } catch(e) {}
+}
+document.addEventListener('DOMContentLoaded', updateBasalPreview);
+</script>
+{% endblock %}
