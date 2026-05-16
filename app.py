@@ -311,6 +311,7 @@ _ENDPOINT_ALIASES = [
     ("patrones.patrones",           "patrones"),
     ("sync.api_kinetics",           "api_kinetics"),
     ("sync.api_dia_estimate",       "api_dia_estimate"),
+    ("sync.api_diagnostico",        "api_diagnostico"),
 ]
 
 for _bp_endpoint, _flat_name in _ENDPOINT_ALIASES:

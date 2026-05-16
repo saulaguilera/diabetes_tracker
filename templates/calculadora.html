@@ -355,6 +355,28 @@
   </div>
 </div>
 
+<!-- ── Panel de diagnóstico del modelo ── -->
+<div class="row g-3 mt-1">
+  <div class="col-12">
+    <div class="chart-box">
+      <div class="d-flex justify-content-between align-items-center">
+        <h6 class="fw-semibold mb-0">
+          <i class="bi bi-stethoscope me-2 text-secondary"></i>
+          Diagnóstico del modelo
+          <span class="badge bg-secondary ms-1" style="font-size:.65rem; vertical-align:middle;">
+            qué variables se están usando
+          </span>
+        </h6>
+        <button class="btn btn-sm btn-outline-secondary" onclick="cargarDiagnostico()"
+                id="btn-diag">
+          <i class="bi bi-cpu me-1"></i>Analizar ahora
+        </button>
+      </div>
+      <div id="diag-contenido" class="mt-3" style="display:none;"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ── Explicación ── -->
 <div class="chart-box mt-3">
   <h6 class="fw-semibold mb-3">¿Cómo se calcula el bolo total?</h6>
@@ -761,6 +783,218 @@
   {% if ultima and ultima.value_mgdl > 100 %}
   window.addEventListener('DOMContentLoaded', () => calcular());
   {% endif %}
+
+  // ── Panel de diagnóstico ───────────────────────────────────────────────────
+  async function cargarDiagnostico() {
+    const btn = document.getElementById('btn-diag');
+    const box = document.getElementById('diag-contenido');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" style="width:.8rem;height:.8rem;"></span>Analizando…';
+    box.style.display = 'block';
+    box.innerHTML = '<div class="text-muted" style="font-size:.82rem;">Cargando variables del modelo…</div>';
+
+    try {
+      const r = await fetch('/api/diagnostico');
+      const d = await r.json();
+      if (!d.ok) { box.innerHTML = `<div class="text-danger">${d.error}</div>`; return; }
+      box.innerHTML = renderDiagnostico(d);
+    } catch(e) {
+      box.innerHTML = `<div class="text-danger">Error: ${e.message}</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Actualizar';
+    }
+  }
+
+  function renderDiagnostico(d) {
+    const nivelColor = { critico: '#dc2626', advertencia: '#d97706', info: '#6366f1' };
+    const nivelIcon  = { critico: 'x-circle-fill', advertencia: 'exclamation-triangle-fill', info: 'info-circle-fill' };
+
+    // ── Alertas de variables faltantes ──────────────────────────────────────
+    let alertasHTML = '';
+    if (d.variables_faltantes && d.variables_faltantes.length) {
+      alertasHTML = `<div class="mb-3">` + d.variables_faltantes.map(a => `
+        <div class="d-flex align-items-start gap-2 mb-1 p-2 rounded"
+             style="background:${a.nivel === 'critico' ? 'rgba(220,38,38,.07)' : a.nivel === 'advertencia' ? 'rgba(217,119,6,.07)' : 'rgba(99,102,241,.07)'};
+                    border:1px solid ${a.nivel === 'critico' ? 'rgba(220,38,38,.2)' : a.nivel === 'advertencia' ? 'rgba(217,119,6,.2)' : 'rgba(99,102,241,.2)'};
+                    font-size:.8rem;">
+          <i class="bi bi-${nivelIcon[a.nivel]}" style="color:${nivelColor[a.nivel]};flex-shrink:0;margin-top:.1rem;"></i>
+          <div><strong style="color:${nivelColor[a.nivel]};">${a.variable}</strong> — ${a.mensaje}</div>
+        </div>`).join('') + `</div>`;
+    } else {
+      alertasHTML = `<div class="alert alert-success border-0 py-2 mb-3" style="font-size:.8rem; background:rgba(34,197,94,.1);">
+        <i class="bi bi-check-circle-fill text-success me-1"></i>
+        Todas las variables tienen datos suficientes. El modelo está usando información real.
+      </div>`;
+    }
+
+    // ── ISF cadena de prioridad ──────────────────────────────────────────────
+    const isfCadena = d.isf.cadena_prioridad.map(c => {
+      const activa = c.activa;
+      return `<div class="d-flex align-items-center gap-2 py-1"
+                   style="opacity:${activa ? '1' : '0.4'}; font-size:.78rem;">
+        <i class="bi bi-${activa ? 'check-circle-fill text-success' : 'circle'}"
+           style="flex-shrink:0;"></i>
+        <span class="${activa ? 'fw-semibold' : ''}">
+          ${c.fuente.replace('_', ' ')}
+          ${c.valor !== null ? `<strong>= ${c.valor}</strong> mg/dL·U` : '<em class="text-muted">sin dato</em>'}
+        </span>
+        ${activa ? '<span class="badge bg-success ms-auto">← en uso</span>' : ''}
+      </div>`;
+    }).join('');
+
+    // ── ISF circadiano por bloques ───────────────────────────────────────────
+    const circ = d.isf.circadiano_bloques.map(b => {
+      const isAct = b.es_actual;
+      return `<div class="text-center" style="flex:1;">
+        <div style="font-size:.65rem;color:${isAct ? '#6366f1' : 'var(--text-muted)'}; font-weight:${isAct ? '700' : '400'};">
+          ${b.label}
+        </div>
+        <div style="font-size:.85rem;font-weight:700;color:${b.isf ? (isAct ? '#6366f1' : 'var(--text)') : 'var(--text-muted)'};">
+          ${b.isf || '—'}
+        </div>
+        <div style="font-size:.6rem;color:var(--text-muted);">n=${b.n}</div>
+        ${isAct ? '<div style="width:100%;height:2px;background:#6366f1;border-radius:1px;margin-top:2px;"></div>' : ''}
+      </div>`;
+    }).join('');
+
+    // ── Ejercicio ────────────────────────────────────────────────────────────
+    const exFactor = d.ejercicio.factor_total;
+    const exDelta  = d.ejercicio.delta_pct;
+    const exColor  = exFactor >= 1.10 ? '#15803d' : exFactor <= 0.92 ? '#dc2626' : 'var(--text-muted)';
+    const exActsHTML = d.ejercicio.detalle.map(a => `
+      <div class="d-flex align-items-center gap-2 py-1 border-bottom" style="font-size:.78rem;">
+        <i class="bi bi-${a.tipo_inferido === 'aerobico' ? 'heart-pulse text-success' : a.tipo_inferido === 'anaerobico' ? 'lightning-charge text-warning' : 'shuffle text-primary'}"></i>
+        <div style="flex:1;">
+          <strong>${a.nombre}</strong>
+          <span class="text-muted">${a.intensidad}, ${a.duracion_min}min, hace ${a.hace_horas}h</span>
+          <span class="badge ${a.tipo_guardado !== 'no especificado' ? 'bg-success' : 'bg-warning text-dark'} ms-1" style="font-size:.6rem;">
+            ${a.tipo_guardado !== 'no especificado' ? a.tipo_guardado : 'inferido: ' + a.tipo_inferido}
+          </span>
+        </div>
+        <strong style="color:${a.delta_pct >= 0 ? '#15803d' : '#dc2626'};">
+          ${a.delta_pct >= 0 ? '+' : ''}${a.delta_pct}%
+        </strong>
+      </div>`).join('') || '<div class="text-muted" style="font-size:.78rem;">Sin actividad en las últimas 24h</div>';
+
+    // ── IOB detalle ──────────────────────────────────────────────────────────
+    const iobHTML = d.iob.detalle.length
+      ? d.iob.detalle.map(b => `
+        <div class="d-flex align-items-center gap-2 py-1 border-bottom" style="font-size:.78rem;">
+          <i class="bi bi-capsule-pill" style="color:#6366f1;"></i>
+          <div style="flex:1;">
+            <strong>${b.units} U</strong>
+            <span class="badge ${b.purpose === 'sin_etiqueta' ? 'bg-secondary' : b.purpose === 'correccion' ? 'bg-danger' : 'bg-success'} ms-1" style="font-size:.6rem;">${b.purpose}</span>
+            <span class="text-muted">hace ${b.elapsed_min}min</span>
+          </div>
+          <div class="text-end">
+            <div style="font-weight:700;color:#6366f1;">${b.contribucion_U} U</div>
+            <div class="text-muted" style="font-size:.7rem;">${(b.frac_activa * 100).toFixed(0)}% activa</div>
+          </div>
+        </div>`).join('')
+      : '<div class="text-muted" style="font-size:.78rem;">Sin bolus activos en las últimas ' + Math.round(d.iob.dia_min/60) + 'h</div>';
+
+    // ── COB detalle ──────────────────────────────────────────────────────────
+    const cobHTML = d.cob.detalle.length
+      ? d.cob.detalle.map(m => `
+        <div class="d-flex align-items-center gap-2 py-1 border-bottom" style="font-size:.78rem;">
+          <i class="bi bi-egg-fried text-success"></i>
+          <div style="flex:1;"><strong>${m.nombre}</strong>
+            <span class="text-muted">hace ${m.hace_horas}h</span></div>
+          <div class="text-end">
+            ${m.carbs_cob > 0 ? `<span class="badge bg-success me-1">${m.carbs_cob}g CH</span>` : ''}
+            ${(m.fat_cob + m.prot_cob) > 0.5 ? `<span class="badge" style="background:rgba(249,115,22,.2);color:#ea580c;">+${(m.fat_cob + m.prot_cob).toFixed(1)}g G/P</span>` : ''}
+          </div>
+        </div>`).join('')
+      : '<div class="text-muted" style="font-size:.78rem;">Sin comidas activas en las últimas 8h</div>';
+
+    return `
+      ${alertasHTML}
+
+      <div class="row g-3">
+
+        <!-- ISF -->
+        <div class="col-md-6">
+          <div class="p-3 rounded" style="background:var(--surface2); font-size:.8rem;">
+            <div class="fw-semibold mb-2">
+              <i class="bi bi-sliders me-1 text-info"></i>ISF — cadena de prioridad
+            </div>
+            ${isfCadena}
+            <div class="mt-2 pt-2 border-top">
+              <strong>ISF base efectivo: ${d.isf.efectivo_base ?? '—'} mg/dL·U</strong>
+              ${d.ejercicio.factor_total !== 1 ? `<br><span style="color:${exColor};">× ejercicio ${d.ejercicio.factor_total} → ISF efectivo <strong>${d.isf.con_ejercicio}</strong></span>` : ''}
+            </div>
+            <div class="mt-2 d-flex gap-1 flex-wrap" style="font-size:.7rem;">
+              ${circ}
+            </div>
+          </div>
+        </div>
+
+        <!-- ICR + Ejercicio -->
+        <div class="col-md-6">
+          <div class="p-3 rounded mb-2" style="background:var(--surface2); font-size:.8rem;">
+            <div class="fw-semibold mb-1">
+              <i class="bi bi-egg-fried me-1 text-success"></i>ICR — ratio insulina:carbohidratos
+            </div>
+            <div>Efectivo: <strong>1U cada ${d.icr.efectivo ?? '—'} g CH</strong>
+              <span class="badge ${d.icr.fuente === 'guardado' ? 'bg-success' : 'bg-secondary'} ms-1" style="font-size:.65rem;">${d.icr.fuente}</span>
+            </div>
+            ${d.icr.calculado ? `<div class="text-muted mt-1">Calculado de ${d.icr.n_comidas} comidas: 1U/${d.icr.calculado}g CH</div>` : ''}
+          </div>
+
+          <div class="p-3 rounded" style="background:var(--surface2); font-size:.8rem;">
+            <div class="fw-semibold mb-2">
+              <i class="bi bi-bicycle me-1" style="color:${exColor};"></i>
+              Ejercicio — factor total:
+              <strong style="color:${exColor};">
+                ${exFactor} (${exDelta >= 0 ? '+' : ''}${exDelta}% sensibilidad)
+              </strong>
+            </div>
+            ${exActsHTML}
+          </div>
+        </div>
+
+        <!-- IOB -->
+        <div class="col-md-6">
+          <div class="p-3 rounded" style="background:var(--surface2); font-size:.8rem;">
+            <div class="fw-semibold mb-2">
+              <i class="bi bi-capsule-pill me-1" style="color:#6366f1;"></i>
+              IOB — <strong style="color:#6366f1;">${d.iob.total_U} U activas</strong>
+              <span class="text-muted">(DIA ${d.iob.dia_min}min, ${d.iob.dia_fuente})</span>
+            </div>
+            ${iobHTML}
+          </div>
+        </div>
+
+        <!-- COB -->
+        <div class="col-md-6">
+          <div class="p-3 rounded" style="background:var(--surface2); font-size:.8rem;">
+            <div class="fw-semibold mb-2">
+              <i class="bi bi-egg-fried me-1 text-success"></i>
+              COB — <strong class="text-success">${d.cob.carbs_cob}g CH</strong>
+              ${d.cob.fp_cob >= 2 ? `+ <strong style="color:#ea580c;">${d.cob.fp_cob}g grasa/prot</strong>` : ''}
+            </div>
+            ${cobHTML}
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Resumen final: ecuación con valores reales -->
+      <div class="mt-3 p-3 rounded" style="background:rgba(99,102,241,.06); border:1px solid rgba(99,102,241,.2); font-size:.82rem;">
+        <div class="fw-semibold mb-2"><i class="bi bi-function me-1"></i>Ecuación con valores actuales</div>
+        <div style="font-family:monospace; line-height:1.8;">
+          ISF_efectivo = ${d.isf.efectivo_base ?? '?'} × ${d.ejercicio.factor_total} = <strong>${d.isf.con_ejercicio ?? '?'}</strong> mg/dL·U<br>
+          bolo_corrección = (glucemia − ${d.isf.objetivo_mg_dl}) / ${d.isf.con_ejercicio ?? '?'}<br>
+          bolo_comida = carbs / ${d.icr.efectivo ?? '?'}<br>
+          IOB_deducir = <strong>${d.iob.total_U} U</strong><br>
+          bolo_neto = bolo_corrección + bolo_comida − ${d.iob.total_U}
+        </div>
+        <div class="text-muted mt-2" style="font-size:.75rem;">
+          Timestamp: ${d.timestamp} · ${d.glucemia.lecturas_roc} lecturas CGM para ROC · tendencia: ${d.glucemia.arrow}
+        </div>
+      </div>`;
+  }
 
   // ── DIA estimation ─────────────────────────────────────────────────────────
   async function estimarDIA() {

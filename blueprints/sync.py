@@ -277,6 +277,251 @@ def api_kinetics():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@bp.route("/api/diagnostico", endpoint="api_diagnostico")
+def api_diagnostico():
+    """
+    Panel de diagnóstico completo: expone todas las variables del modelo
+    con sus valores actuales, fuentes y contribución al cálculo final.
+    """
+    try:
+        from datetime import datetime, timedelta
+        from models import InsulinDose, Meal, GlucoseReading, Activity
+        from helpers import (
+            _get_setting, _calcular_isf_personal, _calcular_icr_personal,
+            _calcular_isf_circadiano, _isf_para_hora,
+        )
+        from utils.kinetics import (
+            get_kinetics_snapshot, exercise_sensitivity_factor,
+            _classify_exercise, current_cob_detailed,
+        )
+
+        now   = datetime.now()
+        hora  = now.hour
+
+        # ── 1. IOB: desglose por bolus ──────────────────────────────────────
+        from utils.kinetics import _iob_fraction, _DEFAULT_PEAK_MIN, _DEFAULT_DIA_MIN
+        saved_dia   = _get_setting("dia_min")
+        dia_min     = int(saved_dia) if saved_dia else _DEFAULT_DIA_MIN
+        peak_min    = _DEFAULT_PEAK_MIN
+        cutoff_iob  = now - timedelta(minutes=dia_min)
+        boluses_raw = InsulinDose.query.filter(
+            InsulinDose.type == "bolus",
+            InsulinDose.timestamp >= cutoff_iob,
+        ).order_by(InsulinDose.timestamp.desc()).all()
+
+        iob_detalle = []
+        iob_total   = 0.0
+        for b in boluses_raw:
+            elapsed = (now - b.timestamp).total_seconds() / 60
+            frac    = _iob_fraction(elapsed, peak_min, dia_min)
+            contrib = round(b.units * frac, 3)
+            iob_total += contrib
+            iob_detalle.append({
+                "timestamp":   b.timestamp.strftime("%H:%M"),
+                "units":       b.units,
+                "purpose":     b.purpose or "sin_etiqueta",
+                "elapsed_min": round(elapsed),
+                "frac_activa": round(frac, 3),
+                "contribucion_U": contrib,
+            })
+
+        # ── 2. COB: desglose por comida ──────────────────────────────────────
+        fat_cutoff  = now - timedelta(hours=8)
+        meals_raw   = Meal.query.filter(Meal.timestamp >= fat_cutoff).all()
+        cob_data    = current_cob_detailed(meals_raw, at_time=now)
+
+        cob_detalle = []
+        for m in cob_data["meals_detail"]:
+            cob_detalle.append({
+                "nombre":      m["name"],
+                "hace_horas":  m["elapsed_h"],
+                "carbs_cob":   m["carbs_cob"],
+                "fat_cob":     m["fat_cob"],
+                "prot_cob":    m["prot_cob"],
+            })
+
+        # ── 3. ISF: cadena de prioridad ──────────────────────────────────────
+        isf_personal, n_isf  = _calcular_isf_personal()
+        isf_circ             = _calcular_isf_circadiano(days=90)
+        isf_guardado_raw     = _get_setting("isf_manual")
+        isf_guardado         = float(isf_guardado_raw) if isf_guardado_raw else None
+        isf_bloque, bloque_label, fuente_circ = _isf_para_hora(hora, isf_circ, isf_personal)
+
+        # Cadena de prioridad
+        isf_cadena = [
+            {"fuente": "manual_sesion",  "valor": None,         "activa": False,
+             "descripcion": "ISF ingresado manualmente en calculadora (parámetro ?isf=)"},
+            {"fuente": "guardado",       "valor": isf_guardado, "activa": isf_guardado is not None,
+             "descripcion": "ISF guardado en Configuración por el usuario"},
+            {"fuente": "circadiano",     "valor": isf_bloque,   "activa": fuente_circ == "circadiano",
+             "descripcion": f"ISF del bloque {bloque_label} (promedio de correcciones en ese horario)"},
+            {"fuente": "global",         "valor": isf_personal, "activa": True,
+             "descripcion": f"ISF global promedio de {n_isf} correcciones de los últimos 90d"},
+        ]
+        isf_efectivo_base = isf_guardado or isf_bloque or isf_personal
+
+        # Bloques circadianos
+        circ_bloques = []
+        for blk, data in isf_circ.items():
+            circ_bloques.append({
+                "bloque_h":   blk,
+                "label":      data["label"],
+                "isf":        data["isf"],
+                "n":          data["n"],
+                "es_actual":  blk == (hora // 4) * 4,
+            })
+
+        # ── 4. ICR ───────────────────────────────────────────────────────────
+        icr_personal, n_icr = _calcular_icr_personal()
+        icr_guardado_raw    = _get_setting("icr")
+        icr_guardado        = float(icr_guardado_raw) if icr_guardado_raw else None
+        icr_efectivo        = icr_guardado or icr_personal
+
+        # ── 5. Ejercicio ─────────────────────────────────────────────────────
+        act_cutoff  = now - timedelta(hours=24)
+        activities  = Activity.query.filter(Activity.timestamp >= act_cutoff).all()
+
+        ej_detalle  = []
+        for act in activities:
+            elapsed_h = (now - act.timestamp).total_seconds() / 3600
+            ex_type   = _classify_exercise(act.activity_type, act.exercise_type)
+            # Factor individual
+            f_ind = exercise_sensitivity_factor([act], at_time=now)
+            ej_detalle.append({
+                "nombre":       act.activity_type,
+                "tipo_guardado": act.exercise_type or "no especificado",
+                "tipo_inferido": ex_type,
+                "intensidad":   act.intensity or "media",
+                "duracion_min": act.duration_min,
+                "hace_horas":   round(elapsed_h, 1),
+                "factor_individual": f_ind,
+                "delta_pct":    round((f_ind - 1) * 100, 1),
+            })
+
+        ex_factor_total = exercise_sensitivity_factor(activities, at_time=now)
+        isf_con_ejercicio = round((isf_efectivo_base or 0) * ex_factor_total, 1) if isf_efectivo_base else None
+
+        # ── 6. DIA ───────────────────────────────────────────────────────────
+        dia_fuente = "guardado" if saved_dia else "default_NovoRapid"
+
+        # ── 7. Última glucemia + ROC ─────────────────────────────────────────
+        from utils.kinetics import glucose_roc, roc_arrow
+        cgm_roc     = GlucoseReading.query.filter(
+            GlucoseReading.timestamp >= now - timedelta(minutes=30)
+        ).order_by(GlucoseReading.timestamp).all()
+        ultima_g    = GlucoseReading.query.order_by(
+            GlucoseReading.timestamp.desc()
+        ).first()
+        roc_val     = glucose_roc(cgm_roc, window_min=20)
+
+        # ── Resumen: qué se usaría AHORA en la calculadora ───────────────────
+        objetivo = float(_get_setting("objetivo", "100"))
+
+        return jsonify({
+            "ok": True,
+            "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
+            "hora_actual": hora,
+
+            "iob": {
+                "total_U":     round(iob_total, 3),
+                "dia_min":     dia_min,
+                "peak_min":    peak_min,
+                "dia_fuente":  dia_fuente,
+                "boluses_activos": len([b for b in iob_detalle if b["contribucion_U"] > 0]),
+                "detalle":     iob_detalle,
+            },
+
+            "cob": {
+                "carbs_cob":   cob_data["carbs_cob"],
+                "fat_cob":     cob_data["fat_cob"],
+                "prot_cob":    cob_data["prot_cob"],
+                "fp_cob":      cob_data["fp_cob"],
+                "total_cob":   cob_data["total_cob"],
+                "has_extended": cob_data["has_extended"],
+                "comidas_activas": len(cob_detalle),
+                "detalle":     cob_detalle,
+            },
+
+            "isf": {
+                "efectivo_base":     isf_efectivo_base,
+                "con_ejercicio":     isf_con_ejercicio,
+                "global_calculado":  isf_personal,
+                "n_correcciones":    n_isf,
+                "guardado_usuario":  isf_guardado,
+                "objetivo_mg_dl":    objetivo,
+                "cadena_prioridad":  isf_cadena,
+                "circadiano_bloques": circ_bloques,
+                "bloque_activo":     bloque_label,
+            },
+
+            "icr": {
+                "efectivo":          icr_efectivo,
+                "calculado":         icr_personal,
+                "n_comidas":         n_icr,
+                "guardado_usuario":  icr_guardado,
+                "fuente":            "guardado" if icr_guardado else "calculado",
+            },
+
+            "ejercicio": {
+                "factor_total":      ex_factor_total,
+                "delta_pct":         round((ex_factor_total - 1) * 100, 1),
+                "actividades_24h":   len(ej_detalle),
+                "detalle":           ej_detalle,
+            },
+
+            "glucemia": {
+                "ultima_mg_dl":  ultima_g.value_mgdl if ultima_g else None,
+                "ultima_ts":     ultima_g.timestamp.strftime("%H:%M") if ultima_g else None,
+                "roc_mgdl_min":  roc_val,
+                "arrow":         roc_arrow(roc_val),
+                "lecturas_roc":  len(cgm_roc),
+            },
+
+            "variables_faltantes": _check_missing_variables(
+                isf_personal, n_isf, icr_personal, n_icr,
+                iob_detalle, cob_detalle, ej_detalle
+            ),
+        })
+
+    except Exception as e:
+        import traceback
+        return jsonify({"ok": False, "error": str(e), "trace": traceback.format_exc()}), 500
+
+
+def _check_missing_variables(isf, n_isf, icr, n_icr, boluses, meals, activities):
+    """Detecta qué variables no tienen datos suficientes."""
+    alertas = []
+    if not isf:
+        alertas.append({"variable": "ISF", "nivel": "critico",
+                        "mensaje": "Sin correcciones registradas — el ISF no se puede calcular"})
+    elif n_isf < 5:
+        alertas.append({"variable": "ISF", "nivel": "advertencia",
+                        "mensaje": f"Solo {n_isf} correcciones — estimación poco confiable (mínimo recomendado: 10)"})
+
+    if not icr:
+        alertas.append({"variable": "ICR", "nivel": "critico",
+                        "mensaje": "Sin comidas + bolus correlacionados — el ICR no se puede calcular"})
+    elif n_icr < 5:
+        alertas.append({"variable": "ICR", "nivel": "advertencia",
+                        "mensaje": f"Solo {n_icr} comidas con bolus — estimación poco confiable"})
+
+    labeled_boluses = sum(1 for b in boluses if b["purpose"] != "sin_etiqueta")
+    if boluses and labeled_boluses == 0:
+        alertas.append({"variable": "Propósito_bolus", "nivel": "advertencia",
+                        "mensaje": "Ningún bolus está etiquetado (comida/corrección/mixto) — el modelo usa inferencias menos precisas"})
+
+    if not activities:
+        alertas.append({"variable": "Ejercicio", "nivel": "info",
+                        "mensaje": "Sin actividad en las últimas 24h — factor de ejercicio = 1.0 (sin ajuste)"})
+
+    ex_sin_tipo = sum(1 for a in activities if a["tipo_guardado"] == "no especificado")
+    if ex_sin_tipo > 0:
+        alertas.append({"variable": "Tipo_ejercicio", "nivel": "advertencia",
+                        "mensaje": f"{ex_sin_tipo} actividad(es) sin tipo metabólico — se usa inferencia por nombre"})
+
+    return alertas
+
+
 @bp.route("/api/kinetics/dia", endpoint="api_dia_estimate")
 def api_dia_estimate():
     """
