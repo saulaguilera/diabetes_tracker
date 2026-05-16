@@ -135,6 +135,13 @@ _SYNC_TOKEN     = os.environ.get("SYNC_TOKEN", "")   # token secreto para cron j
 # <time> con data-utc="ISO" y el JS en base.html lo convierte a hora local.
 from markupsafe import Markup
 
+@app.template_filter("categoria_color")
+def categoria_color_filter(cat):
+    """Mapea una categoría de comida a un color Bootstrap para los badges."""
+    from helpers import CATEGORIA_COLORES
+    return CATEGORIA_COLORES.get(cat, "secondary")
+
+
 @app.template_filter("local_ts")
 def local_ts_filter(dt, fmt="dmhm"):
     if dt is None:
