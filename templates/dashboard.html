@@ -945,16 +945,25 @@ a.insight-chip:hover {
             <span class="pred-dom">${domLabel}${ci50txt ? ' · ' + ci50txt : ''}</span>
           </div>`;
 
-        // Tooltip completo con datos MC
+        // Tooltip completo con datos MC + AR
         const comp = p.componentes || {};
+        const ar   = p.ar || {};
+        const arLine = ar.active
+          ? `AR(6): ${ar.g_pred} mg/dL (${Math.round(ar.weight*100)}%) · MC: ${Math.round((1-ar.weight)*100)}%\n`
+          : `AR: no disponible aún (sin entrenar)\n`;
+        const modelLabel = ar.active
+          ? `blend AR+MC`
+          : `mediana MC`;
         el.title =
-          `+${mins}min — ${p.glucemia_pred} mg/dL (mediana MC)\n` +
+          `+${mins}min — ${p.glucemia_pred} mg/dL (${modelLabel})\n` +
           `Rango 50 %: ${ci50txt || '?'} mg/dL\n` +
           `IC 90 %:    ${ci90 ? ci90[0]+' – '+ci90[1] : '?'} mg/dL\n` +
           `───────────────────────────\n` +
           `Hipo ${pHipo} % · Rango ${pRango} % · Hiper ${pHiper} %\n` +
           `σ = ${sigma} mg/dL · sesgo ${skew > 0 ? '+' : ''}${skew}\n` +
           `${nSim.toLocaleString()} simulaciones Monte Carlo\n` +
+          `───────────────────────────\n` +
+          arLine +
           `───────────────────────────\n` +
           `Tendencia: ${comp.roc_effect >= 0 ? '+' : ''}${comp.roc_effect} mg/dL\n` +
           `Insulina:  ${comp.insulin_effect} mg/dL\n` +
@@ -969,9 +978,19 @@ a.insight-chip:hover {
           const note = document.createElement('span');
           note.className = 'pred-mc-note text-muted';
           note.style.cssText = 'font-size:.62rem; white-space:nowrap; opacity:.7;';
-          note.textContent = `MC ${(anyPred.n_sim || 3000).toLocaleString()} sim`;
-          note.title = `Predicción por simulación de Monte Carlo: ${anyPred.n_sim || 3000} escenarios\n` +
-            'propagando incertidumbre de ISF (±18%), ICR (±12%), absorción (±25%) y sensor (±0.28 mg/dL/min).';
+          const arAny = anyPred.ar || {};
+          const modelNote = arAny.active
+            ? `MC+AR(${Math.round((arAny.weight||0)*100)}%)`
+            : `MC ${(anyPred.n_sim || 3000).toLocaleString()} sim`;
+          note.textContent = modelNote;
+          note.title = arAny.active
+            ? `Modelo combinado: Monte Carlo + Auto-Regresión AR(6)\n` +
+              `AR peso: ${Math.round((arAny.weight||0)*100)}% (σ_AR=${arAny.sigma} mg/dL)\n` +
+              `MC peso: ${Math.round((1-(arAny.weight||0))*100)}% (${anyPred.n_sim||3000} simulaciones)\n` +
+              `Blend por ponderación inversa-varianza.`
+            : `Predicción por simulación de Monte Carlo: ${anyPred.n_sim || 3000} escenarios\n` +
+              'propagando incertidumbre de ISF (±18%), ICR (±12%), absorción (±25%) y sensor.\n' +
+              'AR: se activará automáticamente al acumular más datos CGM.';
           bar.querySelector('.kin-more')?.before(note);
         }
       }

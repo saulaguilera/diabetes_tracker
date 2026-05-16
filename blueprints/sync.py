@@ -76,6 +76,14 @@ def _do_libre_sync(email: str, password: str) -> dict:
         except Exception:
             pass
 
+        # Reajustar modelo AR si no se ha entrenado en las últimas 6h
+        # (lazy: solo cuando llegan datos nuevos, máx 1 vez cada 6h)
+        try:
+            from utils.ar_model import maybe_fit_ar_model
+            maybe_fit_ar_model()
+        except Exception:
+            pass
+
     # Guardar timestamp de última sync exitosa
     _set_setting("libre_last_sync", datetime.now().isoformat())
     _set_setting("libre_last_sync_ok", "1")
@@ -289,6 +297,163 @@ def api_sync_libre_debug():
         })
     except Exception as e:
         return jsonify({"error": str(e)})
+
+
+@bp.route("/api/sync/libre/verbose", endpoint="api_sync_libre_verbose")
+def api_sync_libre_verbose():
+    """
+    Diagnóstico completo del pipeline de sync — SIN insertar datos.
+    Muestra exactamente qué devuelve Abbott y qué pasaría con cada lectura.
+    Útil para diagnosticar "el sensor funciona pero no llegan lecturas a la app".
+    """
+    if not session.get("logged_in"):
+        return jsonify({"error": "No autorizado"}), 401
+
+    import requests as _req
+    from utils.libre_linkup import (
+        _decode_jwt_account_id, _hash_account_id,
+        get_connections, get_readings,
+    )
+
+    token      = _get_setting("libre_token")
+    base_url   = _get_setting("libre_base_url")
+    account_id = _get_setting("libre_account_id") or ""
+
+    if not token or not base_url:
+        return jsonify({
+            "estado": "sin_token",
+            "mensaje": "No hay token cacheado. Apretá ↺ para hacer login.",
+        })
+
+    now = datetime.now()
+
+    try:
+        # Re-computar account_id desde el JWT (igual que sync_all)
+        raw_id = _decode_jwt_account_id(token)
+        if raw_id:
+            account_id = _hash_account_id(raw_id)
+
+        # ── 1. Connections ────────────────────────────────────────────────
+        connections = get_connections(token, base_url, account_id)
+        if not connections:
+            return jsonify({
+                "estado":      "sin_conexiones",
+                "connections": [],
+                "mensaje":     "Abbott devolvió 0 conexiones. El sensor no está vinculado en LibreLinkUp.",
+            })
+
+        patient    = connections[0]
+        patient_id = patient.get("patientId") or patient.get("id")
+
+        # ── 2. Lecturas raw del sensor ────────────────────────────────────
+        readings = get_readings(token, base_url, patient_id, account_id)
+
+        if not readings:
+            return jsonify({
+                "estado":      "sin_lecturas_abbott",
+                "patient_id":  patient_id,
+                "connections": len(connections),
+                "mensaje":     "Abbott devolvió la lista de conexiones pero 0 lecturas en /graph. "
+                               "Puede que el sensor no haya sido escaneado recientemente.",
+            })
+
+        # ── 3. Clasificar cada lectura: nueva vs dedup ────────────────────
+        detalle = []
+        nuevas  = 0
+        dedup   = 0
+        invalidas = 0
+
+        # Última lectura en DB para contexto
+        ultima_db = GlucoseReading.query.order_by(
+            GlucoseReading.timestamp.desc()
+        ).first()
+
+        for r in readings:
+            ts  = r["timestamp"]
+            val = r["value_mgdl"]
+
+            if not val or val < 20:
+                invalidas += 1
+                detalle.append({
+                    "ts":     ts.strftime("%H:%M:%S %d/%m"),
+                    "valor":  val,
+                    "estado": "invalida",
+                    "nota":   "valor < 20 mg/dL, descartada",
+                })
+                continue
+
+            existe = GlucoseReading.query.filter(
+                GlucoseReading.timestamp >= ts - timedelta(minutes=6),
+                GlucoseReading.timestamp <= ts + timedelta(minutes=6),
+            ).first()
+
+            if existe:
+                dedup += 1
+                diff_min = round((ts - existe.timestamp).total_seconds() / 60, 1)
+                detalle.append({
+                    "ts":        ts.strftime("%H:%M:%S %d/%m"),
+                    "valor":     val,
+                    "estado":    "duplicada",
+                    "db_ts":     existe.timestamp.strftime("%H:%M:%S %d/%m"),
+                    "db_valor":  existe.value_mgdl,
+                    "diff_min":  diff_min,
+                })
+            else:
+                nuevas += 1
+                detalle.append({
+                    "ts":     ts.strftime("%H:%M:%S %d/%m"),
+                    "valor":  val,
+                    "estado": "nueva",
+                    "trend":  r.get("trend", "?"),
+                })
+
+        # ── 4. Diagnóstico final ──────────────────────────────────────────
+        if nuevas > 0:
+            diagnostico = f"✓ {nuevas} lectura(s) nueva(s) — deberían insertarse al hacer sync real"
+        elif dedup == len(readings):
+            # Todas duplicadas — posible problema de timezone?
+            # Comparar timestamp de Abbott vs DB
+            primera_abbott = readings[0]["timestamp"]
+            if ultima_db:
+                diff_db_abbott = (ultima_db.timestamp - primera_abbott).total_seconds() / 60
+                if abs(diff_db_abbott) > 60:
+                    diagnostico = (f"⚠️ Todas duplicadas — posible desfase de timezone: "
+                                   f"DB={ultima_db.timestamp.strftime('%H:%M')} "
+                                   f"Abbott={primera_abbott.strftime('%H:%M')} "
+                                   f"(diff={diff_db_abbott:.0f} min)")
+                else:
+                    diagnostico = ("⚠️ Todas las lecturas ya están en la DB — "
+                                   "Abbott no ha enviado datos nuevos desde el último scan en LibreLink")
+            else:
+                diagnostico = "⚠️ Todas duplicadas y no hay lecturas en DB"
+        else:
+            diagnostico = f"Sin lecturas válidas nuevas ({invalidas} inválidas, {dedup} duplicadas)"
+
+        return jsonify({
+            "ok":              True,
+            "timestamp":       now.strftime("%H:%M:%S"),
+            "estado":          "ok",
+            "patient_id":      patient_id,
+            "connections":     len(connections),
+            "abbott_total":    len(readings),
+            "nuevas":          nuevas,
+            "duplicadas":      dedup,
+            "invalidas":       invalidas,
+            "ultima_db_ts":    ultima_db.timestamp.strftime("%H:%M:%S %d/%m") if ultima_db else None,
+            "ultima_db_val":   ultima_db.value_mgdl if ultima_db else None,
+            "ultima_abbott_ts": readings[-1]["timestamp"].strftime("%H:%M:%S %d/%m") if readings else None,
+            "ultima_abbott_val": readings[-1]["value_mgdl"] if readings else None,
+            "diagnostico":     diagnostico,
+            "detalle":         detalle,
+        })
+
+    except Exception as e:
+        import traceback
+        return jsonify({
+            "ok":    False,
+            "error": str(e),
+            "trace": traceback.format_exc(),
+        })
 
 
 @bp.route("/api/sync/libre", endpoint="api_sync_libre")
@@ -600,6 +765,7 @@ def api_predict_glucose():
         # ── Imports internos para esta función ───────────────────────────
         from utils.prediction_feedback import save_prediction, get_adaptive_bias, get_model_accuracy
         from utils.monte_carlo import run_monte_carlo
+        from utils.ar_model import get_ar_prediction
 
         # Bias adaptivo: desplazamiento sistemático observado en predicciones pasadas
         bias    = get_adaptive_bias()
@@ -653,9 +819,31 @@ def api_predict_glucose():
                 sigma_g0        = sigma_g0,   # incertidumbre Kalman del punto de partida
             )
 
+            # ── Blending AR + MC — ponderación por varianza inversa ─────────
+            # El modelo AR captura momentum/patrones individuales; el MC
+            # captura causalidad (insulina, carbos). Combinados son complementarios.
+            # Pesos: w_AR = (1/σ²_AR) / (1/σ²_AR + 1/σ²_MC), cap 40%.
+            ar        = get_ar_prediction(horizon_min=delta_min)
+            ar_active = False
+            ar_weight = 0.0
+            g_final   = mc["g_pred_median"]   # default: solo MC
+
+            if ar and ar.get("ok") and ar["sigma"] > 0 and mc["sigma"] > 0:
+                sigma_ar = ar["sigma"]
+                sigma_mc = mc["sigma"]
+                # Ponderación inversa-varianza (estadísticamente óptima si errores independientes)
+                inv_var_ar = 1.0 / sigma_ar ** 2
+                inv_var_mc = 1.0 / sigma_mc ** 2
+                w_ar_raw   = inv_var_ar / (inv_var_ar + inv_var_mc)
+                # Cap: AR no supera el 40% (el modelo físico siempre domina)
+                ar_weight  = round(min(w_ar_raw, 0.40), 3)
+                g_blended  = (1.0 - ar_weight) * mc["g_pred_median"] + ar_weight * ar["g_pred"]
+                g_final    = round(g_blended)
+                ar_active  = True
+
             predictions[f"+{delta_min}min"] = {
-                # Valor central: mediana MC (más robusta que la media para distribuciones asimétricas)
-                "glucemia_pred":  mc["g_pred_median"],
+                # Valor central: mediana MC (o blend MC+AR si AR disponible)
+                "glucemia_pred":  g_final,
                 "glucemia_mean":  mc["g_pred_mean"],
                 "glucemia_pt":    round(g_pred_pt + bias_val),   # estimado puntual (debug)
                 "estado":         mc["estado"],
@@ -680,6 +868,15 @@ def api_predict_glucose():
                     "carb_effect":     round(carb_effect,     1),
                     "roc_eff_min":     round(roc_eff_min,     1),
                     "cob_suppression": round(cob_suppression, 2),
+                },
+                # Contribución del modelo AR
+                "ar": {
+                    "active":    ar_active,
+                    "g_pred":    ar["g_pred"]   if ar_active else None,
+                    "sigma":     ar["sigma"]    if ar_active else None,
+                    "weight":    ar_weight      if ar_active else 0,
+                    "mc_weight": round(1 - ar_weight, 3) if ar_active else 1.0,
+                    "age_min":   ar.get("last_age_min") if ar_active else None,
                 },
                 "iob_fut": round(iob_fut, 2),
                 "cob_fut": round(cob_fut, 1),
@@ -743,6 +940,34 @@ def api_predict_glucose():
     except Exception as e:
         import traceback
         return jsonify({"ok": False, "error": str(e), "trace": traceback.format_exc()}), 500
+
+
+@bp.route("/api/ar/status", endpoint="api_ar_status")
+def api_ar_status():
+    """Estado y métricas del modelo AR (sin reentrenar)."""
+    if not session.get("logged_in"):
+        return jsonify({"error": "No autorizado"}), 401
+    try:
+        from utils.ar_model import get_ar_status
+        return jsonify({"ok": True, **get_ar_status()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/ar/fit", methods=["POST"], endpoint="api_ar_fit")
+def api_ar_fit():
+    """
+    Fuerza el reentrenamiento del modelo AR con todos los datos disponibles.
+    Útil tras importar un CSV de datos históricos o para entrenamiento inicial.
+    """
+    if not session.get("logged_in"):
+        return jsonify({"error": "No autorizado"}), 401
+    try:
+        from utils.ar_model import fit_ar_model
+        result = fit_ar_model()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @bp.route("/api/model/accuracy", endpoint="api_model_accuracy")
