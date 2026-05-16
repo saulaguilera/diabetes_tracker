@@ -53,6 +53,15 @@ def _do_libre_sync(email: str, password: str) -> dict:
 
     if insertadas:
         db.session.commit()
+        # Resolver predicciones pendientes con las nuevas lecturas
+        try:
+            nuevas = GlucoseReading.query.filter(
+                GlucoseReading.timestamp >= datetime.now() - timedelta(hours=2)
+            ).order_by(GlucoseReading.timestamp).all()
+            from utils.prediction_feedback import resolve_predictions
+            resolve_predictions(nuevas)
+        except Exception:
+            pass
 
     # Guardar timestamp de última sync exitosa
     _set_setting("libre_last_sync", datetime.now().isoformat())
@@ -476,6 +485,47 @@ def api_predict_glucose():
                 "cob_fut":  round(cob_fut, 1),
             }
 
+        # ── Bias adaptivo: corregir desvío sistemático histórico ─────────
+        from utils.prediction_feedback import (
+            save_prediction, get_adaptive_bias, get_model_accuracy,
+        )
+        bias = get_adaptive_bias()
+        bias_30 = bias["bias_30"] if bias["confiable"] else 0.0
+        bias_60 = bias["bias_60"] if bias["confiable"] else 0.0
+
+        # Aplicar bias a las predicciones (bias = mean(real-pred), positivo = modelo subestimó)
+        g_pred_30_raw = predictions["+30min"]["glucemia_pred"]
+        g_pred_60_raw = predictions["+60min"]["glucemia_pred"]
+        g_pred_30_adj = round(g_pred_30_raw + bias_30)
+        g_pred_60_adj = round(g_pred_60_raw + bias_60)
+
+        for key, adj in [("+30min", g_pred_30_adj), ("+60min", g_pred_60_adj)]:
+            predictions[key]["glucemia_pred_raw"] = predictions[key]["glucemia_pred"]
+            predictions[key]["glucemia_pred"]     = adj
+            estado = "hipo" if adj < 70 else "hiper" if adj > 180 else "rango"
+            predictions[key]["estado"] = estado
+            predictions[key]["bias_aplicado"] = bias_30 if key == "+30min" else bias_60
+
+        # ── Guardar predicción en BD para feedback posterior ──────────────
+        try:
+            save_prediction(
+                predicted_at = now,
+                g_actual     = g_actual,
+                g_pred_30    = g_pred_30_adj,
+                g_pred_60    = g_pred_60_adj,
+                iob          = iob_now,
+                cob          = cob_now,
+                roc          = roc,
+                isf_used     = isf_ef,
+                icr_used     = icr,
+                ex_factor    = ex_factor,
+            )
+        except Exception:
+            pass   # nunca romper la predicción por fallo de persistencia
+
+        # ── Accuracy del modelo (últimas N predicciones resueltas) ────────
+        accuracy = get_model_accuracy(n=20)
+
         # Confianza: baja si sin ROC, sin ISF personal, o con pocos datos
         confianza_baja = []
         if roc is None:                 confianza_baja.append("sin tendencia CGM")
@@ -484,23 +534,39 @@ def api_predict_glucose():
         if not activities:              confianza_baja.append("ejercicio desconocido")
 
         return jsonify({
-            "ok":            True,
-            "g_actual":      g_actual,
-            "roc":           roc,
-            "arrow":         snap["arrow"],
-            "iob_now":       iob_now,
-            "cob_now":       cob_now,
-            "isf_ef":        isf_ef,
-            "icr":           icr,
-            "ex_factor":     ex_factor,
-            "predictions":   predictions,
+            "ok":             True,
+            "g_actual":       g_actual,
+            "roc":            roc,
+            "arrow":          snap["arrow"],
+            "iob_now":        iob_now,
+            "cob_now":        cob_now,
+            "isf_ef":         isf_ef,
+            "icr":            icr,
+            "ex_factor":      ex_factor,
+            "predictions":    predictions,
             "confianza_baja": confianza_baja,
-            "timestamp":     now.strftime("%H:%M:%S"),
+            "bias":           bias,
+            "accuracy":       accuracy,
+            "timestamp":      now.strftime("%H:%M:%S"),
         })
 
     except Exception as e:
         import traceback
         return jsonify({"ok": False, "error": str(e), "trace": traceback.format_exc()}), 500
+
+
+@bp.route("/api/model/accuracy", endpoint="api_model_accuracy")
+def api_model_accuracy():
+    """Métricas de accuracy del modelo — para mostrar en Calibración."""
+    try:
+        from utils.prediction_feedback import get_model_accuracy, get_adaptive_bias
+        return jsonify({
+            "ok":       True,
+            "accuracy": get_model_accuracy(n=50),
+            "bias":     get_adaptive_bias(),
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @bp.route("/api/diagnostico", endpoint="api_diagnostico")

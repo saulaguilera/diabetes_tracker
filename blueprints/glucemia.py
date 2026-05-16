@@ -42,6 +42,12 @@ def glucemia_nueva():
         )
         db.session.add(lectura)
         db.session.commit()
+        # Resolver predicciones pendientes con esta nueva lectura
+        try:
+            from utils.prediction_feedback import resolve_predictions
+            resolve_predictions([lectura])
+        except Exception:
+            pass
         flash(f"Glucemia de {valor} mg/dL registrada correctamente.", "success")
         return redirect(url_for("glucemia"))
 

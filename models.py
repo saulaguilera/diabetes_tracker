@@ -146,6 +146,44 @@ class UserSettings(db.Model):
         return f"<Setting {self.key}={self.value}>"
 
 
+class GlucosePrediction(db.Model):
+    """
+    Registro de cada predicción de glucemia generada por el modelo.
+    Se resuelve automáticamente cuando llega la lectura real 30/60 min después.
+    Permite calcular MAE, bias sistemático y aplicar corrección adaptiva.
+    """
+    __tablename__ = "glucose_predictions"
+
+    id           = db.Column(db.Integer, primary_key=True)
+    predicted_at = db.Column(db.DateTime, nullable=False)   # cuándo se hizo la predicción
+
+    # Estado en el momento de la predicción
+    g_actual     = db.Column(db.Float)    # glucemia al momento de predecir
+    iob          = db.Column(db.Float)    # IOB al momento
+    cob          = db.Column(db.Float)    # COB al momento
+    roc          = db.Column(db.Float)    # tendencia mg/dL/min
+    isf_used     = db.Column(db.Float)    # ISF efectivo usado
+    icr_used     = db.Column(db.Float)    # ICR usado
+    ex_factor    = db.Column(db.Float)    # factor de ejercicio
+
+    # Valores predichos
+    g_pred_30    = db.Column(db.Float)    # predicción a +30min
+    g_pred_60    = db.Column(db.Float)    # predicción a +60min
+
+    # Valores reales (se llenan cuando llega la lectura)
+    g_real_30    = db.Column(db.Float)
+    g_real_60    = db.Column(db.Float)
+    error_30     = db.Column(db.Float)    # g_real_30 − g_pred_30
+    error_60     = db.Column(db.Float)    # g_real_60 − g_pred_60
+
+    resolved_30  = db.Column(db.Boolean, default=False)
+    resolved_60  = db.Column(db.Boolean, default=False)
+    created_at   = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<Prediccion {self.predicted_at} pred30={self.g_pred_30} real={self.g_real_30}>"
+
+
 class CGMImport(db.Model):
     """Registro de archivos CSV importados desde Freestyle Libre."""
     __tablename__ = "cgm_imports"

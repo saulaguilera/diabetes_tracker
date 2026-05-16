@@ -134,6 +134,31 @@ with app.app_context():
         if "exercise_type" not in act_cols:
             conn.execute(text("ALTER TABLE activities ADD COLUMN exercise_type VARCHAR(20)"))
             conn.commit()
+        # Migración: tabla glucose_predictions (feedback del modelo)
+        if "glucose_predictions" not in existing_tables:
+            conn.execute(text("""
+                CREATE TABLE glucose_predictions (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    predicted_at DATETIME NOT NULL,
+                    g_actual     REAL,
+                    iob          REAL,
+                    cob          REAL,
+                    roc          REAL,
+                    isf_used     REAL,
+                    icr_used     REAL,
+                    ex_factor    REAL,
+                    g_pred_30    REAL,
+                    g_pred_60    REAL,
+                    g_real_30    REAL,
+                    g_real_60    REAL,
+                    error_30     REAL,
+                    error_60     REAL,
+                    resolved_30  INTEGER DEFAULT 0,
+                    resolved_60  INTEGER DEFAULT 0,
+                    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.commit()
 
 
 # ── Configuración LibreLinkUp ─────────────────────────────────────────────────
@@ -314,6 +339,7 @@ _ENDPOINT_ALIASES = [
     ("sync.api_diagnostico",        "api_diagnostico"),
     ("sync.api_backfill_insulin_labels", "api_backfill_insulin_labels"),
     ("sync.api_predict_glucose",    "api_predict_glucose"),
+    ("sync.api_model_accuracy",     "api_model_accuracy"),
 ]
 
 for _bp_endpoint, _flat_name in _ENDPOINT_ALIASES:

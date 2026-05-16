@@ -411,6 +411,28 @@
 </div><!-- /tab-horario -->
 
 {% endif %}
+
+{# ── Panel de accuracy del modelo de predicción ──────────────────────────── #}
+<div class="chart-box mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h6 class="fw-semibold mb-0">
+        <i class="bi bi-bullseye me-2 text-primary"></i>Precisión del modelo de predicción
+      </h6>
+      <small class="text-muted">Error absoluto medio entre lo predicho y lo real</small>
+    </div>
+    <button class="btn btn-sm btn-outline-primary" onclick="cargarAccuracy()">
+      <i class="bi bi-arrow-repeat me-1"></i>Actualizar
+    </button>
+  </div>
+  <div id="accuracy-panel">
+    <div class="text-muted" style="font-size:.85rem;">
+      <i class="bi bi-info-circle me-1"></i>
+      El modelo registra cada predicción y la compara contra el valor real cuando llega.
+      Presioná "Actualizar" para ver las métricas acumuladas.
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -812,5 +834,107 @@ if (RATIO_DATOS.length && document.getElementById('chart-ratio')) {
     legend:{orientation:'h',y:-0.32},
   }, _cfg);
 })();
+</script>
+
+<script>
+async function cargarAccuracy() {
+  const panel = document.getElementById('accuracy-panel');
+  panel.innerHTML = '<div class="text-muted" style="font-size:.83rem;"><span class="spinner-border spinner-border-sm me-2" style="width:.8rem;height:.8rem;"></span>Calculando…</div>';
+  try {
+    const r = await fetch('/api/model/accuracy');
+    const d = await r.json();
+    if (!d.ok) { panel.innerHTML = `<div class="text-danger">${d.error}</div>`; return; }
+    const a = d.accuracy;
+    const b = d.bias;
+
+    if (a.n_30 === 0 && a.n_60 === 0) {
+      panel.innerHTML = `
+        <div class="alert border-0 mb-0 py-2" style="background:rgba(99,102,241,.07); font-size:.83rem;">
+          <i class="bi bi-hourglass-split me-1" style="color:#6366f1;"></i>
+          <strong>Sin predicciones resueltas aún.</strong>
+          El modelo guarda cada predicción y la compara cuando llega el CGM.
+          En cuanto tengas ~5 lecturas post-predicción aparecerán las métricas.
+        </div>`;
+      return;
+    }
+
+    const tendIcon = { mejorando: '↑ mejorando', empeorando: '↓ empeorando', estable: '→ estable', insuficiente: '—' };
+    const tendColor = { mejorando: '#16a34a', empeorando: '#dc2626', estable: '#6366f1', insuficiente: 'var(--text-muted)' };
+    const tend = a.tendencia;
+
+    const maeColor30 = !a.mae_30 ? '' : a.mae_30 <= 15 ? '#16a34a' : a.mae_30 <= 25 ? '#d97706' : '#dc2626';
+    const maeColor60 = !a.mae_60 ? '' : a.mae_60 <= 20 ? '#16a34a' : a.mae_60 <= 35 ? '#d97706' : '#dc2626';
+
+    panel.innerHTML = `
+      <div class="row g-3 mb-3">
+
+        <div class="col-6 col-md-3">
+          <div class="p-3 rounded text-center" style="background:var(--surface2);">
+            <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;">MAE +30min</div>
+            <div style="font-size:1.8rem;font-weight:800;color:${maeColor30};">
+              ${a.mae_30 !== null ? '±' + a.mae_30 : '—'}
+            </div>
+            <div style="font-size:.72rem;color:var(--text-muted);">mg/dL · ${a.n_30} muestras</div>
+          </div>
+        </div>
+
+        <div class="col-6 col-md-3">
+          <div class="p-3 rounded text-center" style="background:var(--surface2);">
+            <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;">MAE +60min</div>
+            <div style="font-size:1.8rem;font-weight:800;color:${maeColor60};">
+              ${a.mae_60 !== null ? '±' + a.mae_60 : '—'}
+            </div>
+            <div style="font-size:.72rem;color:var(--text-muted);">mg/dL · ${a.n_60} muestras</div>
+          </div>
+        </div>
+
+        <div class="col-6 col-md-3">
+          <div class="p-3 rounded text-center" style="background:var(--surface2);">
+            <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;">Dentro de ±20 mg/dL</div>
+            <div style="font-size:1.8rem;font-weight:800;color:${a.pct_dentro_20_30 >= 70 ? '#16a34a' : '#d97706'};">
+              ${a.pct_dentro_20_30 !== null ? a.pct_dentro_20_30 + '%' : '—'}
+            </div>
+            <div style="font-size:.72rem;color:var(--text-muted);">horizonte 30min</div>
+          </div>
+        </div>
+
+        <div class="col-6 col-md-3">
+          <div class="p-3 rounded text-center" style="background:var(--surface2);">
+            <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;">Tendencia del error</div>
+            <div style="font-size:1.4rem;font-weight:800;color:${tendColor[tend]};">
+              ${tendIcon[tend] || '—'}
+            </div>
+            <div style="font-size:.72rem;color:var(--text-muted);">vs predicciones anteriores</div>
+          </div>
+        </div>
+      </div>
+
+      ${b.confiable ? `
+      <div class="d-flex align-items-center gap-2 p-2 rounded"
+           style="background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.2);font-size:.8rem;">
+        <i class="bi bi-sliders" style="color:#6366f1;"></i>
+        <div>
+          <strong>Corrección adaptiva activa:</strong>
+          +30min ${b.bias_30 >= 0 ? '+' : ''}${b.bias_30} mg/dL ·
+          +60min ${b.bias_60 >= 0 ? '+' : ''}${b.bias_60} mg/dL
+          <span class="text-muted">(aplicada automáticamente a cada predicción)</span>
+        </div>
+      </div>` : `
+      <div class="text-muted" style="font-size:.78rem;">
+        <i class="bi bi-info-circle me-1"></i>
+        La corrección adaptiva se activa con ≥5 predicciones resueltas.
+      </div>`}
+
+      <div class="mt-2" style="font-size:.75rem;color:var(--text-muted);line-height:1.6;">
+        <strong>Referencia:</strong>
+        MAE ≤15 mg/dL en +30min = excelente ·
+        ≤25 = aceptable ·
+        >25 = el modelo necesita más datos de calibración
+        (ISF, ICR, etiquetado de boluses).
+      </div>`;
+  } catch(e) {
+    panel.innerHTML = `<div class="text-danger">Error: ${e.message}</div>`;
+  }
+}
 </script>
 {% endblock %}
