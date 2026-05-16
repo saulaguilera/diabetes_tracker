@@ -241,8 +241,25 @@ def _iniciar_scheduler():
                     except Exception:
                         pass
 
+            def _weekly_report_job():
+                with app.app_context():
+                    try:
+                        from utils.email_notifier import send_weekly_accuracy_report
+                        send_weekly_accuracy_report()
+                    except Exception:
+                        pass
+
             scheduler = BackgroundScheduler(timezone=_tz)  # usa TZ del entorno (America/Santiago)
             scheduler.add_job(_sync_job, "interval", minutes=5, id="libre_sync")
+            # Reporte semanal: cada lunes a las 9:00am (hora local del servidor)
+            scheduler.add_job(
+                _weekly_report_job,
+                "cron",
+                day_of_week="mon",
+                hour=9,
+                minute=0,
+                id="weekly_report",
+            )
             scheduler.start()
             # Sync inicial al arrancar
             _sync_job()
@@ -344,7 +361,8 @@ _ENDPOINT_ALIASES = [
     ("sync.api_diagnostico",        "api_diagnostico"),
     ("sync.api_backfill_insulin_labels", "api_backfill_insulin_labels"),
     ("sync.api_predict_glucose",    "api_predict_glucose"),
-    ("sync.api_model_accuracy",     "api_model_accuracy"),
+    ("sync.api_model_accuracy",           "api_model_accuracy"),
+    ("sync.api_weekly_accuracy_report",   "api_weekly_accuracy_report"),
 ]
 
 for _bp_endpoint, _flat_name in _ENDPOINT_ALIASES:

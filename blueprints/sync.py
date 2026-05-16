@@ -1260,6 +1260,27 @@ def _check_missing_variables(isf, n_isf, icr, n_icr, boluses, meals, activities)
     return alertas
 
 
+@bp.route("/api/weekly-accuracy-report", methods=["POST"], endpoint="api_weekly_accuracy_report")
+def api_weekly_accuracy_report():
+    """
+    Dispara manualmente el reporte semanal de precisión por email.
+    Útil para testear la configuración SMTP sin esperar el lunes.
+
+    Autenticación: sesión web O ?token=SYNC_TOKEN
+    """
+    token_param = request.args.get("token", "")
+    if not session.get("logged_in"):
+        if not _SYNC_TOKEN or token_param != _SYNC_TOKEN:
+            return jsonify({"error": "No autorizado"}), 401
+
+    try:
+        from utils.email_notifier import send_weekly_accuracy_report
+        result = send_weekly_accuracy_report()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @bp.route("/api/kinetics/dia", endpoint="api_dia_estimate")
 def api_dia_estimate():
     """
