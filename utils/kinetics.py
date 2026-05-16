@@ -356,19 +356,49 @@ _BASAL_DIA_DEFAULT = 1440  # glargina como fallback
 
 def current_basal_iob(at_time: Optional[datetime] = None) -> float:
     """
-    Computa el IOB de insulina basal en `at_time` a partir de la configuración
-    guardada en UserSettings (basal_dose_u, basal_hora, basal_tipo).
+    Computa el IOB de insulina basal en `at_time`.
 
-    Modelo: decaimiento lineal peakless:
+    Prioridad 1 — Registros reales de la DB (InsulinDose type='basal'):
+        Si el usuario registra su inyección basal diariamente (como hace con
+        el bolo), la función la encuentra aquí y calcula el IOB con precisión.
+        El tipo de insulina (para saber el DIA) se lee de UserSettings.
+
+    Prioridad 2 — Configuración manual (basal_dose_u + basal_hora):
+        Fallback para usuarios que nunca han registrado una inyección basal.
+
+    Modelo: decaimiento lineal peakless (sin pico — análogos de larga duración):
         iob_fraction(t) = max(0, 1 − elapsed_min / dia_min)
-
-    No requiere que el usuario registre cada inyección basal; basta configurar
-    la dosis diaria y la hora habitual de aplicación una sola vez.
-
-    Retorna 0.0 si no hay basal configurada.
     """
     from helpers import _get_setting
 
+    if at_time is None:
+        at_time = datetime.now()
+
+    tipo = (_get_setting("basal_tipo") or "glargina").lower().strip()
+    dia  = _BASAL_DIA_MIN.get(tipo, _BASAL_DIA_DEFAULT)
+
+    # ── Prioridad 1: inyecciones basales registradas en la DB ─────────────────
+    try:
+        from models import InsulinDose
+        # Ventana: DIA + 2h de buffer para capturar la dosis más reciente
+        cutoff = at_time - timedelta(minutes=dia + 120)
+        doses  = InsulinDose.query.filter(
+            InsulinDose.type      == "basal",
+            InsulinDose.timestamp >= cutoff,
+            InsulinDose.timestamp <= at_time,
+        ).all()
+
+        if doses:
+            total = 0.0
+            for d in doses:
+                elapsed = (at_time - d.timestamp).total_seconds() / 60.0
+                frac    = max(0.0, 1.0 - elapsed / dia)
+                total  += d.units * frac
+            return round(total, 2)
+    except Exception:
+        pass   # DB no disponible (tests, migraciones) → fallback
+
+    # ── Prioridad 2: configuración manual (UserSettings) ─────────────────────
     dose_str = _get_setting("basal_dose_u")
     if not dose_str:
         return 0.0
@@ -380,14 +410,7 @@ def current_basal_iob(at_time: Optional[datetime] = None) -> float:
         return 0.0
 
     hora = int(_get_setting("basal_hora") or 22)
-    tipo = (_get_setting("basal_tipo") or "glargina").lower().strip()
-    dia  = _BASAL_DIA_MIN.get(tipo, _BASAL_DIA_DEFAULT)
-
-    if at_time is None:
-        at_time = datetime.now()
-
-    # Última inyección antes de at_time (misma hora del día anterior si aún no llegó)
-    inj = at_time.replace(hour=hora, minute=0, second=0, microsecond=0)
+    inj  = at_time.replace(hour=hora, minute=0, second=0, microsecond=0)
     if inj > at_time:
         inj -= timedelta(days=1)
 

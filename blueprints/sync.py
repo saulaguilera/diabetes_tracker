@@ -580,11 +580,13 @@ def api_kinetics():
         from utils.kinetics import get_kinetics_snapshot
         snap = get_kinetics_snapshot(hours_lookback=6)
         return jsonify({
-            "ok":    True,
-            "iob":   snap["iob"],
-            "cob":   snap["cob"],
-            "roc":   snap["roc"],
-            "arrow": snap["arrow"],
+            "ok":        True,
+            "iob":       snap["iob"],
+            "iob_basal": snap["iob_basal"],
+            "iob_bolus": snap["iob_bolus"],
+            "cob":       snap["cob"],
+            "roc":       snap["roc"],
+            "arrow":     snap["arrow"],
             "last_glucose": snap["last_glucose"],
             "context":      snap["context"],
             "dia_min":      snap["dia_min"],

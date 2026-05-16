@@ -338,9 +338,17 @@ def configuracion():
     icr_manual   = _get_setting("icr")
     objetivo     = _get_setting("objetivo") or "100"
     dia_min_raw  = _get_setting("dia_min")
-    basal_dose   = _get_setting("basal_dose_u") or ""
-    basal_hora   = _get_setting("basal_hora")   or "22"
-    basal_tipo   = _get_setting("basal_tipo")   or "glargina"
+    basal_tipo   = _get_setting("basal_tipo") or "glargina"
+
+    # Última inyección basal registrada (para mostrar en la card)
+    from models import InsulinDose
+    from datetime import timedelta
+    ultima_basal = (
+        InsulinDose.query
+        .filter(InsulinDose.type == "basal")
+        .order_by(InsulinDose.timestamp.desc())
+        .first()
+    )
 
     dia_min_guardado = int(float(dia_min_raw)) if dia_min_raw else None
     dia_min_default  = _DEFAULT_DIA_MIN
@@ -378,9 +386,8 @@ def configuracion():
         dia_min_default=dia_min_default,
         dia_estimado=dia_estimado,
         # Basal
-        basal_dose=basal_dose,
-        basal_hora=basal_hora,
         basal_tipo=basal_tipo,
+        ultima_basal=ultima_basal,
     )
 
 
