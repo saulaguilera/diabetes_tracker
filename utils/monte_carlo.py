@@ -64,6 +64,7 @@ def run_monte_carlo(
     hipo_thresh:     float = _HIPO_THRESH,
     hiper_thresh:    float = _HIPER_THRESH,
     seed:            Optional[int] = None,
+    sigma_g0:        float = 0.0,   # incertidumbre del punto de partida (Kalman σ_G)
 ) -> dict:
     """
     Ejecuta N simulaciones del modelo de predicción muestreando de las
@@ -111,6 +112,10 @@ def run_monte_carlo(
 
     for _ in range(n):
         # ── Muestreo de parámetros inciertos ──────────────────────────────
+        # Punto de partida: si Kalman está activo, la glucosa inicial también es incierta
+        # sigma_g0 = σ_G del filtro de Kalman (≈ 4–10 mg/dL cuando convergido)
+        g0_i = random.gauss(g_actual, sigma_g0) if sigma_g0 > 0.5 else g_actual
+
         # ISF: Normal(ISF_base, ISF_base×18%), mínimo 10 mg/dL/U
         isf_i = max(10.0, random.gauss(isf_base, isf_base * _SIGMA_ISF_PCT))
 
@@ -134,7 +139,7 @@ def run_monte_carlo(
         insulin_effect = diob_i * isf_i
         carb_effect    = (dcob_i * isf_i / icr_i) if icr_i else 0.0
 
-        g_i = g_actual + roc_effect - insulin_effect + carb_effect
+        g_i = g0_i + roc_effect - insulin_effect + carb_effect
         sims.append(g_i)
 
     # ── Estadísticas de la distribución empírica ──────────────────────────

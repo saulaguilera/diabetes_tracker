@@ -42,6 +42,12 @@ def glucemia_nueva():
         )
         db.session.add(lectura)
         db.session.commit()
+        # Actualizar filtro de Kalman con la nueva lectura manual
+        try:
+            from utils.kalman import update_with_reading as kalman_update
+            kalman_update(lectura.value_mgdl, lectura.timestamp)
+        except Exception:
+            pass
         # Resolver predicciones pendientes con esta nueva lectura
         try:
             from utils.prediction_feedback import resolve_predictions

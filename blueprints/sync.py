@@ -54,13 +54,25 @@ def _do_libre_sync(email: str, password: str) -> dict:
 
     if insertadas:
         db.session.commit()
-        # Resolver predicciones pendientes con las nuevas lecturas
+
+        # Actualizar filtro de Kalman con las nuevas lecturas (orden cronológico)
         try:
-            nuevas = GlucoseReading.query.filter(
+            from utils.kalman import update_with_reading as kalman_update
+            nuevas_ord = GlucoseReading.query.filter(
                 GlucoseReading.timestamp >= datetime.now() - timedelta(hours=2)
             ).order_by(GlucoseReading.timestamp).all()
+            for r in nuevas_ord:
+                kalman_update(r.value_mgdl, r.timestamp, save=False)
+            # Guardar una sola vez al final (más eficiente)
+            if nuevas_ord:
+                kalman_update(nuevas_ord[-1].value_mgdl, nuevas_ord[-1].timestamp, save=True)
+        except Exception:
+            pass
+
+        # Resolver predicciones pendientes con las nuevas lecturas
+        try:
             from utils.prediction_feedback import resolve_predictions
-            resolve_predictions(nuevas)
+            resolve_predictions(nuevas_ord if insertadas else [])
         except Exception:
             pass
 
@@ -430,14 +442,36 @@ def api_predict_glucose():
 
         # ── Datos actuales ────────────────────────────────────────────────
         snap = get_kinetics_snapshot(hours_lookback=6, dia_min=dia_min, peak_min=peak_min)
-        g_actual       = snap["last_glucose"]
-        roc            = snap["roc"]        # mg/dL/min
+        g_raw          = snap["last_glucose"]
+        roc_regression = snap["roc"]        # mg/dL/min — regresión ponderada
         iob_now        = snap["iob"]        # total: bolus + basal
         iob_basal_now  = snap["iob_basal"]  # solo basal (para desglose)
         cob_now        = snap["cob"]
 
-        if g_actual is None:
+        if g_raw is None:
             return jsonify({"ok": False, "error": "Sin lecturas de glucosa recientes"})
+
+        # ── Filtro de Kalman — glucosa y ROC estimados con menor ruido ────
+        from utils.kalman import get_current_estimate as kalman_estimate
+        kalman     = kalman_estimate(propagate=True)
+        sigma_g0   = 0.0   # incertidumbre del punto de partida para MC
+
+        if kalman and kalman.get("sigma_G", 99) < 20:
+            # Kalman confiable (σ < 20 mg/dL = filtro convergido)
+            g_actual  = round(kalman["G"], 1)
+            sigma_g0  = kalman["sigma_G"]           # para MC: incertidumbre del estado inicial
+            # Blend ROC: 70 % Kalman + 30 % regresión (si disponible)
+            roc_k = kalman["v"]
+            if roc_regression is not None:
+                roc = round(0.7 * roc_k + 0.3 * roc_regression, 3)
+            else:
+                roc = round(roc_k, 3)
+            kalman_active = True
+        else:
+            # Kalman no inicializado o divergido — usar valores crudos
+            g_actual      = g_raw
+            roc           = roc_regression
+            kalman_active = False
         if isf_ef is None:
             return jsonify({"ok": False, "error": "Sin ISF configurado — ingresalo en Configuración"})
 
@@ -503,6 +537,7 @@ def api_predict_glucose():
                 isf_base        = isf_ef,
                 icr             = icr,
                 n               = 3_000,
+                sigma_g0        = sigma_g0,   # incertidumbre Kalman del punto de partida
             )
 
             predictions[f"+{delta_min}min"] = {
@@ -567,10 +602,11 @@ def api_predict_glucose():
         return jsonify({
             "ok":             True,
             "g_actual":       g_actual,
+            "g_raw":          g_raw,
             "roc":            roc,
             "arrow":          snap["arrow"],
             "iob_now":        iob_now,
-            "iob_basal":      iob_basal_now,   # componente basal del IOB
+            "iob_basal":      iob_basal_now,
             "cob_now":        cob_now,
             "isf_ef":         isf_ef,
             "icr":            icr,
@@ -579,6 +615,15 @@ def api_predict_glucose():
             "confianza_baja": confianza_baja,
             "bias":           bias,
             "accuracy":       accuracy,
+            "kalman": {
+                "active":   kalman_active,
+                "G":        round(kalman["G"], 1)      if kalman_active else None,
+                "sigma_G":  kalman.get("sigma_G")      if kalman_active else None,
+                "v":        round(kalman["v"], 3)      if kalman_active else None,
+                "sigma_v":  kalman.get("sigma_v")      if kalman_active else None,
+                "gain":     kalman.get("kalman_gain")  if kalman_active else None,
+                "dt_min":   kalman.get("dt_since_update") if kalman_active else None,
+            },
             "timestamp":      now.strftime("%H:%M:%S"),
         })
 
