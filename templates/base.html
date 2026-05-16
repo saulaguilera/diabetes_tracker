@@ -681,13 +681,6 @@
   <a href="{{ url_for('actividad') }}" class="nav-link {% if 'actividad' in request.endpoint %}active{% endif %}">
     <i class="bi bi-bicycle"></i> Actividad física
   </a>
-  <a href="{{ url_for('alimentos') }}" class="nav-link {% if 'alimento' in request.endpoint %}active{% endif %}">
-    <i class="bi bi-journal-bookmark-fill"></i> Mis alimentos
-  </a>
-  <a href="{{ url_for('comidas_grupos') }}" class="nav-link {% if request.endpoint == 'comidas_grupos' %}active{% endif %}">
-    <i class="bi bi-tags-fill"></i> Grupos de comidas
-  </a>
-
   <div class="nav-section">Análisis</div>
   <a href="{{ url_for('agp') }}" class="nav-link {% if request.endpoint == 'agp' %}active{% endif %}">
     <i class="bi bi-layers-fill"></i> AGP

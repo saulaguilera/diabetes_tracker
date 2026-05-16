@@ -34,9 +34,26 @@
 </div>
 {% else %}
 
-<!-- ══════════════════════════════════════════════════════
-     SECCIÓN 1: RATIO CH:INSULINA
-══════════════════════════════════════════════════════ -->
+<!-- ── Tabs de navegación ─────────────────────────────────────────────── -->
+<div class="pat-tabs" role="tablist">
+  <button class="pat-tab" data-tab="postprandial" role="tab">
+    <i class="bi bi-activity"></i>
+    <span>Postprandial</span>
+    {% if postprandial.datos %}<span class="pat-tab-badge">{{ postprandial.datos | length }}</span>{% endif %}
+  </button>
+  <button class="pat-tab" data-tab="ratio" role="tab">
+    <i class="bi bi-calculator"></i>
+    <span>Ratio Insulina</span>
+    {% if ratio_datos %}<span class="pat-tab-badge">{{ ratio_datos | length }}</span>{% endif %}
+  </button>
+  <button class="pat-tab" data-tab="horario" role="tab">
+    <i class="bi bi-clock-history"></i>
+    <span>Por hora</span>
+  </button>
+</div>
+
+<!-- ═══════════════════════ TAB: RATIO CH:INSULINA ═══════════════════════ -->
+<div class="pat-panel" id="tab-ratio">
 <section class="pat-section">
   <div class="pat-section-header">
     <div class="pat-section-icon" style="background:rgba(245,158,11,.12);color:#d97706;">
@@ -143,10 +160,10 @@
   </details>
   {% endif %}
 </section>
+</div><!-- /tab-ratio -->
 
-<!-- ══════════════════════════════════════════════════════
-     SECCIÓN 2: ANÁLISIS POSTPRANDIAL (iAUC)
-══════════════════════════════════════════════════════ -->
+<!-- ═══════════════════════ TAB: POSTPRANDIAL iAUC ══════════════════════ -->
+<div class="pat-panel" id="tab-postprandial">
 <section class="pat-section">
   <div class="pat-section-header">
     <div class="pat-section-icon" style="background:rgba(34,197,94,.12);color:#16a34a;">
@@ -327,10 +344,10 @@
 
   {% endif %}
 </section>
+</div><!-- /tab-postprandial -->
 
-<!-- ══════════════════════════════════════════════════════
-     SECCIÓN 3: SENSIBILIDAD HORARIA
-══════════════════════════════════════════════════════ -->
+<!-- ═══════════════════════ TAB: SENSIBILIDAD HORARIA ═══════════════════ -->
+<div class="pat-panel" id="tab-horario">
 <section class="pat-section">
   <div class="pat-section-header">
     <div class="pat-section-icon" style="background:rgba(139,92,246,.12);color:#7c3aed;">
@@ -391,6 +408,7 @@
   </div>
   {% endif %}
 </section>
+</div><!-- /tab-horario -->
 
 {% endif %}
 {% endblock %}
@@ -555,6 +573,38 @@
 .range-pill { border-color: rgba(99,102,241,.3); color: #6366f1; background: rgba(99,102,241,.06); }
 .range-pill:hover { background: rgba(99,102,241,.15); }
 
+/* ── Tabs ── */
+.pat-tabs {
+  display: flex; gap: .4rem; margin-bottom: 1rem;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 16px; padding: .35rem;
+}
+.pat-tab {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  gap: .4rem; padding: .5rem .6rem; border-radius: 12px;
+  border: none; background: none; cursor: pointer;
+  font-size: .8rem; font-weight: 600; color: var(--text-muted);
+  transition: all .18s; white-space: nowrap;
+}
+.pat-tab:hover { background: var(--surface); color: var(--text); }
+.pat-tab.active {
+  background: var(--surface); color: var(--text);
+  box-shadow: 0 1px 6px rgba(0,0,0,.15);
+}
+.pat-tab i { font-size: .9rem; }
+.pat-tab span { display: none; }
+@media (min-width: 480px) { .pat-tab span { display: inline; } }
+.pat-tab-badge {
+  font-size: .62rem; font-weight: 800; padding: .1em .45em;
+  border-radius: 20px; background: rgba(99,102,241,.15);
+  color: #6366f1; line-height: 1.4;
+}
+.pat-tab.active .pat-tab-badge { background: rgba(99,102,241,.25); }
+
+/* Panels */
+.pat-panel { display: none; }
+.pat-panel.active { display: block; }
+
 /* Botón backfill */
 .pat-backfill-btn {
   display: inline-flex; align-items: center; gap: .4rem;
@@ -569,6 +619,35 @@
 <script>
 const RATIO_DATOS   = {{ ratio_datos | tojson }};
 const POSTPRANDIAL  = {{ postprandial | tojson }};
+
+// ── Tab switcher ─────────────────────────────────────────────────────
+(function() {
+  const STORAGE_KEY = 'pat-active-tab';
+  const DEFAULT_TAB = POSTPRANDIAL.datos && POSTPRANDIAL.datos.length
+                      ? 'postprandial' : (RATIO_DATOS.length ? 'ratio' : 'horario');
+
+  function activateTab(name) {
+    document.querySelectorAll('.pat-tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.tab === name);
+      t.setAttribute('aria-selected', t.dataset.tab === name);
+    });
+    document.querySelectorAll('.pat-panel').forEach(p => {
+      p.classList.toggle('active', p.id === 'tab-' + name);
+    });
+    try { localStorage.setItem(STORAGE_KEY, name); } catch(e) {}
+    // Forzar resize de Plotly para que los charts se rendericen al hacerse visibles
+    setTimeout(() => { if (window.Plotly) Plotly.Plots.resize(document.body); }, 50);
+  }
+
+  document.querySelectorAll('.pat-tab').forEach(btn => {
+    btn.addEventListener('click', () => activateTab(btn.dataset.tab));
+  });
+
+  // Restaurar tab guardado, o usar el default
+  let saved = null;
+  try { saved = localStorage.getItem(STORAGE_KEY); } catch(e) {}
+  activateTab(saved || DEFAULT_TAB);
+})();
 
 // ── Backfill fibra e ÍG ──────────────────────────────────────────────
 async function backfillFiberGi() {

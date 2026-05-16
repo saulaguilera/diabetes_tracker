@@ -15,8 +15,11 @@
     <button class="btn-list-secondary" id="btn-autocategorizar" title="Auto-categorizar comidas">
       <i class="bi bi-tags"></i> <span class="d-none d-sm-inline">Categorizar</span>
     </button>
-    <a href="{{ url_for('comidas_grupos') }}" class="btn-list-secondary">
-      <i class="bi bi-bar-chart-steps"></i> <span class="d-none d-sm-inline">Por grupos</span>
+    <a href="{{ url_for('comidas_grupos') }}" class="btn-list-secondary" title="Ver por grupos y categorías">
+      <i class="bi bi-bar-chart-steps"></i> <span class="d-none d-sm-inline">Grupos</span>
+    </a>
+    <a href="{{ url_for('alimentos') }}" class="btn-list-secondary" title="Mi base de alimentos frecuentes">
+      <i class="bi bi-journal-bookmark-fill"></i> <span class="d-none d-sm-inline">Alimentos</span>
     </a>
     <a href="{{ url_for('comida_nueva') }}" class="btn-list-add btn-add-success">
       <i class="bi bi-plus-lg"></i> Nueva comida
