@@ -226,6 +226,12 @@ def quicklog():
         # Comida
         if request.form.get("reg_comida"):
             nombre = request.form.get("comida_nombre", "").strip()
+            # Auto-generar nombre desde ingredientes si no se proporcionó
+            if not nombre:
+                comp_names = [n.strip() for n in request.form.getlist("comp_name[]") if n.strip()]
+                nombre = ", ".join(comp_names[:3]) or "Comida"
+                if len(comp_names) > 3:
+                    nombre += f" y {len(comp_names)-3} más"
             if nombre:
                 comida = Meal(
                     timestamp=ts,

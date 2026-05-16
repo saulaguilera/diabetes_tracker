@@ -100,15 +100,16 @@ def api_alimentos_buscar():
         .limit(10).all()
     )
     return jsonify([{
-        "id":      i.id,
-        "name":    i.name,
+        "id":         i.id,
+        "name":       i.name,
         "serving_desc": i.serving_desc or "",
-        "carbs":   i.carbs_per_serving,
-        "fat":     i.fat_per_serving,
-        "protein": i.protein_per_serving,
-        "calories":i.calories_per_serving,
-        "fiber":   i.fiber_per_serving or 0,
-        "gi":      i.glycemic_index,
+        "serving_g":  i.serving_g or 100,   # gramos de la porción de referencia
+        "carbs":      i.carbs_per_serving,
+        "fat":        i.fat_per_serving,
+        "protein":    i.protein_per_serving,
+        "calories":   i.calories_per_serving,
+        "fiber":      i.fiber_per_serving or 0,
+        "gi":         i.glycemic_index,
     } for i in items])
 
 

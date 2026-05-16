@@ -2,7 +2,6 @@
 {% block title %}Quick Log — DiabetesTracker{% endblock %}
 
 {% block content %}
-
 <div class="list-page-header mb-3">
   <div>
     <h1 class="list-page-title">
@@ -11,234 +10,215 @@
       </span>
       Quick Log
     </h1>
-    <p class="list-page-sub">Registrá todo de una sola vez</p>
   </div>
   <a href="{{ url_for('dashboard') }}" class="btn-list-secondary">
-    <i class="bi bi-x-lg"></i> Cancelar
+    <i class="bi bi-x-lg"></i>
   </a>
 </div>
 
-{# IOB / COB context banner #}
+{# Banner contexto activo #}
 {% if kinetics and (kinetics.iob > 0.05 or kinetics.cob > 1) %}
-<div class="ql-kinetics-banner mb-3">
-  <i class="bi bi-activity me-1"></i>
-  <strong>Contexto activo:</strong>
+<div class="ql-ctx-banner mb-3">
+  <i class="bi bi-activity"></i>
   {% if kinetics.iob > 0.05 %}
-    <span class="kin-tag kin-tag-insulin">{{ "%.1f"|format(kinetics.iob) }} U IOB</span>
+    <span class="ql-ctx-tag ctx-insulin">{{ "%.1f"|format(kinetics.iob) }}U IOB</span>
   {% endif %}
   {% if kinetics.cob > 1 %}
-    <span class="kin-tag kin-tag-carbs">{{ kinetics.cob | int }}g COB</span>
+    <span class="ql-ctx-tag ctx-carbs">{{ kinetics.cob|int }}g COB</span>
   {% endif %}
   {% if kinetics.roc is not none %}
-    <span class="kin-tag kin-tag-roc">{{ kinetics.arrow }} glucosa</span>
+    <span class="ql-ctx-tag ctx-roc">{{ kinetics.arrow }} glucosa</span>
   {% endif %}
-  <span class="kin-hint">— consideralo al calcular el bolo</span>
 </div>
 {% endif %}
 
-<form method="POST" action="{{ url_for('quicklog') }}" id="quicklog-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<form method="POST" action="{{ url_for('quicklog') }}" id="ql-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="fecha" id="ql-fecha" value="{{ fecha }}">
+  <input type="hidden" name="hora"  id="ql-hora"  value="{{ hora }}">
 
-  <!-- Fecha y hora compartida -->
-  <div class="ql-section mb-3">
-    <div class="ql-section-header">
-      <i class="bi bi-clock-fill text-secondary"></i>
-      <span>Cuándo</span>
-    </div>
-    <div class="ql-section-body">
-      <div class="row g-2 align-items-center">
-        <div class="col-5">
-          <input type="date" name="fecha" id="fecha" class="form-control form-control-sm"
-                 value="{{ fecha }}" required>
-        </div>
-        <div class="col-4">
-          <input type="time" name="hora" id="hora" class="form-control form-control-sm"
-                 value="{{ hora }}" required>
-        </div>
-        <div class="col-3">
-          <button type="button" class="btn btn-sm btn-outline-secondary w-100" onclick="setNow()">
-            Ahora
-          </button>
-        </div>
+  {# ── Selector de tipo ──────────────────────────────────────────────────── #}
+  <div class="ql-selector-row mb-3">
+    <button type="button" class="ql-chip" id="chip-glucemia"
+            onclick="toggleCard('glucemia')">
+      <i class="bi bi-droplet-fill"></i>
+      <span>Glucemia</span>
+    </button>
+    <button type="button" class="ql-chip" id="chip-comida"
+            onclick="toggleCard('comida')">
+      <i class="bi bi-egg-fried"></i>
+      <span>Comida</span>
+    </button>
+    <button type="button" class="ql-chip" id="chip-insulina"
+            onclick="toggleCard('insulina')">
+      <i class="bi bi-capsule-pill"></i>
+      <span>Insulina</span>
+    </button>
+  </div>
+
+  {# Mensaje inicial si nada seleccionado #}
+  <p class="ql-hint" id="ql-hint">
+    Tocá lo que querés registrar
+  </p>
+
+  {# ── Hora (colapsable) ─────────────────────────────────────────────────── #}
+  <div id="ql-time-section" style="display:none;">
+    <div class="ql-time-row mb-3">
+      <button type="button" class="ql-time-badge" id="ql-time-badge"
+              onclick="toggleTimeEdit()">
+        <i class="bi bi-clock"></i>
+        <span id="ql-time-label">Ahora</span>
+        <i class="bi bi-chevron-down" style="font-size:.65rem;opacity:.5;"></i>
+      </button>
+      <div id="ql-time-edit" style="display:none;" class="ql-time-edit">
+        <input type="date" id="ql-fecha-vis" class="form-control form-control-sm"
+               value="{{ fecha }}" oninput="qlSyncTime()">
+        <input type="time" id="ql-hora-vis"  class="form-control form-control-sm"
+               value="{{ hora }}"  oninput="qlSyncTime()">
+        <button type="button" class="ql-now-btn" onclick="setNow()">Ahora</button>
       </div>
     </div>
   </div>
 
-  <!-- ── GLUCEMIA ── -->
-  <div class="ql-card mb-3" id="card-glucemia">
-    <div class="ql-header" onclick="toggleSection('glucemia')" style="cursor:pointer;">
+  {# ── Card: Glucemia ────────────────────────────────────────────────────── #}
+  <div class="ql-card mb-3" id="card-glucemia" style="display:none;">
+    <input type="hidden" name="reg_glucemia" value="1">
+    <div class="ql-card-head">
       <div class="ql-card-icon" style="background:rgba(59,130,246,.12);">
         <i class="bi bi-droplet-fill text-primary"></i>
       </div>
-      <div class="ql-card-info">
-        <div class="ql-card-title">Glucemia</div>
-        <div class="ql-card-sub" id="glucemia-preview">
-          {% if ultima_glucemia %}
-            Última: {{ ultima_glucemia.value_mgdl|int }} mg/dL · {{ ultima_glucemia.timestamp | local_ts('hm') }}
-          {% else %}Sin registros{% endif %}
-        </div>
-      </div>
-      <div class="form-check form-switch mb-0 ms-auto" onclick="event.stopPropagation();">
-        <input class="form-check-input" type="checkbox" name="reg_glucemia"
-               id="toggle-glucemia" checked style="cursor:pointer;">
-      </div>
+      <span class="ql-card-title">Glucemia</span>
+      <button type="button" class="ql-card-close" onclick="toggleCard('glucemia')">
+        <i class="bi bi-x-lg"></i>
+      </button>
     </div>
-
-    <div id="body-glucemia" class="ql-body">
-      <!-- Valor grande + badge -->
-      <div class="ql-value-row mb-2">
-        <div class="ql-input-big">
+    <div class="ql-card-body">
+      <div class="ql-big-row mb-2">
+        <div class="ql-big-input">
           <input type="number" name="glucemia_valor" id="glucemia_valor"
-                 class="ql-num-input" placeholder="—"
-                 min="20" max="600" step="1">
-          <span class="ql-num-unit">mg/dL</span>
+                 class="ql-big-num" placeholder="—"
+                 min="20" max="600" step="1"
+                 oninput="onGlucemiaChange(this.value)">
+          <span class="ql-big-unit">mg/dL</span>
         </div>
-        <div id="glucemia-badge" class="ql-status-badge">
-          <span id="glucemia-estado">—</span>
-        </div>
+        <span class="ql-estado-badge" id="glucemia-badge">—</span>
       </div>
-      <!-- Quick values -->
-      <div class="ql-quick-row mb-2">
-        {% for v in [70, 80, 100, 120, 140, 160, 180, 220, 280] %}
-        <button type="button" class="ql-quick-btn"
+      <div class="ql-chips-row mb-1">
+        {% for v in [70, 80, 90, 100, 120, 140, 160, 180, 220, 280] %}
+        <button type="button" class="ql-val-chip"
                 onclick="setGlucemia({{ v }})">{{ v }}</button>
         {% endfor %}
       </div>
-      <input type="text" name="glucemia_notas" class="form-control form-control-sm"
-             placeholder="Notas: ayuno, post-comida, corrección..." style="font-size:.8rem;">
+      {% if ultima_glucemia %}
+      <div class="ql-prev-hint">
+        Última: {{ ultima_glucemia.value_mgdl|int }} mg/dL
+        · {{ ultima_glucemia.timestamp | local_ts('hm') }}
+      </div>
+      {% endif %}
     </div>
   </div>
 
-  <!-- ── COMIDA ── -->
-  <div class="ql-card mb-3" id="card-comida">
-    <div class="ql-header" onclick="toggleSection('comida')" style="cursor:pointer;">
+  {# ── Card: Comida ──────────────────────────────────────────────────────── #}
+  <div class="ql-card mb-3" id="card-comida" style="display:none;">
+    <input type="hidden" name="reg_comida" value="1">
+    <input type="hidden" name="comida_nombre" id="comida_nombre" value="">
+    <input type="hidden" name="carbs_g"   id="total-carbs"   value="0">
+    <input type="hidden" name="protein_g" id="total-protein" value="0">
+    <input type="hidden" name="fat_g"     id="total-fat"     value="0">
+    <input type="hidden" name="calories"  id="total-cal"     value="0">
+    <div class="ql-card-head">
       <div class="ql-card-icon" style="background:rgba(34,197,94,.12);">
         <i class="bi bi-egg-fried text-success"></i>
       </div>
-      <div class="ql-card-info">
-        <div class="ql-card-title">Comida</div>
-        <div class="ql-card-sub" id="comida-preview">No registrada</div>
+      <div style="flex:1;">
+        <span class="ql-card-title">Comida</span>
+        <span class="ql-carbs-badge" id="total-carbs-badge" style="display:none;"></span>
       </div>
-      <div class="form-check form-switch mb-0 ms-auto" onclick="event.stopPropagation();">
-        <input class="form-check-input" type="checkbox" name="reg_comida"
-               id="toggle-comida" checked style="cursor:pointer;">
-      </div>
-    </div>
-
-    <div id="body-comida" class="ql-body">
-
-      <!-- Nombre del plato -->
-      <div class="mb-2">
-        <input type="text" name="comida_nombre" id="comida_nombre_hidden"
-               class="form-control form-control-sm"
-               placeholder="Nombre del plato (ej. Almuerzo, Desayuno...)" required>
-      </div>
-
-      <!-- Ingredientes compactos -->
-      <div class="ql-ing-header">
-        <span class="ql-ing-label">Ingredientes</span>
-        <span class="ql-ing-total" id="ql-total-badge">0g CH</span>
-      </div>
-
-      <div id="ql-comp-list"></div>
-
-      <button type="button" class="ql-add-ing-btn" onclick="qlAddIngrediente()">
-        <i class="bi bi-plus-circle"></i> Agregar ingrediente
+      <button type="button" class="ql-card-close" onclick="toggleCard('comida')">
+        <i class="bi bi-x-lg"></i>
       </button>
-
-      <!-- Totales hidden (para el backend) -->
-      <input type="hidden" name="carbs_g"   id="ql-total-carbs">
-      <input type="hidden" name="protein_g" id="ql-total-protein">
-      <input type="hidden" name="fat_g"     id="ql-total-fat">
-      <input type="hidden" name="calories"  id="ql-total-cal">
-
     </div>
-  </div>
-
-  <!-- Bolo sugerido -->
-  <div id="bolo-sugerencia" class="ql-bolo-box mb-3" style="display:none;">
-    <div class="ql-bolo-inner">
-      <div class="ql-bolo-icon">⚡</div>
-      <div class="ql-bolo-info">
-        <div class="ql-bolo-label">Bolo sugerido</div>
-        <div id="bolo-detalle" class="ql-bolo-detail"></div>
+    <div class="ql-card-body">
+      {# Buscador de alimentos #}
+      <div class="ql-search-wrap mb-2">
+        <div class="ql-search-row">
+          <i class="bi bi-search ql-search-icon"></i>
+          <input type="text" id="food-search" class="ql-search-input"
+                 placeholder="Buscar alimento..." autocomplete="off">
+        </div>
+        <div class="ql-drop" id="food-drop" style="display:none;"></div>
       </div>
-      <div id="bolo-valor" class="ql-bolo-val"></div>
-    </div>
-    <div class="ql-bolo-hint">
-      Basado en tu ISF y ratio I:CH ·
-      <a href="{{ url_for('calculadora') }}">Configurar</a>
+      {# Lista de ingredientes agregados #}
+      <div id="ing-list"></div>
     </div>
   </div>
 
-  <!-- ── INSULINA ── -->
-  <div class="ql-card mb-4" id="card-insulina">
-    <div class="ql-header" onclick="toggleSection('insulina')" style="cursor:pointer;">
+  {# ── Bolo sugerido (aparece entre comida e insulina) ────────────────────── #}
+  <div class="ql-bolo-banner mb-3" id="bolo-banner" style="display:none;">
+    <div class="ql-bolo-left">
+      <span class="ql-bolo-icon">⚡</span>
+      <div>
+        <div class="ql-bolo-title">Bolo sugerido</div>
+        <div class="ql-bolo-detail" id="bolo-detail"></div>
+      </div>
+    </div>
+    <div class="ql-bolo-right">
+      <span class="ql-bolo-val" id="bolo-val"></span>
+      <button type="button" class="ql-bolo-apply" id="bolo-apply"
+              onclick="aplicarBolo()">
+        Usar <i class="bi bi-arrow-right"></i>
+      </button>
+    </div>
+  </div>
+
+  {# ── Card: Insulina ────────────────────────────────────────────────────── #}
+  <div class="ql-card mb-3" id="card-insulina" style="display:none;">
+    <input type="hidden" name="reg_insulina" value="1">
+    <div class="ql-card-head">
       <div class="ql-card-icon" style="background:rgba(245,158,11,.12);">
         <i class="bi bi-capsule-pill text-warning"></i>
       </div>
-      <div class="ql-card-info">
-        <div class="ql-card-title">Insulina bolo</div>
-        <div class="ql-card-sub" id="insulina-preview">No registrada</div>
-      </div>
-      <div class="form-check form-switch mb-0 ms-auto" onclick="event.stopPropagation();">
-        <input class="form-check-input" type="checkbox" name="reg_insulina"
-               id="toggle-insulina" checked style="cursor:pointer;">
-      </div>
+      <span class="ql-card-title">Insulina</span>
+      <button type="button" class="ql-card-close" onclick="toggleCard('insulina')">
+        <i class="bi bi-x-lg"></i>
+      </button>
     </div>
-
-    <div id="body-insulina" class="ql-body">
-      <div class="ql-value-row mb-2">
-        <div class="ql-input-big">
+    <div class="ql-card-body">
+      <div class="ql-big-row mb-2">
+        <div class="ql-big-input">
           <input type="number" name="insulina_units" id="insulina_units"
-                 class="ql-num-input" placeholder="—"
+                 class="ql-big-num" placeholder="—"
                  min="0.5" max="80" step="0.5"
-                 oninput="updateInsulinaPreview()">
-          <span class="ql-num-unit">U</span>
+                 oninput="onInsulinaChange()">
+          <span class="ql-big-unit">U</span>
         </div>
-        <input type="text" name="insulina_brand" class="form-control form-control-sm"
-               placeholder="Marca: Novorapid, Humalog..." style="flex:1;">
       </div>
-      <div class="ql-quick-row mb-3">
+      <div class="ql-chips-row mb-3">
         {% for u in [1, 2, 3, 4, 5, 6, 7, 8, 10, 12] %}
-        <button type="button" class="ql-quick-btn ql-quick-btn-insulin"
+        <button type="button" class="ql-val-chip ql-val-chip-ins"
                 onclick="setInsulina({{ u }})">{{ u }}U</button>
         {% endfor %}
       </div>
-
-      {# Propósito — dato clave para calibración #}
-      <div class="mb-2">
-        <div style="font-size:.75rem; font-weight:600; text-transform:uppercase;
-                    letter-spacing:.06em; color:var(--text-muted); margin-bottom:.4rem;">
-          ¿Para qué es?
-        </div>
-        <div class="ql-purpose-row">
-          <label class="ql-purpose-chip">
-            <input type="radio" name="purpose" value="comida" checked onchange="qlPurposeChange()">
-            <span><i class="bi bi-egg-fried"></i> Comida</span>
-          </label>
-          <label class="ql-purpose-chip">
-            <input type="radio" name="purpose" value="correccion" onchange="qlPurposeChange()">
-            <span><i class="bi bi-arrow-down-circle"></i> Corrección</span>
-          </label>
-          <label class="ql-purpose-chip">
-            <input type="radio" name="purpose" value="mixto" onchange="qlPurposeChange()">
-            <span><i class="bi bi-intersect"></i> Mixto</span>
-          </label>
-        </div>
+      <div class="ql-purpose-row">
+        {% for val, label, icon in [('comida','Comida','bi-egg-fried'),
+                                     ('correccion','Corrección','bi-arrow-down-circle'),
+                                     ('mixto','Mixto','bi-intersect')] %}
+        <label class="ql-purpose-chip">
+          <input type="radio" name="purpose" value="{{ val }}"
+                 {{ 'checked' if val == 'comida' }}
+                 onchange="qlPurposeChange()">
+          <span><i class="bi {{ icon }}"></i> {{ label }}</span>
+        </label>
+        {% endfor %}
       </div>
-
-      {# Timing — solo para comida/mixto #}
-      <div id="ql-timing-row" class="mb-1">
-        <div style="font-size:.75rem; font-weight:600; text-transform:uppercase;
-                    letter-spacing:.06em; color:var(--text-muted); margin-bottom:.4rem;">
-          ¿Cuánto antes de comer?
-        </div>
-        <div class="ql-purpose-row">
+      <div id="timing-row" class="ql-timing-row mt-2">
+        <span class="ql-timing-label">¿Cuánto antes de comer?</span>
+        <div class="ql-chips-row">
           {% for m in [0, 5, 10, 15, 20, 30] %}
           <label class="ql-purpose-chip ql-timing-chip">
-            <input type="radio" name="pre_meal_min" value="{{ m }}" {{ 'checked' if m == 0 }}>
-            <span>{{ 'Ahora' if m == 0 else m ~ ' min' }}</span>
+            <input type="radio" name="pre_meal_min" value="{{ m }}"
+                   {{ 'checked' if m == 0 }}>
+            <span>{{ 'Ahora' if m == 0 else (m|string + ' min') }}</span>
           </label>
           {% endfor %}
         </div>
@@ -246,17 +226,9 @@
     </div>
   </div>
 
-  <!-- Resumen -->
-  <div id="resumen-box" class="ql-resumen mb-3" style="display:none;">
-    <div class="ql-resumen-title">
-      <i class="bi bi-check2-circle text-success"></i> Se va a registrar:
-    </div>
-    <div id="resumen-items"></div>
-  </div>
-
-  <!-- Submit -->
-  <button type="submit" class="ql-submit-btn">
-    <i class="bi bi-lightning-charge-fill"></i> Registrar todo
+  {# ── Botón submit ─────────────────────────────────────────────────────── #}
+  <button type="submit" class="ql-submit" id="ql-submit" style="display:none;">
+    <i class="bi bi-lightning-charge-fill"></i> Registrar
   </button>
 
 </form>
@@ -265,244 +237,189 @@
 {% block scripts %}
 {{ list_styles() }}
 <style>
-/* ── Quick Log styles ─────────────────────────────────────────────────────── */
-.ql-section {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 14px; overflow: hidden;
-}
-.ql-section-header {
-  display: flex; align-items: center; gap: .5rem;
-  padding: .6rem 1rem; font-size: .8rem; font-weight: 600;
-  color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em;
-  border-bottom: 1px solid var(--border); background: var(--surface2);
-}
-.ql-section-body { padding: .85rem 1rem; }
+/* ── Quick Log v2 ──────────────────────────────────────────────────────── */
 
+/* Selector chips */
+.ql-selector-row {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem;
+}
+.ql-chip {
+  display: flex; flex-direction: column; align-items: center; gap: .35rem;
+  padding: .9rem .5rem; border-radius: 16px;
+  background: var(--surface); border: 2px solid var(--border);
+  color: var(--text-muted); font-size: .82rem; font-weight: 600;
+  cursor: pointer; transition: all .15s; user-select: none;
+}
+.ql-chip i { font-size: 1.4rem; }
+.ql-chip.active {
+  border-color: #6366f1; background: rgba(99,102,241,.08); color: #6366f1;
+}
+#chip-glucemia.active { border-color:#3b82f6; background:rgba(59,130,246,.08); color:#3b82f6; }
+#chip-comida.active   { border-color:#22c55e; background:rgba(34,197,94,.08);  color:#16a34a; }
+#chip-insulina.active { border-color:#f59e0b; background:rgba(245,158,11,.08); color:#d97706; }
+
+/* Hint */
+.ql-hint {
+  text-align: center; color: var(--text-muted); font-size: .85rem;
+  padding: 1.5rem 0; margin: 0;
+}
+
+/* Cards */
 .ql-card {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 14px; overflow: hidden;
-  transition: box-shadow .2s, border-color .2s;
+  border-radius: 16px; overflow: hidden;
+  animation: qlSlideIn .18s ease;
 }
-.ql-card:has(.form-check-input:checked) {
-  border-color: rgba(99,102,241,.35);
-  box-shadow: 0 0 0 3px rgba(99,102,241,.08);
+@keyframes qlSlideIn {
+  from { opacity:0; transform:translateY(-6px); }
+  to   { opacity:1; transform:translateY(0); }
 }
-.ql-card.collapsed { opacity: .5; }
-.ql-card.collapsed .ql-body { display: none; }
-
-.ql-header {
-  display: flex; align-items: center; gap: .85rem;
-  padding: .9rem 1rem; user-select: none;
+.ql-card-head {
+  display: flex; align-items: center; gap: .75rem;
+  padding: .85rem 1rem; border-bottom: 1px solid var(--border);
 }
 .ql-card-icon {
-  width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+  width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 1rem;
 }
-.ql-card-info { flex: 1; min-width: 0; }
-.ql-card-title { font-size: .92rem; font-weight: 700; }
-.ql-card-sub { font-size: .75rem; color: var(--text-muted); margin-top: .05rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-.ql-body { padding: 0 1rem 1rem; border-top: 1px solid var(--border); }
+.ql-card-title { font-size: .92rem; font-weight: 700; flex: 1; }
+.ql-card-close {
+  background: none; border: none; cursor: pointer;
+  color: var(--text-muted); font-size: .9rem; padding: .2rem .4rem;
+  border-radius: 6px; transition: all .12s;
+}
+.ql-card-close:hover { background: rgba(239,68,68,.1); color: #ef4444; }
+.ql-card-body { padding: .9rem 1rem; }
 
 /* Big number input */
-.ql-value-row { display: flex; align-items: center; gap: .75rem; }
-.ql-input-big {
+.ql-big-row { display: flex; align-items: center; gap: .75rem; }
+.ql-big-input {
   display: flex; align-items: baseline; gap: .3rem;
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 12px; padding: .4rem .8rem;
+  background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: 12px; padding: .35rem .8rem;
 }
-.ql-num-input {
-  width: 90px; font-size: 2rem; font-weight: 800; letter-spacing: -2px;
+.ql-big-num {
+  width: 90px; font-size: 2.2rem; font-weight: 800; letter-spacing: -2px;
   background: none; border: none; outline: none; color: var(--text);
   text-align: center;
 }
-.ql-num-unit { font-size: .75rem; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
+.ql-big-unit { font-size: .72rem; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
 
-/* Status badge */
-.ql-status-badge {
-  min-width: 70px; text-align: center;
-  padding: .4rem .6rem; border-radius: 10px;
-  font-size: .9rem; font-weight: 700;
-  background: var(--surface2); color: var(--text-muted);
-  border: 1px solid var(--border); transition: all .2s;
+/* Estado badge */
+.ql-estado-badge {
+  padding: .35rem .65rem; border-radius: 10px; font-size: .88rem; font-weight: 700;
+  background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border);
+  transition: all .15s; white-space: nowrap;
+}
+.ql-carbs-badge {
+  display: inline-block; background: rgba(34,197,94,.12); color: #16a34a;
+  font-size: .72rem; font-weight: 700; padding: .1em .5em;
+  border-radius: 20px; margin-left: .5rem;
 }
 
-/* Quick buttons */
-.ql-quick-row {
-  display: flex; flex-wrap: wrap; gap: .3rem;
-}
-.ql-quick-btn {
-  padding: .2rem .55rem; border-radius: 8px; font-size: .78rem; font-weight: 600;
+/* Value chips (quick pick) */
+.ql-chips-row { display: flex; flex-wrap: wrap; gap: .3rem; }
+.ql-val-chip {
+  padding: .22rem .5rem; border-radius: 8px; font-size: .78rem; font-weight: 600;
   background: var(--surface2); border: 1px solid var(--border);
   color: var(--text-muted); cursor: pointer; transition: all .12s;
 }
-.ql-quick-btn:hover { background: #3b82f6; border-color: #3b82f6; color: #fff; }
-.ql-quick-btn-insulin:hover { background: #f59e0b; border-color: #f59e0b; color: #fff; }
+.ql-val-chip:hover       { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+.ql-val-chip-ins:hover   { background: #f59e0b; border-color: #f59e0b; color: #fff; }
+.ql-val-chip.selected    { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+.ql-val-chip-ins.selected{ background: #f59e0b; border-color: #f59e0b; color: #fff; }
 
-/* Macro input */
-.ql-macro-input label {
-  display: block; font-size: .72rem; font-weight: 600;
-  color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em;
-  margin-bottom: .2rem;
-}
-
-/* Dropdown alimentos */
-.ql-dropdown {
-  position: absolute; top: 100%; left: 0; right: 0; z-index: 1000;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.15);
-  max-height: 220px; overflow-y: auto; margin-top: 2px;
-}
-.ql-dropdown-item {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: .55rem .85rem; font-size: .85rem; cursor: pointer;
-  border-bottom: 1px solid var(--border);
-  transition: background .1s;
-}
-.ql-dropdown-item:last-child { border-bottom: none; }
-.ql-dropdown-item:hover { background: var(--surface2); }
-.ql-dropdown-item strong { font-weight: 600; }
-.ql-dropdown-item small { color: var(--text-muted); }
-
-/* Bolo box */
-.ql-bolo-box {
-  background: rgba(99,102,241,.06);
-  border: 1px solid rgba(99,102,241,.25);
-  border-radius: 14px; padding: .85rem 1rem;
-}
-.ql-bolo-inner { display: flex; align-items: center; gap: .85rem; }
-.ql-bolo-icon  { font-size: 1.5rem; flex-shrink: 0; }
-.ql-bolo-info  { flex: 1; }
-.ql-bolo-label { font-size: .85rem; font-weight: 700; }
-.ql-bolo-detail{ font-size: .75rem; color: var(--text-muted); margin-top: .1rem; }
-.ql-bolo-val   { font-size: 2rem; font-weight: 800; letter-spacing: -1px; }
-.ql-bolo-hint  { font-size: .72rem; color: var(--text-muted); margin-top: .5rem; }
-.ql-bolo-hint a { color: #6366f1; }
-
-/* Resumen */
-.ql-resumen {
-  background: rgba(34,197,94,.06); border: 1px solid rgba(34,197,94,.2);
-  border-radius: 12px; padding: .8rem 1rem;
-}
-.ql-resumen-title { font-size: .82rem; font-weight: 700; margin-bottom: .4rem; }
-.ql-resumen-title i { color: #22c55e; }
-#resumen-items div { font-size: .82rem; margin-bottom: .2rem; }
-
-/* ── Ingredient rows (quicklog) ───────────────────────────────────────── */
-.ql-ing-header {
-  display: flex; justify-content: space-between; align-items: center;
-  margin-bottom: .4rem;
-}
-.ql-ing-label {
-  font-size: .7rem; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .05em; color: var(--text-muted);
-}
-.ql-ing-total {
-  background: rgba(34,197,94,.12); color: #16a34a;
-  font-size: .72rem; font-weight: 700; padding: .1em .55em; border-radius: 20px;
+/* Prev hint */
+.ql-prev-hint {
+  font-size: .72rem; color: var(--text-muted); margin-top: .35rem;
 }
 
-.ql-ing-row {
-  display: flex; align-items: center; gap: .4rem;
+/* Time row */
+.ql-time-row { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.ql-time-badge {
+  display: inline-flex; align-items: center; gap: .35rem;
   background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 10px; padding: .4rem .5rem; margin-bottom: .35rem;
+  border-radius: 20px; padding: .3rem .75rem;
+  font-size: .8rem; font-weight: 600; color: var(--text-muted);
+  cursor: pointer; white-space: nowrap;
 }
-.ql-ing-name-wrap { flex: 1; min-width: 0; position: relative; }
-.ql-ing-macros {
-  display: flex; align-items: center; gap: .3rem; flex-shrink: 0;
+.ql-time-edit { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.ql-time-edit .form-control { width: auto; }
+.ql-now-btn {
+  padding: .25rem .6rem; border-radius: 8px; font-size: .75rem; font-weight: 600;
+  background: none; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer;
 }
-.ql-ing-field {
-  display: flex; align-items: center; gap: .2rem;
-}
-.ql-ing-field input { width: 52px; text-align: center; font-size: .8rem; padding: .2rem .3rem; }
-.ql-ing-opt input   { width: 40px; }
-.qli-unit {
-  font-size: .65rem; color: var(--text-muted); font-weight: 600; white-space: nowrap;
-}
-.ql-ing-remove {
-  background: none; border: none; cursor: pointer;
-  width: 24px; height: 24px; border-radius: 6px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: .85rem; color: var(--text-muted); transition: all .15s;
-}
-.ql-ing-remove:hover { background: rgba(239,68,68,.12); color: #ef4444; }
 
-/* Ingredient search dropdown (reuse ql-dropdown) */
-.ql-ing-drop {
-  position: absolute; top: calc(100% + 2px); left: 0; right: 0;
+/* Food search */
+.ql-search-wrap { position: relative; }
+.ql-search-row {
+  display: flex; align-items: center; gap: .5rem;
+  background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: 10px; padding: .45rem .75rem;
+}
+.ql-search-icon { color: var(--text-muted); font-size: .9rem; flex-shrink: 0; }
+.ql-search-input {
+  flex: 1; background: none; border: none; outline: none;
+  color: var(--text); font-size: .9rem;
+}
+.ql-drop {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 200;
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.12);
-  z-index: 300; max-height: 180px; overflow-y: auto;
+  border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.15);
+  max-height: 220px; overflow-y: auto;
 }
+.ql-drop-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .6rem .9rem; cursor: pointer; border-bottom: 1px solid var(--border);
+  transition: background .1s; font-size: .85rem;
+}
+.ql-drop-item:last-child { border-bottom: none; }
+.ql-drop-item:hover { background: var(--surface2); }
 
-.ql-add-ing-btn {
-  display: flex; align-items: center; gap: .35rem; justify-content: center;
-  width: 100%; padding: .4rem; border-radius: 8px; margin-top: .3rem;
-  background: none; border: 1.5px dashed var(--border); color: var(--text-muted);
-  font-size: .8rem; font-weight: 600; cursor: pointer; transition: all .15s;
+/* Ingredient items */
+.ql-ing-item {
+  display: flex; align-items: center; gap: .5rem;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 10px; padding: .4rem .6rem; margin-bottom: .35rem;
+  animation: qlSlideIn .15s ease;
 }
-.ql-add-ing-btn:hover { border-color: #22c55e; color: #22c55e; }
+.ql-ing-name { flex: 1; font-size: .85rem; font-weight: 600; white-space: nowrap;
+               overflow: hidden; text-overflow: ellipsis; }
+.ql-ing-grams {
+  width: 60px; text-align: center; font-size: .85rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: .2rem .3rem;
+}
+.ql-ing-carbs { font-size: .78rem; font-weight: 700; color: #16a34a; min-width: 44px; text-align: right; }
+.ql-ing-remove {
+  background: none; border: none; cursor: pointer; padding: .1rem .3rem;
+  color: var(--text-muted); border-radius: 6px; transition: all .12s;
+}
+.ql-ing-remove:hover { background: rgba(239,68,68,.1); color: #ef4444; }
 
-@media (max-width: 480px) {
-  .ql-ing-opt { display: none; }  /* ocultar P/G en móvil chico */
+/* Bolo banner */
+.ql-bolo-banner {
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(99,102,241,.07); border: 1.5px solid rgba(99,102,241,.25);
+  border-radius: 14px; padding: .8rem 1rem; gap: .75rem;
+  animation: qlSlideIn .18s ease;
 }
+.ql-bolo-left  { display: flex; align-items: center; gap: .75rem; }
+.ql-bolo-icon  { font-size: 1.4rem; }
+.ql-bolo-title { font-size: .85rem; font-weight: 700; }
+.ql-bolo-detail{ font-size: .72rem; color: var(--text-muted); margin-top: .1rem; }
+.ql-bolo-right { display: flex; align-items: center; gap: .6rem; }
+.ql-bolo-val   { font-size: 1.8rem; font-weight: 800; letter-spacing: -1px; color: #6366f1; }
+.ql-bolo-apply {
+  background: #6366f1; color: #fff; border: none; border-radius: 10px;
+  padding: .35rem .75rem; font-size: .8rem; font-weight: 700; cursor: pointer;
+  white-space: nowrap; transition: background .12s;
+}
+.ql-bolo-apply:hover { background: #4f46e5; }
 
-/* Submit */
-.ql-submit-btn {
-  width: 100%; background: #6366f1; color: #fff; border: none;
-  border-radius: 14px; padding: .9rem; font-size: 1rem; font-weight: 700;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  gap: .5rem; transition: background .15s; margin-bottom: 1rem;
-}
-.ql-submit-btn:hover { background: #4f46e5; }
-
-.ql-estimar-btn {
-  display: inline-flex; align-items: center; gap: .25rem;
-  padding: .18rem .5rem; border-radius: 20px; margin-top: .2rem;
-  background: rgba(99,102,241,.08); border: 1px solid rgba(99,102,241,.25);
-  color: #6366f1; font-size: .68rem; font-weight: 600; cursor: pointer;
-  transition: all .15s; white-space: nowrap;
-}
-.ql-estimar-btn:hover { background: rgba(99,102,241,.18); border-color: #6366f1; }
-.ql-estimar-btn:disabled { opacity: .55; cursor: wait; }
-
-.qli-fibra-msg {
-  font-size: .67rem; color: #0369a1;
-  background: rgba(14,165,233,.1); border: 1px solid rgba(14,165,233,.25);
-  border-radius: 8px; padding: .2rem .5rem; margin-top: .2rem;
-  display: flex; align-items: center; gap: .25rem; flex-wrap: wrap;
-}
-@media (max-width: 768px) {
-  .ql-submit-btn {
-    margin-bottom: 2rem;
-  }
-}
-
-/* Kinetics context banner */
-.ql-kinetics-banner {
-  display: flex; align-items: center; flex-wrap: wrap; gap: .4rem;
-  background: rgba(99,102,241,.07);
-  border: 1px solid rgba(99,102,241,.2);
-  border-radius: 10px; padding: .55rem .85rem;
-  font-size: .82rem; color: var(--text-muted);
-}
-.kin-tag {
-  display: inline-flex; align-items: center;
-  padding: .15rem .5rem; border-radius: 12px;
-  font-weight: 700; font-size: .78rem;
-}
-.kin-tag-insulin { background: rgba(99,102,241,.15); color: #6366f1; }
-.kin-tag-carbs   { background: rgba(34,197,94,.15);  color: #16a34a; }
-.kin-tag-roc     { background: rgba(245,158,11,.15); color: #d97706; }
-.kin-hint        { font-style: italic; opacity: .75; }
-
-/* Purpose + timing chips inside quicklog */
-.ql-purpose-row {
-  display: flex; flex-wrap: wrap; gap: .35rem;
-}
-.ql-purpose-chip {
-  cursor: pointer;
-}
+/* Purpose chips */
+.ql-purpose-row { display: flex; flex-wrap: wrap; gap: .35rem; }
+.ql-purpose-chip { cursor: pointer; }
 .ql-purpose-chip input[type="radio"] { display: none; }
 .ql-purpose-chip span {
   display: inline-flex; align-items: center; gap: .3rem;
@@ -510,362 +427,379 @@
   border: 1.5px solid var(--border); color: var(--text-muted);
   transition: border-color .12s, background .12s, color .12s;
 }
-.ql-purpose-chip:has(input:checked) span {
+.ql-purpose-chip:has(input[value="comida"]:checked) span {
   border-color: #f59e0b; background: rgba(245,158,11,.1); color: #d97706; font-weight: 700;
 }
 .ql-purpose-chip:has(input[value="correccion"]:checked) span {
-  border-color: #ef4444; background: rgba(239,68,68,.09); color: #dc2626;
+  border-color: #ef4444; background: rgba(239,68,68,.09); color: #dc2626; font-weight: 700;
 }
 .ql-purpose-chip:has(input[value="mixto"]:checked) span {
-  border-color: #6366f1; background: rgba(99,102,241,.09); color: #6366f1;
+  border-color: #6366f1; background: rgba(99,102,241,.09); color: #6366f1; font-weight: 700;
 }
+.ql-timing-row { }
+.ql-timing-label { display: block; font-size: .72rem; font-weight: 600; text-transform: uppercase;
+                   letter-spacing: .05em; color: var(--text-muted); margin-bottom: .4rem; }
 .ql-timing-chip:has(input:checked) span {
-  border-color: #6366f1; background: rgba(99,102,241,.1); color: #6366f1;
+  border-color: #6366f1; background: rgba(99,102,241,.1); color: #6366f1; font-weight: 700;
 }
+
+/* Submit */
+.ql-submit {
+  width: 100%; background: #6366f1; color: #fff; border: none;
+  border-radius: 14px; padding: .95rem; font-size: 1rem; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  gap: .5rem; transition: background .15s; margin-bottom: 1.5rem;
+  animation: qlSlideIn .18s ease;
+}
+.ql-submit:hover { background: #4f46e5; }
+
+/* Context banner */
+.ql-ctx-banner {
+  display: flex; align-items: center; flex-wrap: wrap; gap: .4rem;
+  background: rgba(99,102,241,.06); border: 1px solid rgba(99,102,241,.18);
+  border-radius: 10px; padding: .5rem .85rem; font-size: .8rem; color: var(--text-muted);
+}
+.ql-ctx-tag {
+  display: inline-flex; align-items: center; padding: .12rem .45rem;
+  border-radius: 12px; font-weight: 700; font-size: .76rem;
+}
+.ctx-insulin { background: rgba(99,102,241,.15); color: #6366f1; }
+.ctx-carbs   { background: rgba(34,197,94,.15);  color: #16a34a; }
+.ctx-roc     { background: rgba(245,158,11,.15); color: #d97706; }
 </style>
 
 <script>
+/* ── Estado de la UI ────────────────────────────────────────────────────── */
+const activeCards = new Set();
+
+// Ingredientes: [{name, food_id, carbs_base, grams, carbs_g, protein_g, fat_g, cal}]
+let ingredientes = [];
+let boloTimer, searchTimer;
+let boloVal = 0;
+
+/* ── Inicialización ─────────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  setNow();
+  qlPurposeChange();
+
+  // Search
+  const si = document.getElementById('food-search');
+  if (si) {
+    si.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      const q = si.value.trim();
+      if (q.length < 1) { closeDrop(); return; }
+      searchTimer = setTimeout(() => fetchFoods(q), 220);
+    });
+    document.addEventListener('click', e => {
+      if (!e.target.closest('.ql-search-wrap')) closeDrop();
+    });
+  }
+});
+
+/* ── Tiempo ─────────────────────────────────────────────────────────────── */
 function setNow() {
   const n = new Date();
-  document.getElementById('fecha').value = n.toLocaleDateString('sv');
-  document.getElementById('hora').value  = n.toTimeString().slice(0,5);
+  const fecha = n.toLocaleDateString('sv');
+  const hora  = n.toTimeString().slice(0,5);
+  document.getElementById('ql-fecha').value = fecha;
+  document.getElementById('ql-hora').value  = hora;
+  const fv = document.getElementById('ql-fecha-vis');
+  const hv = document.getElementById('ql-hora-vis');
+  if (fv) fv.value = fecha;
+  if (hv) hv.value = hora;
+  updateTimeLabel();
 }
-// Siempre inicializar con hora local del browser (no la UTC del servidor)
-document.addEventListener('DOMContentLoaded', () => { setNow(); qlPurposeChange(); });
+
+function qlSyncTime() {
+  document.getElementById('ql-fecha').value = document.getElementById('ql-fecha-vis').value;
+  document.getElementById('ql-hora').value  = document.getElementById('ql-hora-vis').value;
+  updateTimeLabel();
+}
+
+function updateTimeLabel() {
+  const hora = document.getElementById('ql-hora').value;
+  const now  = new Date().toTimeString().slice(0,5);
+  const lbl  = document.getElementById('ql-time-label');
+  if (lbl) lbl.textContent = Math.abs(timeToMin(hora) - timeToMin(now)) <= 2 ? 'Ahora' : hora;
+}
+
+function timeToMin(t) {
+  const [h,m] = t.split(':').map(Number); return h*60+m;
+}
+
+function toggleTimeEdit() {
+  const edit = document.getElementById('ql-time-edit');
+  if (edit) edit.style.display = edit.style.display === 'none' ? 'flex' : 'none';
+}
+
+/* ── Cards ──────────────────────────────────────────────────────────────── */
+function toggleCard(name) {
+  const chip = document.getElementById('chip-' + name);
+  const card = document.getElementById('card-' + name);
+  if (!chip || !card) return;
+
+  if (activeCards.has(name)) {
+    activeCards.delete(name);
+    chip.classList.remove('active');
+    card.style.display = 'none';
+  } else {
+    activeCards.add(name);
+    chip.classList.add('active');
+    card.style.display = 'block';
+  }
+  updateUI();
+}
+
+function updateUI() {
+  const any = activeCards.size > 0;
+  document.getElementById('ql-hint').style.display          = any ? 'none' : '';
+  document.getElementById('ql-time-section').style.display  = any ? '' : 'none';
+  document.getElementById('ql-submit').style.display        = any ? '' : 'none';
+  if (activeCards.has('comida')) sugerirBolo();
+  else document.getElementById('bolo-banner').style.display = 'none';
+}
+
+/* ── Glucemia ───────────────────────────────────────────────────────────── */
+function setGlucemia(v) {
+  document.getElementById('glucemia_valor').value = v;
+  onGlucemiaChange(v);
+  // deselect other chips
+  document.querySelectorAll('#card-glucemia .ql-val-chip').forEach(b =>
+    b.classList.toggle('selected', parseInt(b.textContent) === v));
+}
+
+function onGlucemiaChange(val) {
+  val = parseFloat(val);
+  const badge = document.getElementById('glucemia-badge');
+  if (isNaN(val)) { badge.textContent = '—'; badge.style.cssText = ''; return; }
+  if (val < 70) {
+    badge.textContent = '↓ Hipo';
+    badge.style.cssText = 'background:rgba(239,68,68,.12);color:#ef4444;border-color:rgba(239,68,68,.3)';
+  } else if (val > 180) {
+    badge.textContent = '↑ Hiper';
+    badge.style.cssText = 'background:rgba(249,115,22,.12);color:#f97316;border-color:rgba(249,115,22,.3)';
+  } else {
+    badge.textContent = '✓ OK';
+    badge.style.cssText = 'background:rgba(34,197,94,.12);color:#22c55e;border-color:rgba(34,197,94,.3)';
+  }
+  sugerirBolo();
+}
+
+/* ── Insulina ───────────────────────────────────────────────────────────── */
+function setInsulina(u) {
+  document.getElementById('insulina_units').value = u;
+  document.querySelectorAll('#card-insulina .ql-val-chip').forEach(b =>
+    b.classList.toggle('selected', parseFloat(b.textContent) === u));
+}
+
+function onInsulinaChange() {
+  const u = parseFloat(document.getElementById('insulina_units').value);
+  document.querySelectorAll('#card-insulina .ql-val-chip').forEach(b =>
+    b.classList.toggle('selected', parseFloat(b.textContent) === u));
+}
 
 function qlPurposeChange() {
   const purpose = document.querySelector('[name=purpose]:checked')?.value;
-  const timingRow = document.getElementById('ql-timing-row');
-  if (timingRow) {
-    timingRow.style.display = (purpose === 'comida' || purpose === 'mixto') ? '' : 'none';
-  }
+  const tr = document.getElementById('timing-row');
+  if (tr) tr.style.display = (purpose === 'comida' || purpose === 'mixto') ? '' : 'none';
 }
 
-function toggleSection(section, force) {
-  const card   = document.getElementById('card-' + section);
-  const toggle = document.getElementById('toggle-' + section);
-  const enabled = force !== undefined ? force : !card.classList.contains('collapsed');
-  card.classList.toggle('collapsed', !enabled);
-  toggle.checked = enabled;
-  updateResumen();
-}
-
-function setGlucemia(v) {
-  document.getElementById('glucemia_valor').value = v;
-  updateGlucemiaBadge(v);
-  sugerirBolo();
-}
-
-function setInsulina(u) {
-  document.getElementById('insulina_units').value = u;
-  updateInsulinaPreview();
-}
-
-function updateGlucemiaBadge(val) {
-  const badge  = document.getElementById('glucemia-badge');
-  const estado = document.getElementById('glucemia-estado');
-  val = parseFloat(val);
-  if (isNaN(val)) {
-    estado.textContent = '—'; badge.style.cssText = '';
-    return;
-  }
-  if (val < 70) {
-    estado.textContent = '↓ Hipo';
-    badge.style.cssText = 'background:rgba(239,68,68,.12);color:#ef4444;border-color:rgba(239,68,68,.3)';
-  } else if (val > 180) {
-    estado.textContent = '↑ Hiper';
-    badge.style.cssText = 'background:rgba(249,115,22,.12);color:#f97316;border-color:rgba(249,115,22,.3)';
-  } else {
-    estado.textContent = '✓ OK';
-    badge.style.cssText = 'background:rgba(34,197,94,.12);color:#22c55e;border-color:rgba(34,197,94,.3)';
-  }
-  document.getElementById('glucemia-preview').textContent = val + ' mg/dL';
-  updateResumen();
-}
-
-document.getElementById('glucemia_valor').addEventListener('input', function() {
-  updateGlucemiaBadge(this.value);
-  sugerirBolo();
-});
-
-function updateComidaPreview() {
-  const n = document.getElementById('comida_nombre_hidden').value.trim();
-  const c = parseFloat(document.getElementById('ql-total-carbs').value) || 0;
-  const rows = document.querySelectorAll('.ql-ing-row').length;
-  document.getElementById('comida-preview').textContent =
-    n ? (n + (rows ? ` · ${rows} ing., ${Math.round(c)}g CH` : '')) : 'No registrada';
-  updateResumen();
-}
-
-function updateInsulinaPreview() {
-  const u = document.getElementById('insulina_units').value;
-  document.getElementById('insulina-preview').textContent = u ? u + ' U bolo' : 'No registrada';
-  updateResumen();
-}
-
-let boloTimer;
+/* ── Bolo sugerido ──────────────────────────────────────────────────────── */
 async function sugerirBolo() {
-  const glucemia = document.getElementById('glucemia_valor').value;
-  const carbs    = document.getElementById('ql-total-carbs').value || 0;
-  const box      = document.getElementById('bolo-sugerencia');
-  const tieneG   = document.getElementById('toggle-glucemia').checked && glucemia;
-  const tieneC   = document.getElementById('toggle-comida').checked && carbs > 0;
-  if (!tieneG && !tieneC) { box.style.display = 'none'; return; }
+  const glucemia = parseFloat(document.getElementById('glucemia_valor')?.value) || 0;
+  const carbs    = parseFloat(document.getElementById('total-carbs')?.value) || 0;
+  const box      = document.getElementById('bolo-banner');
+
+  if (!glucemia && !carbs) { box.style.display = 'none'; return; }
+  if (!activeCards.has('comida') && !activeCards.has('glucemia')) { box.style.display = 'none'; return; }
+
   clearTimeout(boloTimer);
   boloTimer = setTimeout(async () => {
     try {
       const res = await fetch(`/api/calculadora/correccion?glucemia=${glucemia||100}&carbs=${carbs||0}`);
       const d   = await res.json();
-      if (d.error || d.total_sugerido === undefined) { box.style.display = 'none'; return; }
-      const col = d.total_sugerido >= 6 ? '#ef4444' : d.total_sugerido >= 3 ? '#f59e0b' : '#22c55e';
-      box.style.display = '';
-      document.getElementById('bolo-valor').textContent  = d.total_sugerido + ' U';
-      document.getElementById('bolo-valor').style.color  = col;
-      document.getElementById('bolo-detalle').innerHTML  =
-        (d.bolo_comida_exacto > 0  ? `<span>🍽 Comida: ${d.bolo_comida_exacto.toFixed(1)}U</span>` : '') +
-        (d.correccion_exacta  > 0  ? `<span class="ms-2">🔧 Corrección: ${d.correccion_exacta.toFixed(1)}U</span>` : '');
-      if (document.getElementById('toggle-insulina').checked &&
-          !document.getElementById('insulina_units').value) {
-        document.getElementById('insulina_units').value = d.total_sugerido;
-        updateInsulinaPreview();
+      if (d.error || d.total_sugerido === undefined || d.total_sugerido <= 0) {
+        box.style.display = 'none'; return;
       }
+      boloVal = d.total_sugerido;
+      const col = boloVal >= 6 ? '#ef4444' : boloVal >= 3 ? '#f59e0b' : '#22c55e';
+      document.getElementById('bolo-val').textContent = boloVal + ' U';
+      document.getElementById('bolo-val').style.color = col;
+
+      let det = '';
+      if (d.bolo_comida_exacto > 0)
+        det += `Comida ${d.bolo_comida_exacto.toFixed(1)}U`;
+      if (d.correccion_exacta > 0)
+        det += (det ? ' + ' : '') + `Corrección ${d.correccion_exacta.toFixed(1)}U`;
+      if (d.iob_deduccion > 0)
+        det += ` − IOB ${d.iob_deduccion.toFixed(1)}U`;
+      document.getElementById('bolo-detail').textContent = det;
+      box.style.display = '';
     } catch(e) { box.style.display = 'none'; }
   }, 400);
 }
 
-function updateResumen() {
-  const items = [];
-  if (document.getElementById('toggle-glucemia').checked) {
-    const v = document.getElementById('glucemia_valor').value;
-    if (v) items.push(`<i class="bi bi-droplet-fill text-primary me-1"></i>${v} mg/dL`);
-  }
-  if (document.getElementById('toggle-comida').checked) {
-    const n = document.getElementById('comida_nombre_hidden').value.trim();
-    const c = parseFloat(document.getElementById('ql-total-carbs').value) || 0;
-    const rows = document.querySelectorAll('.ql-ing-row').length;
-    if (n) items.push(`<i class="bi bi-egg-fried text-success me-1"></i>${n}${rows ? ` (${Math.round(c)}g CH, ${rows} ing.)` : ''}`);
-  }
-  if (document.getElementById('toggle-insulina').checked) {
-    const u = document.getElementById('insulina_units').value;
-    if (u) items.push(`<i class="bi bi-capsule-pill text-warning me-1"></i>${u}U bolus`);
-  }
-  const box  = document.getElementById('resumen-box');
-  const list = document.getElementById('resumen-items');
-  if (items.length) {
-    list.innerHTML = items.map(i => `<div>${i}</div>`).join('');
-    box.style.display = '';
-  } else {
-    box.style.display = 'none';
-  }
+function aplicarBolo() {
+  if (!boloVal) return;
+  if (!activeCards.has('insulina')) toggleCard('insulina');
+  setInsulina(boloVal);
+  document.getElementById('bolo-banner').style.display = 'none';
 }
 
-/* ── Ingredientes en quicklog ─────────────────────────────────────────── */
-let qlIdx = 0;
-
-function qlRecalc() {
-  let ch = 0, pr = 0, fa = 0, kc = 0;
-  document.querySelectorAll('.ql-ing-row').forEach(row => {
-    ch += parseFloat(row.querySelector('.qli-carbs').value)    || 0;
-    pr += parseFloat(row.querySelector('.qli-protein').value)  || 0;
-    fa += parseFloat(row.querySelector('.qli-fat').value)      || 0;
-    kc += parseFloat(row.querySelector('.qli-cal').value)      || 0;
-  });
-  document.getElementById('ql-total-carbs').value   = ch.toFixed(1);
-  document.getElementById('ql-total-protein').value = pr.toFixed(1);
-  document.getElementById('ql-total-fat').value     = fa.toFixed(1);
-  document.getElementById('ql-total-cal').value     = kc.toFixed(1);
-  document.getElementById('ql-total-badge').textContent = Math.round(ch) + 'g CH';
-  updateComidaPreview();
-  sugerirBolo();
-}
-
-function qlAddIngrediente(data = {}) {
-  const idx  = qlIdx++;
-  const list = document.getElementById('ql-comp-list');
-  const row  = document.createElement('div');
-  row.className = 'ql-ing-row';
-  row.dataset.idx = idx;
-  row.innerHTML = `
-    <div class="ql-ing-name-wrap position-relative">
-      <input type="text"   name="comp_name[]"    class="form-control form-control-sm qli-name"
-             placeholder="Ingrediente..." value="${esc(data.name||'')}" autocomplete="off">
-      <input type="hidden" name="comp_food_id[]" class="qli-food-id" value="${data.food_id||''}">
-      <div class="ql-ing-drop" id="qli-drop-${idx}" style="display:none;"></div>
-    </div>
-    <div class="ql-ing-macros">
-      <div class="ql-ing-field">
-        <input type="number" name="comp_carbs[]"    class="form-control form-control-sm qli-carbs"
-               placeholder="0" step="0.1" min="0" value="${data.carbs??''}">
-        <span class="qli-unit">g CH</span>
-      </div>
-      <div class="ql-ing-field ql-ing-opt">
-        <input type="number" name="comp_protein[]"  class="form-control form-control-sm qli-protein"
-               placeholder="0" step="0.1" min="0" value="${data.protein??''}">
-        <span class="qli-unit">P</span>
-      </div>
-      <div class="ql-ing-field ql-ing-opt">
-        <input type="number" name="comp_fat[]"      class="form-control form-control-sm qli-fat"
-               placeholder="0" step="0.1" min="0" value="${data.fat??''}">
-        <span class="qli-unit">G</span>
-      </div>
-      <input type="hidden" name="comp_calories[]" class="qli-cal" value="${data.calories??''}">
-      <input type="hidden" name="comp_grams[]"    class="qli-grams" value="">
-    </div>
-    <button type="button" class="ql-ing-remove" onclick="qlRemoveIng(this)" title="Eliminar">
-      <i class="bi bi-x"></i>
-    </button>
-    <button type="button" class="ql-estimar-btn" onclick="qlEstimar(this)" title="Estimar macros">
-      <i class="bi bi-stars"></i> Estimar
-    </button>`;
-
-  list.appendChild(row);
-
-  // Recalc on any numeric input
-  row.querySelectorAll('input[type=number]').forEach(i => i.addEventListener('input', qlRecalc));
-
-  // Search on name input
-  const ni = row.querySelector('.qli-name');
-  const drop = document.getElementById('qli-drop-' + idx);
-  let dt;
-  ni.addEventListener('input', () => {
-    clearTimeout(dt);
-    const q = ni.value.trim();
-    if (q.length < 1) { drop.style.display = 'none'; return; }
-    dt = setTimeout(() => qlFetchFood(q, drop, row), 220);
-  });
-
-  if (!data.name) ni.focus();
-  qlRecalc();
-}
-
-function qlRemoveIng(btn) {
-  btn.closest('.ql-ing-row').remove();
-  qlRecalc();
-}
-
-async function qlEstimar(btn) {
-  const row    = btn.closest('.ql-ing-row');
-  const nombre = row.querySelector('.qli-name').value.trim();
-  const carbs  = parseFloat(row.querySelector('.qli-carbs').value) || 0;
-
-  if (!nombre) { alert('Escribí el nombre del ingrediente primero.'); return; }
-
-  btn.disabled = true;
-  btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
-
-  try {
-    const res  = await fetch(`/api/estimar-macros?nombre=${encodeURIComponent(nombre)}&carbs=${carbs}`);
-    const data = await res.json();
-
-    if (data.error) {
-      btn.innerHTML = '<i class="bi bi-x-circle"></i>';
-      btn.title = data.error;
-      setTimeout(() => { btn.innerHTML = '<i class="bi bi-stars"></i> Estimar'; btn.disabled = false; }, 2000);
-      return;
-    }
-
-    const pField = row.querySelector('.qli-protein');
-    const fField = row.querySelector('.qli-fat');
-    const cField = row.querySelector('.qli-cal');
-    if (!parseFloat(pField.value)) pField.value = data.protein_g;
-    if (!parseFloat(fField.value)) fField.value = data.fat_g;
-    if (!parseFloat(cField.value)) cField.value = data.calories;
-    const carbField = row.querySelector('.qli-carbs');
-    if (carbs === 0 && data.carbs_g > 0 && !parseFloat(carbField.value))
-      carbField.value = data.carbs_g;
-
-    // Badge fibra
-    let fibraMsg = row.querySelector('.qli-fibra-msg');
-    if (data.alta_fibra && data.fibra_g > 0) {
-      if (!fibraMsg) {
-        fibraMsg = document.createElement('div');
-        fibraMsg.className = 'qli-fibra-msg';
-        row.appendChild(fibraMsg);
-      }
-      fibraMsg.innerHTML =
-        `<i class="bi bi-info-circle-fill"></i> ` +
-        `CH totales ${data.carbs_total}g · Fibra ${data.fibra_g}g · <b>CH netos ${data.carbs_g}g</b>`;
-    } else if (fibraMsg) fibraMsg.remove();
-
-    qlRecalc();
-    btn.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
-    btn.title = data.nota || 'estimado';
-    btn.style.color = '#22c55e';
-    setTimeout(() => { btn.innerHTML = '<i class="bi bi-stars"></i> Estimar'; btn.style.color = ''; btn.title = 'Estimar macros'; btn.disabled = false; }, 2500);
-  } catch (e) {
-    btn.innerHTML = '<i class="bi bi-wifi-off"></i>';
-    setTimeout(() => { btn.innerHTML = '<i class="bi bi-stars"></i> Estimar'; btn.disabled = false; }, 2000);
-  }
-}
-
-async function qlFetchFood(q, drop, row) {
+/* ── Búsqueda de alimentos ──────────────────────────────────────────────── */
+async function fetchFoods(q) {
   try {
     const res   = await fetch(`/api/alimentos/buscar?q=${encodeURIComponent(q)}`);
     const items = await res.json();
-    if (!items.length) { drop.style.display = 'none'; return; }
+    const drop  = document.getElementById('food-drop');
+    if (!items.length) { closeDrop(); return; }
     drop.innerHTML = items.map(it => `
-      <div class="ql-dropdown-item" onclick='qlFillIng(this, ${JSON.stringify(it).replace(/"/g,"&quot;")})'>
-        <div><strong>${it.name}</strong>${it.serving_desc ? `<small class="ms-1 text-muted">${it.serving_desc}</small>` : ''}</div>
-        <span class="list-badge" style="background:rgba(245,158,11,.15);color:#d97706;">${it.carbs}g CH</span>
+      <div class="ql-drop-item" onclick='addIngredient(${JSON.stringify(it).replace(/'/g,"&#39;")})'>
+        <strong>${escH(it.name)}</strong>
+        <span style="color:#16a34a;font-weight:700;font-size:.8rem;">${it.carbs}g CH</span>
       </div>`).join('');
     drop.style.display = 'block';
-  } catch(e) {}
+  } catch(e) { closeDrop(); }
 }
 
-function qlFillIng(el, item) {
-  const row = el.closest('.ql-ing-row');
-  row.querySelector('.qli-name').value    = item.name;
-  row.querySelector('.qli-food-id').value = item.id;
-  row.querySelector('.qli-carbs').value   = item.carbs    || '';
-  row.querySelector('.qli-protein').value = item.protein  || '';
-  row.querySelector('.qli-fat').value     = item.fat      || '';
-  row.querySelector('.qli-cal').value     = item.calories || '';
-  el.closest('.ql-ing-drop').style.display = 'none';
-  qlRecalc();
-  fetch(`/api/alimentos/${item.id}/usar`, { method: 'POST' });
+function closeDrop() {
+  const d = document.getElementById('food-drop');
+  if (d) d.style.display = 'none';
 }
 
-// Close dropdowns on outside click
-document.addEventListener('click', e => {
-  if (!e.target.closest('.ql-ing-name-wrap'))
-    document.querySelectorAll('.ql-ing-drop').forEach(d => d.style.display = 'none');
-});
+/* ── Ingredientes ───────────────────────────────────────────────────────── */
+function addIngredient(item) {
+  closeDrop();
+  document.getElementById('food-search').value = '';
+  document.getElementById('food-search').focus();
 
-// Update preview when plate name changes
-document.getElementById('comida_nombre_hidden').addEventListener('input', updateComidaPreview);
+  // serving_g = gramos de referencia para los macros devueltos por la API
+  // Usamos eso como porción inicial y escalamos proporcionalmente al cambiar gramos.
+  const servingG = item.serving_g || 100;
 
-function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const ing = {
+    id:          Date.now(),
+    name:        item.name,
+    food_id:     item.id || '',
+    grams:       servingG,          // porción inicial = porción de referencia
+    serving_g:   servingG,
+    carbs_s:     item.carbs    || 0,   // macros por serving_g gramos
+    protein_s:   item.protein  || 0,
+    fat_s:       item.fat      || 0,
+    cal_s:       item.calories || 0,
+  };
+  ingredientes.push(ing);
+  renderIngredients();
+  fetch(`/api/alimentos/${item.id}/usar`, { method: 'POST' }).catch(()=>{});
 }
 
-// Start with one empty ingredient row
-qlAddIngrediente();
+function macros(ing) {
+  // Escala los macros proporcionalmente a los gramos actuales vs porción base
+  const f = ing.grams / ing.serving_g;
+  return {
+    carbs:   +(ing.carbs_s   * f).toFixed(1),
+    protein: +(ing.protein_s * f).toFixed(1),
+    fat:     +(ing.fat_s     * f).toFixed(1),
+    cal:     +(ing.cal_s     * f).toFixed(1),
+  };
+}
 
-/* ── Form submit validation ──────────────────────────────────────────── */
-document.getElementById('quicklog-form').addEventListener('submit', function(e) {
-  const checks = [
-    ['toggle-glucemia', 'glucemia_valor'],
-    ['toggle-insulina', 'insulina_units'],
-  ];
-  for (const [tog, fld] of checks) {
-    if (document.getElementById(tog).checked && !document.getElementById(fld).value) {
-      e.preventDefault();
-      const el = document.getElementById(fld);
-      el.focus(); el.classList.add('is-invalid');
-      setTimeout(() => el.classList.remove('is-invalid'), 2000);
-      return;
-    }
+function renderIngredients() {
+  const list = document.getElementById('ing-list');
+  list.innerHTML = '';
+  ingredientes.forEach(ing => {
+    const m = macros(ing);
+    const div = document.createElement('div');
+    div.className = 'ql-ing-item';
+    div.dataset.id = ing.id;
+    div.innerHTML = `
+      <span class="ql-ing-name" title="${escH(ing.name)}">${escH(ing.name)}</span>
+      <input type="number" class="ql-ing-grams" value="${ing.grams}" min="1" max="2000" step="5"
+             onchange="updateGrams(${ing.id}, this.value)">
+      <span class="qli-unit" style="font-size:.65rem;color:var(--text-muted);">g</span>
+      <span class="ql-ing-carbs">${m.carbs}g</span>
+      <button type="button" class="ql-ing-remove" onclick="removeIng(${ing.id})">
+        <i class="bi bi-x"></i>
+      </button>
+      <input type="hidden" name="comp_name[]"     value="${escH(ing.name)}">
+      <input type="hidden" name="comp_food_id[]"  value="${ing.food_id}">
+      <input type="hidden" name="comp_carbs[]"    value="${m.carbs}">
+      <input type="hidden" name="comp_protein[]"  value="${m.protein}">
+      <input type="hidden" name="comp_fat[]"      value="${m.fat}">
+      <input type="hidden" name="comp_calories[]" value="${m.cal}">
+      <input type="hidden" name="comp_grams[]"    value="${ing.grams}">`;
+    list.appendChild(div);
+  });
+  recalcTotals();
+}
+
+function updateGrams(id, grams) {
+  const ing = ingredientes.find(i => i.id === id);
+  if (!ing) return;
+  ing.grams = parseFloat(grams) || 100;
+  renderIngredients();
+}
+
+function removeIng(id) {
+  ingredientes = ingredientes.filter(i => i.id !== id);
+  renderIngredients();
+}
+
+function recalcTotals() {
+  let ch = 0, pr = 0, fa = 0, kc = 0;
+  ingredientes.forEach(ing => {
+    const m = macros(ing);
+    ch += m.carbs; pr += m.protein; fa += m.fat; kc += m.cal;
+  });
+  document.getElementById('total-carbs').value   = ch.toFixed(1);
+  document.getElementById('total-protein').value = pr.toFixed(1);
+  document.getElementById('total-fat').value     = fa.toFixed(1);
+  document.getElementById('total-cal').value     = kc.toFixed(1);
+
+  const badge = document.getElementById('total-carbs-badge');
+  if (ingredientes.length > 0) {
+    badge.textContent = Math.round(ch) + 'g CH';
+    badge.style.display = 'inline-block';
+  } else {
+    badge.style.display = 'none';
   }
-  // Comida: validar que haya nombre si está activo
-  if (document.getElementById('toggle-comida').checked) {
-    const nombre = document.getElementById('comida_nombre_hidden').value.trim();
-    if (!nombre) {
-      e.preventDefault();
-      const el = document.getElementById('comida_nombre_hidden');
-      el.focus(); el.classList.add('is-invalid');
-      setTimeout(() => el.classList.remove('is-invalid'), 2000);
-    }
+
+  // Auto-generar nombre del plato
+  const nombres = ingredientes.map(i => i.name);
+  let nombre = nombres.slice(0,3).join(', ');
+  if (nombres.length > 3) nombre += ` +${nombres.length-3}`;
+  document.getElementById('comida_nombre').value = nombre;
+
+  sugerirBolo();
+}
+
+/* ── Helpers ────────────────────────────────────────────────────────────── */
+function escH(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                  .replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+                  .replace(/'/g,'&#39;');
+}
+
+/* ── Validación submit ──────────────────────────────────────────────────── */
+document.getElementById('ql-form').addEventListener('submit', function(e) {
+  if (activeCards.has('glucemia') && !document.getElementById('glucemia_valor').value) {
+    e.preventDefault();
+    document.getElementById('glucemia_valor').focus();
+    return;
   }
+  if (activeCards.has('insulina') && !document.getElementById('insulina_units').value) {
+    e.preventDefault();
+    document.getElementById('insulina_units').focus();
+    return;
+  }
+  // Desactivar cards no abiertas para no enviar sus hidden inputs
+  if (!activeCards.has('glucemia'))
+    document.querySelector('[name=reg_glucemia]').disabled = true;
+  if (!activeCards.has('comida'))
+    document.querySelector('[name=reg_comida]').disabled = true;
+  if (!activeCards.has('insulina'))
+    document.querySelector('[name=reg_insulina]').disabled = true;
 });
 </script>
 {% endblock %}
