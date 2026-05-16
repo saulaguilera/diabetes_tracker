@@ -281,6 +281,12 @@ def sync_all(email: str, password: str, get_setting_fn=None, set_setting_fn=None
         return {"readings": [], "error": str(e)}
     except requests.RequestException as e:
         err = str(e)
+        # 429 Too Many Requests → Abbott está rate-limiting; guardar timestamp para cooldown
+        if "429" in err:
+            if set_setting_fn:
+                from datetime import datetime as _dt
+                set_setting_fn("libre_rate_limited_at", _dt.now().isoformat())
+            return {"readings": [], "error": "429: Abbott limitó las requests. Esperá 5 minutos antes de sincronizar de nuevo."}
         # 401/403 con token cacheado → limpiar y reintentar sin caché
         if ("401" in err or "403" in err or "430" in err) and get_setting_fn:
             cached = get_setting_fn("libre_token")

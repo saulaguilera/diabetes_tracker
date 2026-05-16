@@ -248,7 +248,51 @@ def api_sync_libre():
             "error": "Configurá LIBRE_EMAIL y LIBRE_PASSWORD en las variables de entorno de Railway."
         }), 400
 
+    # ── Cooldown: no llamar a Abbott más seguido de cada 4 min ──────────────
+    _COOLDOWN_MIN  = 4    # mínimo entre syncs normales
+    _RATELIMIT_MIN = 8    # espera extra si el último intento fue 429
+
+    now = datetime.now()
+
+    # Verificar si hay rate-limit activo de Abbott
+    rl_at_str = _get_setting("libre_rate_limited_at")
+    if rl_at_str:
+        try:
+            rl_at = datetime.fromisoformat(rl_at_str)
+            secs_since_rl = (now - rl_at).total_seconds()
+            if secs_since_rl < _RATELIMIT_MIN * 60:
+                wait = int(_RATELIMIT_MIN * 60 - secs_since_rl)
+                return jsonify({
+                    "insertadas": 0, "total": 0,
+                    "error": f"Abbott limitó las requests (429). Esperá {wait // 60}m {wait % 60}s más.",
+                    "rate_limited": True, "wait_seconds": wait,
+                })
+        except (ValueError, TypeError):
+            pass
+
+    # Cooldown normal entre syncs
+    last_sync_str = _get_setting("libre_last_sync")
+    if last_sync_str:
+        try:
+            last_sync = datetime.fromisoformat(last_sync_str)
+            secs_since = (now - last_sync).total_seconds()
+            if secs_since < _COOLDOWN_MIN * 60:
+                wait = int(_COOLDOWN_MIN * 60 - secs_since)
+                return jsonify({
+                    "insertadas": 0, "total": 0,
+                    "error": None,  # no es un error real — ya está actualizado
+                    "cooldown": True, "wait_seconds": wait,
+                    "mensaje": f"Ya sincronizaste hace {int(secs_since)}s. Próxima sync en {wait}s.",
+                })
+        except (ValueError, TypeError):
+            pass
+
     resultado = _do_libre_sync(email, password)
+
+    # Si el sync fue exitoso, limpiar el flag de rate-limit
+    if not resultado.get("error") or "429" not in (resultado.get("error") or ""):
+        _set_setting("libre_rate_limited_at", "")
+
     return jsonify(resultado)
 
 

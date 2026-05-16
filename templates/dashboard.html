@@ -590,7 +590,9 @@
   display: inline-block; width: 7px; height: 7px;
   border-radius: 50%; background: var(--border);
 }
-.sync-dot.sync-ok { background: #22c55e; box-shadow: 0 0 4px #22c55e88; }
+.sync-dot.sync-ok   { background: #22c55e; box-shadow: 0 0 4px #22c55e88; }
+.sync-dot.sync-warn { background: #f59e0b; box-shadow: 0 0 4px #f59e0b88; }
+.sync-dot.sync-err  { background: #ef4444; box-shadow: 0 0 4px #ef444488; }
 .btn-sync-mini {
   background: none; border: none; color: var(--text-muted);
   cursor: pointer; padding: 0; font-size: .95rem; line-height: 1;
@@ -989,16 +991,30 @@ a.insight-chip:hover {
     try {
       const r = await fetch('/api/sync/libre');
       const d = await r.json();
-      if (d.error) {
-        dot.className = 'sync-dot';
-        if (status) status.textContent = d.error;
+
+      if (d.rate_limited) {
+        // 429: Abbott limitó — mostrar countdown
+        dot.className = 'sync-dot sync-warn';
+        const mins = Math.ceil(d.wait_seconds / 60);
+        if (status) status.textContent = `429 · esperá ${mins} min`;
+        btn.title = `Abbott rate-limit activo. Esperá ${mins} minuto(s) antes de intentar de nuevo.`;
+      } else if (d.cooldown) {
+        // Cooldown local — ya está al día, no es un error
+        dot.className = 'sync-dot sync-ok';
+        if (status) status.textContent = 'Al día';
+      } else if (d.error) {
+        dot.className = 'sync-dot sync-err';
+        if (status) status.textContent = d.error.length > 40 ? d.error.slice(0, 40) + '…' : d.error;
+        btn.title = d.error;
       } else {
         dot.className = 'sync-dot sync-ok';
         if (status) status.textContent = d.insertadas > 0 ? `+${d.insertadas} lecturas` : 'Al día';
+        btn.title = 'Sincronizar Libre';
         if (d.insertadas > 0) setTimeout(() => location.reload(), 1200);
       }
     } catch(e) {
-      dot.className = 'sync-dot';
+      dot.className = 'sync-dot sync-err';
+      if (status) status.textContent = 'Sin conexión';
     } finally {
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
@@ -1006,14 +1022,20 @@ a.insight-chip:hover {
   }
 
   window.addEventListener('DOMContentLoaded', () => {
-    const lastSync = localStorage.getItem('dt_libre_sync');
-    const now = Date.now();
-    if (!lastSync || now - parseInt(lastSync) > 5 * 60 * 1000) {
-      localStorage.setItem('dt_libre_sync', now);
-      fetch('/api/sync/libre').then(r => r.json()).then(d => {
-        if (d.insertadas > 0) setTimeout(() => location.reload(), 800);
-      }).catch(() => {});
-    }
+    // Auto-sync al cargar — respeta el cooldown del servidor (4 min)
+    fetch('/api/sync/libre').then(r => r.json()).then(d => {
+      if (d.insertadas > 0) setTimeout(() => location.reload(), 800);
+      // Si hay rate-limit activo, marcar el dot
+      if (d.rate_limited) {
+        const dot    = document.getElementById('sync-dot');
+        const status = document.getElementById('sync-status');
+        if (dot) dot.className = 'sync-dot sync-warn';
+        if (status) {
+          const mins = Math.ceil((d.wait_seconds || 300) / 60);
+          status.textContent = `429 · esperá ${mins} min`;
+        }
+      }
+    }).catch(() => {});
   });
   {% endif %}
 
