@@ -39,6 +39,19 @@
         <div class="list-row-name">
           {% if is_bolus %}
             <span class="list-badge" style="background:rgba(245,158,11,.15);color:#d97706;">Bolo</span>
+            {% if d.purpose == 'comida' %}
+              <span class="list-badge ms-1" style="background:rgba(34,197,94,.12);color:#16a34a;">
+                <i class="bi bi-egg-fried me-1" style="font-size:.7rem;"></i>Comida
+              </span>
+            {% elif d.purpose == 'correccion' %}
+              <span class="list-badge ms-1" style="background:rgba(239,68,68,.1);color:#dc2626;">
+                <i class="bi bi-arrow-down-circle me-1" style="font-size:.7rem;"></i>Corrección
+              </span>
+            {% elif d.purpose == 'mixto' %}
+              <span class="list-badge ms-1" style="background:rgba(99,102,241,.1);color:#6366f1;">
+                <i class="bi bi-intersect me-1" style="font-size:.7rem;"></i>Mixto
+              </span>
+            {% endif %}
           {% else %}
             <span class="list-badge" style="background:var(--surface2);color:var(--text-muted);">Basal</span>
           {% endif %}
@@ -48,6 +61,15 @@
         </div>
         <div class="list-row-meta">
           <span class="list-ts">{{ d.timestamp | local_ts }}</span>
+          {% if d.pre_meal_min is not none and d.pre_meal_min > 0 %}
+            <span class="list-sep">·</span>
+            <span style="font-size:.75rem; color:#6366f1;">
+              <i class="bi bi-clock me-1"></i>{{ d.pre_meal_min }} min antes
+            </span>
+          {% elif d.pre_meal_min == 0 and d.purpose in ('comida', 'mixto') %}
+            <span class="list-sep">·</span>
+            <span style="font-size:.75rem; color:var(--text-muted);">con la comida</span>
+          {% endif %}
           {% if d.notes %}
             <span class="list-sep">·</span>
             <span style="font-size:.78rem; color:var(--text-muted);">{{ d.notes }}</span>

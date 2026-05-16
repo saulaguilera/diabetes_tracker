@@ -393,7 +393,8 @@ def _save_meal_components(comida, form):
 def _calcular_isf_personal(days=60):
     """
     Estima el Factor de Sensibilidad a la Insulina (ISF) personal.
-    Busca bolus sin comida cercana (correcciones puras) y mide la caída de glucosa.
+    Prioridad 1: bolus etiquetados como purpose='correccion' (más confiables).
+    Prioridad 2: bolus sin comida cercana en ±30 min (inferidos).
     Retorna (isf_promedio, n_muestras).
     """
     desde = datetime.now() - timedelta(days=days)
@@ -404,12 +405,16 @@ def _calcular_isf_personal(days=60):
 
     muestras = []
     for d in bolus_list:
-        comida = Meal.query.filter(
-            Meal.timestamp >= d.timestamp - timedelta(minutes=30),
-            Meal.timestamp <= d.timestamp + timedelta(minutes=30),
-        ).first()
-        if comida:
-            continue
+        is_labeled_correction = d.purpose == "correccion"
+
+        if not is_labeled_correction:
+            # Filtro por inferencia: sin comida cercana
+            comida = Meal.query.filter(
+                Meal.timestamp >= d.timestamp - timedelta(minutes=30),
+                Meal.timestamp <= d.timestamp + timedelta(minutes=30),
+            ).first()
+            if comida:
+                continue
 
         pre = (
             GlucoseReading.query
@@ -472,14 +477,25 @@ def _calcular_icr_personal(days=90):
         if not pre:
             continue
 
-        bolus = (InsulinDose.query
-                 .filter(
-                     InsulinDose.type == "bolus",
-                     InsulinDose.timestamp >= c.timestamp - timedelta(minutes=15),
-                     InsulinDose.timestamp <= c.timestamp + timedelta(minutes=30),
-                 )
-                 .order_by(InsulinDose.timestamp).first())
-        if not bolus or bolus.units <= 0:
+        # Buscar bolus cercano; preferir los etiquetados como comida/mixto
+        bolus_q = (InsulinDose.query
+                   .filter(
+                       InsulinDose.type == "bolus",
+                       InsulinDose.timestamp >= c.timestamp - timedelta(minutes=30),
+                       InsulinDose.timestamp <= c.timestamp + timedelta(minutes=45),
+                   )
+                   .order_by(InsulinDose.timestamp).all())
+        if not bolus_q:
+            continue
+
+        # Preferir bolus etiquetado como comida o mixto
+        bolus = next((b for b in bolus_q if b.purpose in ("comida", "mixto")), bolus_q[0])
+
+        # Excluir correcciones puras etiquetadas (no tienen CH asociados)
+        if bolus.purpose == "correccion":
+            continue
+
+        if bolus.units <= 0:
             continue
 
         objetivo   = float(_get_setting("objetivo", 100))

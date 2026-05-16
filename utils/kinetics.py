@@ -300,11 +300,13 @@ def estimate_dia_from_data(days: int = 90, peak_min: int = _DEFAULT_PEAK_MIN) ->
 
     Method
     ------
-    1. Find bolus doses that are NOT preceded or followed by a meal within ±90 min
-       (i.e., pure correction boluses — no postprandial confounding).
-    2. For each correction bolus, find the glucose nadir in the 4 hours following.
-    3. Estimate DIA ≈ time_to_nadir / _NADIR_RATIO.
-    4. Return median estimate + details.
+    Priority 1: boluses explicitly labeled purpose='correccion' — most reliable.
+    Priority 2: boluses with no meal within ±90 min (inferred corrections).
+
+    For each correction bolus:
+    1. Find the glucose nadir in the 4 hours following.
+    2. Estimate DIA ≈ time_to_nadir / _NADIR_RATIO.
+    3. Return median estimate + details.
 
     Returns
     -------
@@ -313,10 +315,10 @@ def estimate_dia_from_data(days: int = 90, peak_min: int = _DEFAULT_PEAK_MIN) ->
         sample_size       : int (number of usable correction events)
         estimates         : list[int] (individual DIA estimates)
         confidence        : str ("alta" / "media" / "baja" / "insuficiente")
+        labeled_count     : int (how many were explicitly labeled)
         message           : str (human-readable explanation)
     """
     from models import InsulinDose, Meal, GlucoseReading
-    from flask import current_app
 
     cutoff = datetime.now() - timedelta(days=days)
     boluses = InsulinDose.query.filter(
@@ -327,17 +329,24 @@ def estimate_dia_from_data(days: int = 90, peak_min: int = _DEFAULT_PEAK_MIN) ->
     meals = Meal.query.filter(Meal.timestamp >= cutoff).all()
     meal_times = [m.timestamp for m in meals]
 
+    # Separate explicitly labeled from inferred corrections
+    labeled_corrections = [b for b in boluses if b.purpose == "correccion"]
+    labeled_count = len(labeled_corrections)
+
     estimates = []
+    labeled_used = 0
     for bolus in boluses:
         bt = bolus.timestamp
+        is_labeled = bolus.purpose == "correccion"
 
-        # Skip if a meal is within ±90 min (not a pure correction)
-        confounded = any(
-            abs((mt - bt).total_seconds()) < 90 * 60
-            for mt in meal_times
-        )
-        if confounded:
-            continue
+        if not is_labeled:
+            # Skip if a meal is within ±90 min (not a pure correction)
+            confounded = any(
+                abs((mt - bt).total_seconds()) < 90 * 60
+                for mt in meal_times
+            )
+            if confounded:
+                continue
 
         # Fetch glucose readings in the 4 hours after the bolus
         window_end = bt + timedelta(hours=4)
@@ -362,38 +371,56 @@ def estimate_dia_from_data(days: int = 90, peak_min: int = _DEFAULT_PEAK_MIN) ->
 
         # Plausible range for NovoRapid: 120–360 min
         if 120 <= dia_est <= 360:
-            estimates.append(dia_est)
+            estimates.append({"dia": dia_est, "labeled": is_labeled})
 
     if not estimates:
+        tip = (
+            "Etiquetá tus próximas correcciones como 'Corrección' en el formulario "
+            "de insulina para mejorar la estimación."
+        ) if labeled_count == 0 else ""
         return {
             "estimated_dia_min": None,
             "sample_size": 0,
+            "labeled_count": labeled_count,
             "estimates": [],
             "confidence": "insuficiente",
             "message": (
-                f"No se encontraron eventos de corrección sin comida cercana "
+                f"No se encontraron suficientes eventos de corrección utilizables "
                 f"en los últimos {days} días. Se usará DIA por defecto "
-                f"({_DEFAULT_DIA_MIN} min) para NovoRapid."
+                f"({_DEFAULT_DIA_MIN} min). {tip}"
             ),
         }
 
-    estimates.sort()
-    n = len(estimates)
+    dia_values = [e["dia"] for e in estimates]
+    n_labeled  = sum(1 for e in estimates if e["labeled"])
+    dia_values.sort()
+    n = len(dia_values)
+
     # Median
-    median = estimates[n // 2] if n % 2 else (estimates[n // 2 - 1] + estimates[n // 2]) // 2
+    median = dia_values[n // 2] if n % 2 else (dia_values[n // 2 - 1] + dia_values[n // 2]) // 2
     # Round to nearest 15 min
     median_rounded = round(median / 15) * 15
 
-    confidence = "alta" if n >= 6 else "media" if n >= 3 else "baja"
+    # Higher confidence when events are explicitly labeled
+    if n >= 6 or (n >= 3 and n_labeled >= 2):
+        confidence = "alta"
+    elif n >= 3 or n_labeled >= 1:
+        confidence = "media"
+    else:
+        confidence = "baja"
+
+    label_note = f" ({n_labeled} etiquetadas manualmente)" if n_labeled > 0 else " (inferidas)"
 
     return {
         "estimated_dia_min": median_rounded,
         "sample_size": n,
-        "estimates": estimates,
+        "labeled_count": labeled_count,
+        "labeled_used": n_labeled,
+        "estimates": dia_values,
         "confidence": confidence,
         "message": (
             f"DIA estimado: {median_rounded} min ({median_rounded // 60}h "
-            f"{median_rounded % 60}min) con {n} evento(s) de corrección. "
+            f"{median_rounded % 60}min) con {n} corrección(es){label_note}. "
             f"Confianza {confidence}."
         ),
     }

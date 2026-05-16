@@ -122,6 +122,13 @@ with app.app_context():
         if "glycemic_index" not in fi_cols:
             conn.execute(text("ALTER TABLE food_items ADD COLUMN glycemic_index INTEGER"))
             conn.commit()
+        # Migración: purpose y pre_meal_min en insulin_doses
+        id_cols = [c["name"] for c in inspector.get_columns("insulin_doses")]
+        if "purpose" not in id_cols:
+            conn.execute(text("ALTER TABLE insulin_doses ADD COLUMN purpose VARCHAR(20)"))
+            conn.commit()
+        if "pre_meal_min" not in id_cols:
+            conn.execute(text("ALTER TABLE insulin_doses ADD COLUMN pre_meal_min INTEGER"))
 
 
 # ── Configuración LibreLinkUp ─────────────────────────────────────────────────

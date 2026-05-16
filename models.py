@@ -81,6 +81,10 @@ class InsulinDose(db.Model):
     units = db.Column(db.Float, nullable=False)
     brand = db.Column(db.String(100))
     notes = db.Column(db.Text)
+    # purpose: 'comida' | 'correccion' | 'mixto' (solo para bolus)
+    purpose = db.Column(db.String(20))
+    # minutos antes de la comida en que se inyectó (0 = simultáneo, 15 = pre-bolo 15min)
+    pre_meal_min = db.Column(db.Integer)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def __repr__(self):

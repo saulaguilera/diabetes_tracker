@@ -18,25 +18,27 @@
 </div>
 
 <div class="form-modern">
-  <form method="post">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <form method="post" id="insulina-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-    <!-- Tipo -->
+    {# ── Tipo principal: Bolo / Basal ── #}
     <div class="fm-section mb-3">
-      <div class="fm-section-label">Tipo</div>
+      <div class="fm-section-label">Tipo de insulina</div>
       <div class="fm-type-pills">
         <label class="fm-type-pill">
-          <input type="radio" name="tipo" value="bolus"
-                 {{ 'checked' if not editar or item.type == 'bolus' }}>
+          <input type="radio" name="tipo" value="bolus" id="tipo-bolus"
+                 {{ 'checked' if not editar or item.type == 'bolus' }}
+                 onchange="onTipoChange()">
           <span>
             <i class="bi bi-lightning-charge-fill"></i>
             Bolo
-            <small>Rápida / corrección</small>
+            <small>Rápida — cubre comida o corrige</small>
           </span>
         </label>
         <label class="fm-type-pill">
-          <input type="radio" name="tipo" value="basal"
-                 {{ 'checked' if editar and item.type == 'basal' }}>
+          <input type="radio" name="tipo" value="basal" id="tipo-basal"
+                 {{ 'checked' if editar and item.type == 'basal' }}
+                 onchange="onTipoChange()">
           <span>
             <i class="bi bi-clock-history"></i>
             Basal
@@ -46,7 +48,73 @@
       </div>
     </div>
 
-    <!-- Unidades -->
+    {# ── Propósito del bolo (solo visible para bolo) ── #}
+    <div class="fm-section mb-3" id="section-purpose">
+      <div class="fm-section-label">¿Para qué es este bolo?</div>
+      <div class="purpose-grid">
+
+        <label class="purpose-card" id="pc-comida">
+          <input type="radio" name="purpose" value="comida"
+                 {{ 'checked' if not editar or (editar and item.purpose in ('comida', None)) and item.type == 'bolus' }}
+                 onchange="onPurposeChange()">
+          <div class="pc-icon" style="background:rgba(34,197,94,.12); color:#16a34a;">
+            <i class="bi bi-egg-fried"></i>
+          </div>
+          <div class="pc-label">Comida</div>
+          <div class="pc-sub">Bolo de comida (prandial)</div>
+        </label>
+
+        <label class="purpose-card" id="pc-correccion">
+          <input type="radio" name="purpose" value="correccion"
+                 {{ 'checked' if editar and item.purpose == 'correccion' }}
+                 onchange="onPurposeChange()">
+          <div class="pc-icon" style="background:rgba(239,68,68,.12); color:#dc2626;">
+            <i class="bi bi-arrow-down-circle-fill"></i>
+          </div>
+          <div class="pc-label">Corrección</div>
+          <div class="pc-sub">Sin comida — solo baja la glucosa</div>
+        </label>
+
+        <label class="purpose-card" id="pc-mixto">
+          <input type="radio" name="purpose" value="mixto"
+                 {{ 'checked' if editar and item.purpose == 'mixto' }}
+                 onchange="onPurposeChange()">
+          <div class="pc-icon" style="background:rgba(99,102,241,.12); color:#6366f1;">
+            <i class="bi bi-intersect"></i>
+          </div>
+          <div class="pc-label">Mixto</div>
+          <div class="pc-sub">Corrección + cubre comida</div>
+        </label>
+
+      </div>
+    </div>
+
+    {# ── Timing pre-bolo (solo para comida y mixto) ── #}
+    <div class="fm-section mb-3" id="section-timing">
+      <div class="fm-section-label">
+        Timing — ¿cuánto antes de comer?
+        <span class="text-muted" style="font-size:.75rem; font-weight:400; text-transform:none;">
+          (pre-bolo recomendado: 10–20 min para NovoRapid)
+        </span>
+      </div>
+
+      <div class="timing-chips">
+        {% set saved_pre = item.pre_meal_min if editar and item.pre_meal_min is not none else 0 %}
+        {% for m in [0, 5, 10, 15, 20, 30] %}
+        <label class="timing-chip">
+          <input type="radio" name="pre_meal_min" value="{{ m }}"
+                 {{ 'checked' if saved_pre == m }}>
+          <span>
+            {% if m == 0 %}Con la comida{% else %}{{ m }} min antes{% endif %}
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+
+      <div class="timing-hint mt-2" id="timing-hint"></div>
+    </div>
+
+    {# ── Unidades ── #}
     <div class="fm-section mb-3">
       <div class="fm-section-label">Unidades</div>
       <div class="fm-value-row mb-2">
@@ -66,7 +134,7 @@
       </div>
     </div>
 
-    <!-- Marca -->
+    {# ── Marca ── #}
     <div class="fm-section mb-3">
       <div class="fm-section-label">Marca <span class="text-muted">(opcional)</span></div>
       <input type="text" name="brand" class="form-control form-control-sm"
@@ -74,7 +142,7 @@
              placeholder="Novorapid, Lantus, Tresiba, Humalog...">
     </div>
 
-    <!-- Fecha y hora -->
+    {# ── Fecha y hora ── #}
     <div class="fm-section mb-3">
       <div class="fm-section-label">Cuándo</div>
       <div class="row g-2 align-items-center">
@@ -91,14 +159,15 @@
                   onclick="setNow()">Ahora</button>
         </div>
       </div>
+      <div class="form-text" id="timing-note" style="display:none;"></div>
     </div>
 
-    <!-- Notas -->
+    {# ── Notas ── #}
     <div class="fm-section mb-4">
       <div class="fm-section-label">Notas <span class="text-muted">(opcional)</span></div>
       <input type="text" name="notas" class="form-control form-control-sm"
              value="{{ item.notes if editar and item.notes else '' }}"
-             placeholder="corrección, pre-comida, basal nocturna...">
+             placeholder="ej. glucemia 220 → corrección, arroz con pollo...">
     </div>
 
     <div class="fm-actions">
@@ -115,6 +184,66 @@
 {% block scripts %}
 {{ list_styles() }}
 {{ form_styles() }}
+
+<style>
+/* ── Purpose cards ─────────────────────────────────────────── */
+.purpose-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: .6rem;
+}
+@media (max-width: 480px) { .purpose-grid { grid-template-columns: 1fr; } }
+
+.purpose-card {
+  display: flex; flex-direction: column; align-items: center;
+  gap: .4rem; padding: .85rem .5rem;
+  border: 2px solid var(--border);
+  border-radius: 12px; cursor: pointer;
+  transition: border-color .15s, background .15s;
+  text-align: center;
+}
+.purpose-card input[type="radio"] { display: none; }
+.purpose-card:has(input:checked) {
+  border-color: #f59e0b;
+  background: rgba(245,158,11,.06);
+}
+#pc-correccion:has(input:checked) { border-color: #ef4444; background: rgba(239,68,68,.06); }
+#pc-mixto:has(input:checked)      { border-color: #6366f1; background: rgba(99,102,241,.06); }
+
+.pc-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.2rem;
+}
+.pc-label { font-weight: 700; font-size: .9rem; color: var(--text); }
+.pc-sub   { font-size: .72rem; color: var(--text-muted); line-height: 1.3; }
+
+/* ── Timing chips ────────────────────────────────────────────── */
+.timing-chips {
+  display: flex; gap: .4rem; flex-wrap: wrap;
+}
+.timing-chip {
+  display: inline-flex; align-items: center;
+  cursor: pointer;
+}
+.timing-chip input[type="radio"] { display: none; }
+.timing-chip span {
+  padding: .35rem .75rem; border-radius: 20px;
+  border: 1.5px solid var(--border);
+  font-size: .82rem; font-weight: 500;
+  color: var(--text-muted);
+  transition: border-color .15s, background .15s, color .15s;
+}
+.timing-chip:has(input:checked) span {
+  border-color: #6366f1;
+  background: rgba(99,102,241,.1);
+  color: #6366f1; font-weight: 700;
+}
+.timing-hint {
+  font-size: .78rem; color: var(--text-muted); font-style: italic;
+}
+</style>
+
 <script>
 function setNow() {
   const n = new Date();
@@ -122,5 +251,59 @@ function setNow() {
   document.querySelector('[name=hora]').value  = n.toTimeString().slice(0,5);
 }
 {% if not editar %}document.addEventListener('DOMContentLoaded', setNow);{% endif %}
+
+function onTipoChange() {
+  const esBolus = document.getElementById('tipo-bolus').checked;
+  document.getElementById('section-purpose').style.display = esBolus ? '' : 'none';
+  onPurposeChange();
+}
+
+function onPurposeChange() {
+  const esBolus  = document.getElementById('tipo-bolus').checked;
+  const purpose  = document.querySelector('[name=purpose]:checked')?.value;
+  const showTiming = esBolus && (purpose === 'comida' || purpose === 'mixto');
+  document.getElementById('section-timing').style.display = showTiming ? '' : 'none';
+
+  // Hint de timing
+  const pre = parseInt(document.querySelector('[name=pre_meal_min]:checked')?.value || '0');
+  const hint = document.getElementById('timing-hint');
+  const note = document.getElementById('timing-note');
+
+  if (showTiming) {
+    if (pre === 0) {
+      hint.textContent = 'Sin pre-bolo — mayor riesgo de pico postprandial con NovoRapid.';
+      hint.style.color = '#d97706';
+    } else if (pre <= 10) {
+      hint.textContent = `Pre-bolo de ${pre} min — adecuado para comidas de absorción rápida.`;
+      hint.style.color = '#16a34a';
+    } else if (pre <= 20) {
+      hint.textContent = `Pre-bolo de ${pre} min — óptimo para la mayoría de comidas con NovoRapid.`;
+      hint.style.color = '#16a34a';
+    } else {
+      hint.textContent = `Pre-bolo de ${pre} min — usalo solo con comidas de absorción lenta o si tu glucemia es alta.`;
+      hint.style.color = '#2563eb';
+    }
+
+    // Actualizar también la hora en el campo si queremos registrar la hora de la comida
+    note.textContent = pre > 0
+      ? `La hora registrada es la de la inyección. La comida será ~${pre} min después.`
+      : '';
+    note.style.display = pre > 0 ? '' : 'none';
+  } else {
+    hint.textContent = '';
+    note.style.display = 'none';
+  }
+}
+
+// Escuchar cambios en timing chips
+document.querySelectorAll('[name=pre_meal_min]').forEach(r =>
+  r.addEventListener('change', onPurposeChange)
+);
+
+// Estado inicial
+document.addEventListener('DOMContentLoaded', () => {
+  onTipoChange();
+  onPurposeChange();
+});
 </script>
 {% endblock %}

@@ -199,11 +199,49 @@
         <input type="text" name="insulina_brand" class="form-control form-control-sm"
                placeholder="Marca: Novorapid, Humalog..." style="flex:1;">
       </div>
-      <div class="ql-quick-row">
+      <div class="ql-quick-row mb-3">
         {% for u in [1, 2, 3, 4, 5, 6, 7, 8, 10, 12] %}
         <button type="button" class="ql-quick-btn ql-quick-btn-insulin"
                 onclick="setInsulina({{ u }})">{{ u }}U</button>
         {% endfor %}
+      </div>
+
+      {# Propósito — dato clave para calibración #}
+      <div class="mb-2">
+        <div style="font-size:.75rem; font-weight:600; text-transform:uppercase;
+                    letter-spacing:.06em; color:var(--text-muted); margin-bottom:.4rem;">
+          ¿Para qué es?
+        </div>
+        <div class="ql-purpose-row">
+          <label class="ql-purpose-chip">
+            <input type="radio" name="purpose" value="comida" checked onchange="qlPurposeChange()">
+            <span><i class="bi bi-egg-fried"></i> Comida</span>
+          </label>
+          <label class="ql-purpose-chip">
+            <input type="radio" name="purpose" value="correccion" onchange="qlPurposeChange()">
+            <span><i class="bi bi-arrow-down-circle"></i> Corrección</span>
+          </label>
+          <label class="ql-purpose-chip">
+            <input type="radio" name="purpose" value="mixto" onchange="qlPurposeChange()">
+            <span><i class="bi bi-intersect"></i> Mixto</span>
+          </label>
+        </div>
+      </div>
+
+      {# Timing — solo para comida/mixto #}
+      <div id="ql-timing-row" class="mb-1">
+        <div style="font-size:.75rem; font-weight:600; text-transform:uppercase;
+                    letter-spacing:.06em; color:var(--text-muted); margin-bottom:.4rem;">
+          ¿Cuánto antes de comer?
+        </div>
+        <div class="ql-purpose-row">
+          {% for m in [0, 5, 10, 15, 20, 30] %}
+          <label class="ql-purpose-chip ql-timing-chip">
+            <input type="radio" name="pre_meal_min" value="{{ m }}" {{ 'checked' if m == 0 }}>
+            <span>{{ 'Ahora' if m == 0 else m ~ ' min' }}</span>
+          </label>
+          {% endfor %}
+        </div>
       </div>
     </div>
   </div>
@@ -457,6 +495,33 @@
 .kin-tag-carbs   { background: rgba(34,197,94,.15);  color: #16a34a; }
 .kin-tag-roc     { background: rgba(245,158,11,.15); color: #d97706; }
 .kin-hint        { font-style: italic; opacity: .75; }
+
+/* Purpose + timing chips inside quicklog */
+.ql-purpose-row {
+  display: flex; flex-wrap: wrap; gap: .35rem;
+}
+.ql-purpose-chip {
+  cursor: pointer;
+}
+.ql-purpose-chip input[type="radio"] { display: none; }
+.ql-purpose-chip span {
+  display: inline-flex; align-items: center; gap: .3rem;
+  padding: .28rem .65rem; border-radius: 20px; font-size: .78rem; font-weight: 500;
+  border: 1.5px solid var(--border); color: var(--text-muted);
+  transition: border-color .12s, background .12s, color .12s;
+}
+.ql-purpose-chip:has(input:checked) span {
+  border-color: #f59e0b; background: rgba(245,158,11,.1); color: #d97706; font-weight: 700;
+}
+.ql-purpose-chip:has(input[value="correccion"]:checked) span {
+  border-color: #ef4444; background: rgba(239,68,68,.09); color: #dc2626;
+}
+.ql-purpose-chip:has(input[value="mixto"]:checked) span {
+  border-color: #6366f1; background: rgba(99,102,241,.09); color: #6366f1;
+}
+.ql-timing-chip:has(input:checked) span {
+  border-color: #6366f1; background: rgba(99,102,241,.1); color: #6366f1;
+}
 </style>
 
 <script>
@@ -466,7 +531,15 @@ function setNow() {
   document.getElementById('hora').value  = n.toTimeString().slice(0,5);
 }
 // Siempre inicializar con hora local del browser (no la UTC del servidor)
-document.addEventListener('DOMContentLoaded', setNow);
+document.addEventListener('DOMContentLoaded', () => { setNow(); qlPurposeChange(); });
+
+function qlPurposeChange() {
+  const purpose = document.querySelector('[name=purpose]:checked')?.value;
+  const timingRow = document.getElementById('ql-timing-row');
+  if (timingRow) {
+    timingRow.style.display = (purpose === 'comida' || purpose === 'mixto') ? '' : 'none';
+  }
+}
 
 function toggleSection(section, force) {
   const card   = document.getElementById('card-' + section);

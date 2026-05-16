@@ -177,14 +177,19 @@ def quicklog():
         if request.form.get("reg_insulina"):
             units = request.form.get("insulina_units", type=float)
             if units and units > 0:
+                purpose   = request.form.get("purpose", "comida")
+                pre_meal  = request.form.get("pre_meal_min", type=int) if purpose in ("comida", "mixto") else None
                 db.session.add(InsulinDose(
                     timestamp=ts,
                     type="bolus",
                     units=units,
                     brand=request.form.get("insulina_brand", "").strip(),
                     notes="",
+                    purpose=purpose,
+                    pre_meal_min=pre_meal,
                 ))
-                guardados.append(f"Insulina {units}U bolus")
+                label = {"comida": "comida", "correccion": "corrección", "mixto": "mixto"}.get(purpose, "")
+                guardados.append(f"Insulina {units}U {label}")
 
         if guardados:
             db.session.commit()

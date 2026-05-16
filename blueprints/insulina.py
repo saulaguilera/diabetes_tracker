@@ -33,16 +33,23 @@ def insulina_nueva():
             flash("Las unidades deben ser mayores a 0.", "danger")
             return redirect(url_for("insulina_nueva"))
 
+        purpose     = request.form.get("purpose") if tipo == "bolus" else None
+        pre_meal    = request.form.get("pre_meal_min", type=int) if purpose in ("comida", "mixto") else None
+
         dosis = InsulinDose(
             timestamp=parse_datetime(fecha, hora),
             type=tipo,
             units=unidades,
             brand=marca,
             notes=notas,
+            purpose=purpose,
+            pre_meal_min=pre_meal,
         )
         db.session.add(dosis)
         db.session.commit()
-        flash(f"Dosis de {unidades}U de insulina {tipo} registrada.", "success")
+
+        label = {"comida": "de comida", "correccion": "de corrección", "mixto": "mixto"}.get(purpose, "")
+        flash(f"Dosis de {unidades}U de insulina {tipo} {label} registrada.", "success")
         return redirect(url_for("insulina"))
 
     ahora = datetime.now()
@@ -71,6 +78,16 @@ def insulina_editar(id):
         dosis.units     = request.form.get("units", type=float)
         dosis.brand     = request.form.get("brand", "").strip()
         dosis.notes     = request.form.get("notas", "")
+        if dosis.type == "bolus":
+            dosis.purpose     = request.form.get("purpose") or dosis.purpose
+            purpose = dosis.purpose
+            dosis.pre_meal_min = (
+                request.form.get("pre_meal_min", type=int)
+                if purpose in ("comida", "mixto") else None
+            )
+        else:
+            dosis.purpose      = None
+            dosis.pre_meal_min = None
         db.session.commit()
         flash("Dosis actualizada.", "success")
         return redirect(url_for("insulina"))
