@@ -19,6 +19,7 @@
 
 <div class="form-modern">
   <form method="post" id="meal-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
 
     {% if editar and not item.components %}

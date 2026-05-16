@@ -386,3 +386,114 @@ def _save_meal_components(comida, form):
         comida.fat_g     = round(sum(c.fat_g     for c in componentes), 1)
         comida.calories  = round(sum(c.calories  for c in componentes), 1)
     return componentes
+
+
+# ─── Cálculos personales de sensibilidad ─────────────────────────────────────
+
+def _calcular_isf_personal(days=60):
+    """
+    Estima el Factor de Sensibilidad a la Insulina (ISF) personal.
+    Busca bolus sin comida cercana (correcciones puras) y mide la caída de glucosa.
+    Retorna (isf_promedio, n_muestras).
+    """
+    desde = datetime.now() - timedelta(days=days)
+    bolus_list = InsulinDose.query.filter(
+        InsulinDose.type == "bolus",
+        InsulinDose.timestamp >= desde,
+    ).all()
+
+    muestras = []
+    for d in bolus_list:
+        comida = Meal.query.filter(
+            Meal.timestamp >= d.timestamp - timedelta(minutes=30),
+            Meal.timestamp <= d.timestamp + timedelta(minutes=30),
+        ).first()
+        if comida:
+            continue
+
+        pre = (
+            GlucoseReading.query
+            .filter(
+                GlucoseReading.timestamp >= d.timestamp - timedelta(minutes=30),
+                GlucoseReading.timestamp <= d.timestamp + timedelta(minutes=15),
+            )
+            .order_by(GlucoseReading.timestamp.desc())
+            .first()
+        )
+        posts = (
+            GlucoseReading.query
+            .filter(
+                GlucoseReading.timestamp > d.timestamp + timedelta(minutes=30),
+                GlucoseReading.timestamp <= d.timestamp + timedelta(hours=3),
+            )
+            .all()
+        )
+
+        if not pre or not posts or d.units <= 0:
+            continue
+
+        nadir = min(r.value_mgdl for r in posts)
+        if nadir >= pre.value_mgdl:
+            continue
+
+        isf = (pre.value_mgdl - nadir) / d.units
+        if 10 <= isf <= 200:
+            muestras.append(round(isf, 1))
+
+    if len(muestras) >= 2:
+        return round(sum(muestras) / len(muestras), 1), len(muestras)
+    return None, len(muestras)
+
+
+def _calcular_icr_personal(days=90):
+    """
+    Estima el ratio Insulina:Carbohidratos (ICR) personal.
+    Retorna (icr_promedio, n_muestras).
+    """
+    desde = datetime.now() - timedelta(days=days)
+    isf_personal, _ = _calcular_isf_personal(days=days)
+
+    comidas = Meal.query.filter(
+        Meal.timestamp >= desde,
+        Meal.carbs_g > 0,
+    ).all()
+
+    muestras = []
+    for c in comidas:
+        if not c.carbs_g or c.carbs_g < 5:
+            continue
+
+        pre = (GlucoseReading.query
+               .filter(
+                   GlucoseReading.timestamp >= c.timestamp - timedelta(minutes=30),
+                   GlucoseReading.timestamp <= c.timestamp + timedelta(minutes=5),
+               )
+               .order_by(GlucoseReading.timestamp.desc()).first())
+        if not pre:
+            continue
+
+        bolus = (InsulinDose.query
+                 .filter(
+                     InsulinDose.type == "bolus",
+                     InsulinDose.timestamp >= c.timestamp - timedelta(minutes=15),
+                     InsulinDose.timestamp <= c.timestamp + timedelta(minutes=30),
+                 )
+                 .order_by(InsulinDose.timestamp).first())
+        if not bolus or bolus.units <= 0:
+            continue
+
+        objetivo   = float(_get_setting("objetivo", 100))
+        isf        = isf_personal or 40
+        correccion = max(0, (pre.value_mgdl - objetivo) / isf)
+        bolo_comida = bolus.units - correccion
+
+        if bolo_comida <= 0.2:
+            continue
+
+        icr = c.carbs_g / bolo_comida
+        if 3 <= icr <= 30:
+            muestras.append(round(icr, 1))
+
+    if len(muestras) >= 3:
+        return round(sum(muestras) / len(muestras), 1), len(muestras)
+    return None, len(muestras)

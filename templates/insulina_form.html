@@ -19,6 +19,7 @@
 
 <div class="form-modern">
   <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
     <!-- Tipo -->
     <div class="fm-section mb-3">

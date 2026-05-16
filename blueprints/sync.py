@@ -6,6 +6,8 @@ from helpers import _get_setting, _set_setting
 from utils.libre_linkup import sync_all as libre_sync_all
 
 bp = Blueprint("sync", __name__)
+# Este blueprint está exento de CSRF: recibe llamadas de cron externos
+# (autenticados por SYNC_TOKEN) y APIs JSON del navegador.
 
 _LIBRE_EMAIL    = os.environ.get("LIBRE_EMAIL", "")
 _LIBRE_PASSWORD = os.environ.get("LIBRE_PASSWORD", "")

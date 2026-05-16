@@ -79,6 +79,7 @@
         </a>
         <form method="post" action="{{ url_for('glucemia_eliminar', id=r.id) }}"
               onsubmit="return confirm('¿Eliminar esta lectura?')" class="d-inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="list-btn-delete" title="Eliminar">
             <i class="bi bi-trash3"></i>
           </button>

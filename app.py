@@ -34,6 +34,10 @@ app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB max upload
 
 db.init_app(app)
 
+# ── CSRF Protection ───────────────────────────────────────────────────────────
+from flask_wtf.csrf import CSRFProtect, generate_csrf
+csrf = CSRFProtect(app)
+
 # ── Credenciales desde variables de entorno ───────────────────────────────────
 _APP_USER     = os.environ.get("APP_USERNAME", "admin")
 _APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
@@ -230,6 +234,9 @@ from blueprints.patrones     import bp as patrones_bp
 for _bp in [auth_bp, glucemia_bp, insulina_bp, actividad_bp, alimentos_bp,
             backup_bp, sync_bp, comidas_bp, herramientas_bp, reportes_bp, patrones_bp]:
     app.register_blueprint(_bp)
+
+# sync blueprint: exento de CSRF (cron externo + APIs JSON)
+csrf.exempt(sync_bp)
 
 # ── Alias de endpoints para compatibilidad con templates ──────────────────────
 # Los blueprints registran sus funciones como "blueprintname.endpointname".

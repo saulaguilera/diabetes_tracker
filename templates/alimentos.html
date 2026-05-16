@@ -98,6 +98,7 @@
         </a>
         <form method="post" action="{{ url_for('alimento_eliminar', id=item.id) }}"
               onsubmit="return confirm('¿Eliminar {{ item.name }}?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash3"></i></button>
         </form>
       </div>

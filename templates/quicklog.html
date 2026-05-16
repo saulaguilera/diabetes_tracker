@@ -19,6 +19,7 @@
 </div>
 
 <form method="POST" action="{{ url_for('quicklog') }}" id="quicklog-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
   <!-- Fecha y hora compartida -->
   <div class="ql-section mb-3">

@@ -103,6 +103,7 @@
     Los registros que ya existen no se duplican.
   </p>
   <form method="post" enctype="multipart/form-data" class="backup-upload-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="backup-dropzone" id="dropzone-json"
          onclick="document.getElementById('file-json').click()">
       <i class="bi bi-filetype-json" style="font-size:2rem; color:#22c55e;"></i>
@@ -131,6 +132,7 @@
   <div class="row g-3">
     <div class="col-md-6">
       <form method="post" action="{{ url_for('importar') }}" enctype="multipart/form-data" class="backup-upload-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="backup-dropzone" id="dropzone-csv"
              onclick="document.getElementById('file-csv').click()">
           <i class="bi bi-file-earmark-csv" style="font-size:2rem; color:#3b82f6;"></i>
