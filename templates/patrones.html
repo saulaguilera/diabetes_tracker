@@ -841,11 +841,13 @@ async function cargarAccuracy() {
   const panel = document.getElementById('accuracy-panel');
   panel.innerHTML = '<div class="text-muted" style="font-size:.83rem;"><span class="spinner-border spinner-border-sm me-2" style="width:.8rem;height:.8rem;"></span>Calculando…</div>';
   try {
-    const r = await fetch('/api/model/accuracy');
+    const r = await fetch('/api/feedback/stats');
     const d = await r.json();
     if (!d.ok) { panel.innerHTML = `<div class="text-danger">${d.error}</div>`; return; }
     const a = d.accuracy;
     const b = d.bias;
+    const ceg30 = d.clarke_30 || null;
+    const ceg60 = d.clarke_60 || null;
 
     if (a.n_30 === 0 && a.n_60 === 0) {
       panel.innerHTML = `
@@ -924,6 +926,90 @@ async function cargarAccuracy() {
         <i class="bi bi-info-circle me-1"></i>
         La corrección adaptiva se activa con ≥5 predicciones resueltas.
       </div>`}
+
+      ${(ceg30 && ceg30.n > 0) ? (() => {
+        const zoneColors = { A:'#16a34a', B:'#2563eb', C:'#d97706', D:'#dc2626', E:'#7c3aed' };
+        const zoneBg     = { A:'#f0fdf4', B:'#eff6ff', C:'#fffbeb', D:'#fef2f2', E:'#f5f3ff' };
+        const zoneDesc   = {
+          A: 'Precisa (±20%)',
+          B: 'Aceptable',
+          C: 'Sobrecorrección',
+          D: 'Falla en detectar hipo/hiper',
+          E: 'Tratamiento opuesto'
+        };
+
+        function cegBars(ceg) {
+          if (!ceg || !ceg.n) return '<span style="color:var(--text-muted);font-size:.78rem;">Sin datos</span>';
+          return 'ABCDE'.split('').map(z => {
+            const pct = ceg.pct[z] || 0;
+            if (pct === 0) return '';
+            return `<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.3rem;">
+              <span style="width:14px;height:14px;border-radius:4px;background:${zoneBg[z]};
+                border:1.5px solid ${zoneColors[z]};display:inline-block;flex-shrink:0;"></span>
+              <span style="font-size:.75rem;font-weight:700;color:${zoneColors[z]};width:14px;">
+                ${z}
+              </span>
+              <div style="flex:1;height:10px;background:var(--surface2);border-radius:99px;overflow:hidden;">
+                <div style="width:${pct}%;height:100%;background:${zoneColors[z]};border-radius:99px;
+                  opacity:.8;transition:width .5s;"></div>
+              </div>
+              <span style="font-size:.75rem;color:var(--text-muted);width:32px;text-align:right;">
+                ${pct}%
+              </span>
+              <span style="font-size:.7rem;color:var(--text-muted);">${zoneDesc[z]}</span>
+            </div>`;
+          }).join('');
+        }
+
+        const ab30 = ceg30.zona_a_b_pct;
+        const ab60 = (ceg60 && ceg60.n) ? ceg60.zona_a_b_pct : null;
+        const seguro = ceg30.clinicamente_seguro;
+        const segColor = seguro ? '#16a34a' : '#d97706';
+        const segIcon  = seguro ? 'bi-shield-check' : 'bi-shield-exclamation';
+        const segText  = seguro ? 'Clínicamente seguro (A+B ≥ 95%)' : `A+B = ${ab30}% — Meta: ≥ 95%`;
+
+        return `
+        <div class="mt-3 p-3 rounded" style="background:var(--surface2);border:1px solid var(--border);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;">
+            <div>
+              <span style="font-size:.75rem;font-weight:700;text-transform:uppercase;
+                letter-spacing:.06em;color:var(--text-muted);">
+                <i class="bi bi-grid-3x3-gap me-1"></i>Clarke Error Grid
+              </span>
+              <span style="font-size:.72rem;color:var(--text-muted);margin-left:.4rem;">
+                — impacto clínico del error
+              </span>
+            </div>
+            <span style="font-size:.75rem;font-weight:700;color:${segColor};">
+              <i class="bi ${segIcon} me-1"></i>${segText}
+            </span>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.4rem;font-weight:600;">
+                HORIZONTE +30 MIN — ${ceg30.n} predicciones
+              </div>
+              ${cegBars(ceg30)}
+            </div>
+            ${(ceg60 && ceg60.n > 0) ? `
+            <div class="col-12 col-md-6">
+              <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.4rem;font-weight:600;">
+                HORIZONTE +60 MIN — ${ceg60.n} predicciones
+              </div>
+              ${cegBars(ceg60)}
+            </div>` : ''}
+          </div>
+
+          <div style="font-size:.7rem;color:var(--text-muted);margin-top:.6rem;line-height:1.5;">
+            <strong>Zona A</strong> precisa (±20%) &nbsp;·&nbsp;
+            <strong>B</strong> aceptable &nbsp;·&nbsp;
+            <strong>C</strong> sobrecorrección &nbsp;·&nbsp;
+            <strong>D</strong> falla en detectar hipo/hiper &nbsp;·&nbsp;
+            <strong>E</strong> tratamiento opuesto (más peligroso)
+          </div>
+        </div>`;
+      })() : ''}
 
       <div class="mt-2" style="font-size:.75rem;color:var(--text-muted);line-height:1.6;">
         <strong>Referencia:</strong>
