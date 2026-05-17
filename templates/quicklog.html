@@ -144,16 +144,63 @@
       </button>
     </div>
     <div class="ql-card-body">
-      {# Buscador de alimentos #}
-      <div class="ql-search-wrap mb-2">
-        <div class="ql-search-row">
-          <i class="bi bi-search ql-search-icon"></i>
-          <input type="text" id="food-search" class="ql-search-input"
-                 placeholder="Buscar alimento..." autocomplete="off">
-        </div>
-        <div class="ql-drop" id="food-drop" style="display:none;"></div>
+
+      {# ── Tabs: Manual / Buscar ─────────────────────────────────── #}
+      <div class="ql-food-tabs mb-2">
+        <button type="button" class="ql-food-tab active" id="tab-manual"
+                onclick="switchFoodTab('manual')">
+          <i class="bi bi-pencil"></i> Manual
+        </button>
+        <button type="button" class="ql-food-tab" id="tab-buscar"
+                onclick="switchFoodTab('buscar')">
+          <i class="bi bi-search"></i> Buscar
+        </button>
       </div>
-      {# Lista de ingredientes agregados #}
+
+      {# ── Panel manual ──────────────────────────────────────────── #}
+      <div id="panel-manual">
+        <div class="ql-manual-row mb-2">
+          <input type="text" id="manual-nombre" class="ql-manual-input"
+                 placeholder="Nombre (ej: Arroz con pollo)" autocomplete="off">
+        </div>
+        <div class="ql-manual-macros mb-2">
+          <div class="ql-macro-field">
+            <span class="ql-macro-label">CH</span>
+            <input type="number" id="manual-carbs" class="ql-macro-input"
+                   placeholder="0" min="0" max="500" step="1">
+            <span class="ql-macro-unit">g</span>
+          </div>
+          <div class="ql-macro-field">
+            <span class="ql-macro-label">Prot</span>
+            <input type="number" id="manual-prot" class="ql-macro-input"
+                   placeholder="0" min="0" max="200" step="1">
+            <span class="ql-macro-unit">g</span>
+          </div>
+          <div class="ql-macro-field">
+            <span class="ql-macro-label">Grasa</span>
+            <input type="number" id="manual-fat" class="ql-macro-input"
+                   placeholder="0" min="0" max="200" step="1">
+            <span class="ql-macro-unit">g</span>
+          </div>
+        </div>
+        <button type="button" class="ql-add-manual-btn" onclick="addManual()">
+          <i class="bi bi-plus-circle-fill"></i> Agregar
+        </button>
+      </div>
+
+      {# ── Panel búsqueda ────────────────────────────────────────── #}
+      <div id="panel-buscar" style="display:none;">
+        <div class="ql-search-wrap mb-2">
+          <div class="ql-search-row">
+            <i class="bi bi-search ql-search-icon"></i>
+            <input type="text" id="food-search" class="ql-search-input"
+                   placeholder="Buscar en base de alimentos..." autocomplete="off">
+          </div>
+          <div class="ql-drop" id="food-drop" style="display:none;"></div>
+        </div>
+      </div>
+
+      {# Lista de ingredientes agregados (compartida entre tabs) #}
       <div id="ing-list"></div>
     </div>
   </div>
@@ -418,6 +465,46 @@
   background: none; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer;
 }
 
+/* Food tabs */
+.ql-food-tabs { display: flex; gap: .4rem; }
+.ql-food-tab {
+  flex: 1; padding: .35rem .6rem; border-radius: 10px; font-size: .8rem; font-weight: 600;
+  background: var(--surface2); border: 1.5px solid var(--border);
+  color: var(--text-muted); cursor: pointer; transition: all .12s;
+  display: flex; align-items: center; justify-content: center; gap: .3rem;
+}
+.ql-food-tab.active {
+  background: rgba(34,197,94,.1); border-color: #22c55e; color: #16a34a;
+}
+
+/* Manual entry */
+.ql-manual-row { display: flex; gap: .4rem; }
+.ql-manual-input {
+  flex: 1; padding: .45rem .7rem; border-radius: 10px; font-size: .88rem;
+  background: var(--surface2); border: 1.5px solid var(--border);
+  color: var(--text); outline: none;
+}
+.ql-manual-input:focus { border-color: #22c55e; }
+.ql-manual-macros { display: flex; gap: .5rem; align-items: center; }
+.ql-macro-field {
+  display: flex; align-items: center; gap: .25rem;
+  background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: 9px; padding: .3rem .5rem;
+}
+.ql-macro-label { font-size: .68rem; font-weight: 700; color: var(--text-muted); white-space: nowrap; }
+.ql-macro-input {
+  width: 52px; background: none; border: none; outline: none;
+  font-size: .9rem; font-weight: 700; color: var(--text); text-align: center;
+}
+.ql-macro-unit { font-size: .65rem; color: var(--text-muted); }
+.ql-add-manual-btn {
+  width: 100%; padding: .45rem; border-radius: 10px; font-size: .85rem; font-weight: 700;
+  background: rgba(34,197,94,.1); border: 1.5px solid #22c55e; color: #16a34a;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  gap: .4rem; transition: all .12s;
+}
+.ql-add-manual-btn:hover { background: #22c55e; color: #fff; }
+
 /* Food search */
 .ql-search-wrap { position: relative; }
 .ql-search-row {
@@ -571,6 +658,12 @@ let boloVal = 0;
 document.addEventListener('DOMContentLoaded', () => {
   setNow();
   qlPurposeChange();
+
+  // Enter en campos manuales → agregar
+  ['manual-nombre','manual-carbs','manual-prot','manual-fat'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addManual(); } });
+  });
 
   // Search
   const si = document.getElementById('food-search');
@@ -735,6 +828,50 @@ function aplicarBolo() {
   if (!activeCards.has('insulina')) toggleCard('insulina');
   setInsulina(boloVal);
   document.getElementById('bolo-banner').style.display = 'none';
+}
+
+/* ── Tabs de comida ─────────────────────────────────────────────────────── */
+function switchFoodTab(tab) {
+  document.getElementById('panel-manual').style.display = tab === 'manual' ? '' : 'none';
+  document.getElementById('panel-buscar').style.display = tab === 'buscar' ? '' : 'none';
+  document.getElementById('tab-manual').classList.toggle('active', tab === 'manual');
+  document.getElementById('tab-buscar').classList.toggle('active', tab === 'buscar');
+}
+
+/* ── Entrada manual de comida ───────────────────────────────────────────── */
+function addManual() {
+  const nombre = document.getElementById('manual-nombre').value.trim() || 'Comida';
+  const carbs  = parseFloat(document.getElementById('manual-carbs').value) || 0;
+  const prot   = parseFloat(document.getElementById('manual-prot').value)  || 0;
+  const fat    = parseFloat(document.getElementById('manual-fat').value)   || 0;
+  const cal    = Math.round(carbs * 4 + prot * 4 + fat * 9);
+
+  if (carbs === 0 && prot === 0 && fat === 0) {
+    document.getElementById('manual-carbs').focus();
+    return;
+  }
+
+  const ing = {
+    id:        Date.now(),
+    name:      nombre,
+    food_id:   '',
+    grams:     100,
+    serving_g: 100,
+    carbs_s:   carbs,
+    protein_s: prot,
+    fat_s:     fat,
+    cal_s:     cal,
+  };
+  ingredientes.push(ing);
+
+  // Limpiar campos
+  document.getElementById('manual-nombre').value = '';
+  document.getElementById('manual-carbs').value  = '';
+  document.getElementById('manual-prot').value   = '';
+  document.getElementById('manual-fat').value    = '';
+  document.getElementById('manual-nombre').focus();
+
+  renderIngredients();
 }
 
 /* ── Búsqueda de alimentos ──────────────────────────────────────────────── */
