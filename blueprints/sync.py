@@ -1088,6 +1088,8 @@ def api_feedback_stats():
             GlucosePrediction.predicted_at.desc()
         ).first()
 
+        accuracy = get_model_accuracy(n=50) if res_30 >= 5 else None
+
         return jsonify({
             "ok": True,
             "tabla_existe": True,
@@ -1097,8 +1099,11 @@ def api_feedback_stats():
             "pendientes": pendientes,
             "ultima_prediccion": ultima.predicted_at.isoformat() if ultima else None,
             "loop_activo": total > 0,
-            "accuracy": get_model_accuracy(n=20) if res_30 >= 5 else None,
-            "bias":     get_adaptive_bias(),
+            "accuracy": accuracy,
+            # Clarke Error Grid viene dentro de accuracy como ceg_30 / ceg_60
+            "clarke_30": accuracy.get("ceg_30") if accuracy else None,
+            "clarke_60": accuracy.get("ceg_60") if accuracy else None,
+            "bias":      get_adaptive_bias(),
         })
     except Exception as e:
         import traceback

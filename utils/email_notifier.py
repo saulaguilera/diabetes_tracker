@@ -75,6 +75,9 @@ def _build_html(accuracy: dict, dawn: dict | None = None) -> str:
     rmse60   = accuracy.get("rmse_60")
     pct60    = accuracy.get("pct_dentro_20_60")
 
+    ceg30    = accuracy.get("ceg_30") or {}
+    ceg60    = accuracy.get("ceg_60") or {}
+
     tendencia = accuracy.get("tendencia", "insuficiente")
     trend_txt = _trend_icon(tendencia)
 
@@ -95,6 +98,50 @@ def _build_html(accuracy: dict, dawn: dict | None = None) -> str:
         if v is None:
             return "<span style='color:#888'>—</span>"
         return f"{v:.{decimals}f}{unit}"
+
+    # ── Sección Clarke Error Grid ────────────────────────────────────────────
+    def _ceg_badge(zona: str, pct: int) -> str:
+        """Mini badge de colores para cada zona del Clarke EGA."""
+        colors = {
+            "A": ("#16a34a", "#f0fdf4"),   # verde
+            "B": ("#2563eb", "#eff6ff"),   # azul
+            "C": ("#d97706", "#fffbeb"),   # naranja
+            "D": ("#dc2626", "#fef2f2"),   # rojo
+            "E": ("#7c3aed", "#f5f3ff"),   # violeta oscuro
+        }
+        fg, bg = colors.get(zona, ("#555", "#f5f5f5"))
+        return (
+            f"<span style='display:inline-block;background:{bg};color:{fg};"
+            f"border:1px solid {fg};border-radius:4px;padding:1px 6px;"
+            f"font-size:11px;font-weight:700'>{zona} {pct}%</span>"
+        )
+
+    def _ceg_row(label: str, ceg: dict) -> str:
+        if not ceg or not ceg.get("n"):
+            return ""
+        pct = ceg.get("pct", {})
+        badges = " ".join(
+            _ceg_badge(z, pct.get(z, 0))
+            for z in "ABCDE"
+            if pct.get(z, 0) > 0
+        )
+        ab = ceg.get("zona_a_b_pct", 0)
+        seguro = "✅" if ceg.get("clinicamente_seguro") else "⚠️"
+        return f"""
+        <tr>
+          <td style="padding:10px 16px;border-bottom:1px solid #f3f4f6;color:#6b7280">
+            Clarke EGA — {label}
+            <div style="font-size:11px;color:#9ca3af">Zonas A+B clínicamente aceptables. A+B ≥ 95% = seguro</div>
+          </td>
+          <td colspan="2" style="padding:10px 16px;border-bottom:1px solid #f3f4f6">
+            {badges}<br>
+            <span style="font-size:12px;margin-top:4px;display:inline-block">
+              {seguro} A+B = <strong>{ab}%</strong> ({ceg.get('n', 0)} predicciones)
+            </span>
+          </td>
+        </tr>"""
+
+    clarke_rows = _ceg_row("+30 min", ceg30) + _ceg_row("+60 min", ceg60)
 
     # Sección dawn
     dawn_row = ""
@@ -232,6 +279,7 @@ def _build_html(accuracy: dict, dawn: dict | None = None) -> str:
               <div style="margin-top:4px">+60 min: {_bias_label(bias60)}</div>
             </td>
           </tr>
+          {clarke_rows}
           {dawn_row}
         </table>
 
@@ -253,7 +301,8 @@ def _build_html(accuracy: dict, dawn: dict | None = None) -> str:
               <div style="font-size:12px;color:#6b7280;line-height:1.6">
                 <strong>MAE</strong> (Mean Absolute Error): promedio del error absoluto entre lo predicho y la glucemia real medida por el sensor.<br>
                 <strong>RMSE</strong>: como el MAE pero penaliza más los errores grandes. Un RMSE mucho mayor que el MAE indica que hubo algunos errores muy grandes.<br>
-                <strong>Bias</strong>: si el modelo predice sistemáticamente más o menos que la realidad, se corrige automáticamente en la siguiente predicción.
+                <strong>Bias</strong>: si el modelo predice sistemáticamente más o menos que la realidad, se corrige automáticamente en la siguiente predicción.<br>
+                <strong>Clarke EGA</strong> (Error Grid Analysis): estándar clínico para evaluar predicciones de glucosa. Zona A = precisa (±20%), B = aceptable, C = sobrecorrección, D = falla en detectar hipo/hiperglucemia, E = tratamiento opuesto (más peligroso). Meta: A+B ≥ 95%.
               </div>
             </td>
           </tr>

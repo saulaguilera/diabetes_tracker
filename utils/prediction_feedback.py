@@ -6,10 +6,11 @@ Responsabilidades
 1. save_prediction()      — persiste cada predicción generada en glucose_predictions
 2. resolve_predictions()  — cuando llega una lectura real, busca predicciones
                             pendientes y calcula el error (g_real − g_pred)
-3. get_model_accuracy()   — calcula MAE, bias y tendencia de error de las
-                            últimas N predicciones resueltas
+3. get_model_accuracy()   — calcula MAE, bias, tendencia y Clarke Error Grid
 4. get_adaptive_bias()    — devuelve el bias promedio para corregir la
                             próxima predicción antes de mostrarla al usuario
+5. clarke_zone()          — clasifica un par (real, pred) en zona A-E del Clarke EGA
+6. clarke_error_grid()    — aplica Clarke EGA sobre un conjunto de predicciones
 
 Concepto clave: bias adaptivo
 -----------------------------
@@ -19,6 +20,21 @@ Este ajuste es transparente (se muestra al usuario) y mejora la percepción
 de precisión mientras el modelo de fondo acumula datos para re-calibración.
 
 No es ML — es una corrección de offset lineal simple y explicable.
+
+Clarke Error Grid (CEG)
+-----------------------
+Estándar clínico para evaluar la exactitud de mediciones/predicciones de
+glucosa (Clarke et al., Diabetes Care 1987).  Clasifica cada par (real, pred)
+en zonas A-E según el impacto clínico del error:
+
+  A — Clínicamente precisa (error ≤ 20 % del valor real, o ambos < 70)
+  B — Aceptable (error benigno, no conduce a tratamiento incorrecto)
+  C — Sobrecorrección (predicción lleva a tratar un valor aceptable)
+  D — Falla en detectar hipo/hiperglucemia peligrosa
+  E — Tratamiento opuesto (el más peligroso)
+
+Para predicciones de glucosa (no SMBG puntual) la referencia clínica más
+relevante es la proporción en Zona A ≥ 90 % a +30 min y ≥ 80 % a +60 min.
 """
 from __future__ import annotations
 
@@ -33,6 +49,104 @@ _WINDOW_60 = 12   # ±12 min alrededor de +60min
 
 # Número de predicciones resueltas para calcular bias y MAE
 _BIAS_WINDOW = 20
+
+
+# ── Clarke Error Grid ─────────────────────────────────────────────────────────
+
+def clarke_zone(g_real: float, g_pred: float) -> str:
+    """
+    Clasifica el par (g_real, g_pred) en una zona del Clarke Error Grid (A-E).
+
+    Algoritmo basado en Clarke et al. (1987) y Kovatchev et al. (2004).
+    x = valor de referencia (real), y = valor estimado (predicho).
+
+    Zonas (en orden de peligrosidad ascendente):
+      A — precisa: |y−x|/x ≤ 20%, o ambos < 70 mg/dL
+      B — aceptable: error >20% pero clínicamente benigno
+      C — sobrecorrección de valor aceptable (puede causar hipo/hiperglucemia iatrogénica)
+      D — falla en detectar hipo (<70) o hiperglucemia severa (>240) real
+      E — tratamiento opuesto (predice hiperglucemia en hipoglucemia real o viceversa)
+    """
+    x, y = float(g_real), float(g_pred)
+
+    # ── Zona A: dentro del 20% o ambos hipoglucémicos ──────────────────────
+    if x < 70.0 and y < 70.0:
+        return "A"
+    if x > 0 and abs(y - x) / x <= 0.20:
+        return "A"
+
+    # ── Zona E: tratamiento completamente opuesto (más peligroso) ──────────
+    # Predice hiperglucemia severa cuando el real es hipoglucemia
+    if x <= 70.0 and y >= 180.0:
+        return "E"
+    # Predice hipoglucemia severa cuando el real es hiperglucemia
+    if x >= 180.0 and y <= 70.0:
+        return "E"
+
+    # ── Zona D: falla en detectar evento clínico peligroso ─────────────────
+    # D inferior: glucemia real < 70 (hipo), predicción en rango normal
+    if x < 70.0 and 70.0 <= y <= 180.0:
+        return "D"
+    # D superior: glucemia real ≥ 240 (hiper severa), predicción en rango normal
+    if x >= 240.0 and 70.0 <= y <= 180.0:
+        return "D"
+
+    # ── Zona C: sobrecorrección ─────────────────────────────────────────────
+    # C superior: predicción muy alta para valor real aceptable/leve (llevaría a
+    #             tratar un hiper que no existe o corregir agresivamente)
+    #             Región: x ∈ [70, 180], y > x·1.20 y y ≥ 180
+    if 70.0 <= x <= 180.0 and y > x * 1.20 and y >= 180.0:
+        return "C"
+    # C inferior: predicción demasiado baja para valor real aceptable/levemente
+    #             elevado (llevaría a agregar carbohidratos innecesarios)
+    #             Región: x ∈ [120, 240], y < x·0.80 y y ≤ 70
+    if 120.0 <= x <= 240.0 and y < x * 0.80 and y <= 70.0:
+        return "C"
+
+    # ── Zona B: todo lo demás (error >20% pero clínicamente aceptable) ─────
+    return "B"
+
+
+def clarke_error_grid(pairs: list[tuple[float, float]]) -> dict:
+    """
+    Aplica el Clarke Error Grid sobre una lista de pares (g_real, g_pred).
+
+    Args:
+        pairs: lista de (g_real, g_pred) en mg/dL.
+
+    Returns:
+        {
+          "zonas": {"A": n, "B": n, "C": n, "D": n, "E": n},
+          "pct":   {"A": %, "B": %, "C": %, "D": %, "E": %},
+          "n":     total de pares,
+          "zona_a_b_pct": % combinado A+B (clínicamente aceptable),
+          "clinicamente_seguro": True si zona_a_b_pct ≥ 95%
+        }
+    """
+    if not pairs:
+        return {
+            "zonas": {z: 0 for z in "ABCDE"},
+            "pct":   {z: 0 for z in "ABCDE"},
+            "n":     0,
+            "zona_a_b_pct": 0,
+            "clinicamente_seguro": False,
+        }
+
+    conteo = {z: 0 for z in "ABCDE"}
+    for g_real, g_pred in pairs:
+        conteo[clarke_zone(g_real, g_pred)] += 1
+
+    n = len(pairs)
+    pct = {z: round(100 * conteo[z] / n) for z in "ABCDE"}
+    ab  = round(100 * (conteo["A"] + conteo["B"]) / n)
+
+    return {
+        "zonas": conteo,
+        "pct":   pct,
+        "n":     n,
+        "zona_a_b_pct":         ab,
+        "clinicamente_seguro":  ab >= 95,
+    }
 
 
 def save_prediction(
@@ -188,6 +302,20 @@ def get_model_accuracy(n: int = _BIAS_WINDOW) -> dict:
         else:
             tendencia = "estable"
 
+    # ── Clarke Error Grid ───────────────────────────────────────────────────
+    pairs_30 = [
+        (i.g_real_30, i.g_pred_30)
+        for i in resueltas_30
+        if i.g_real_30 is not None and i.g_pred_30 is not None
+    ]
+    pairs_60 = [
+        (i.g_real_60, i.g_pred_60)
+        for i in resueltas_60
+        if i.g_real_60 is not None and i.g_pred_60 is not None
+    ]
+    ceg_30 = clarke_error_grid(pairs_30)
+    ceg_60 = clarke_error_grid(pairs_60)
+
     return {
         "n_30":           m30["n"],
         "mae_30":         m30["mae"],
@@ -200,6 +328,10 @@ def get_model_accuracy(n: int = _BIAS_WINDOW) -> dict:
         "rmse_60":        m60["rmse"],
         "pct_dentro_20_60": m60["pct_20"],
         "tendencia":      tendencia,
+        # Clarke Error Grid — horizonte +30 min
+        "ceg_30":         ceg_30,
+        # Clarke Error Grid — horizonte +60 min
+        "ceg_60":         ceg_60,
     }
 
 
