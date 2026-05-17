@@ -976,8 +976,10 @@ def api_predict_glucose():
                 icr_used     = icr,
                 ex_factor    = ex_factor,
             )
-        except Exception:
-            pass   # nunca romper la predicción por fallo de persistencia
+        except Exception as _e:
+            import logging
+            logging.getLogger(__name__).warning(f"save_prediction falló: {_e}")
+            # nunca romper la predicción por fallo de persistencia
 
         # ── Accuracy del modelo (últimas N predicciones resueltas) ────────
         accuracy = get_model_accuracy(n=20)
@@ -1066,6 +1068,43 @@ def api_model_accuracy():
         })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/feedback/stats", endpoint="api_feedback_stats")
+def api_feedback_stats():
+    """Estado del feedback loop: cuántas predicciones hay, resueltas y pendientes."""
+    try:
+        from models import GlucosePrediction
+        from utils.prediction_feedback import get_model_accuracy, get_adaptive_bias
+
+        total      = GlucosePrediction.query.count()
+        res_30     = GlucosePrediction.query.filter_by(resolved_30=True).count()
+        res_60     = GlucosePrediction.query.filter_by(resolved_60=True).count()
+        pendientes = GlucosePrediction.query.filter(
+            db.or_(GlucosePrediction.resolved_30 == False,
+                   GlucosePrediction.resolved_60 == False)
+        ).count()
+        ultima = GlucosePrediction.query.order_by(
+            GlucosePrediction.predicted_at.desc()
+        ).first()
+
+        return jsonify({
+            "ok": True,
+            "tabla_existe": True,
+            "total_predicciones": total,
+            "resueltas_30min": res_30,
+            "resueltas_60min": res_60,
+            "pendientes": pendientes,
+            "ultima_prediccion": ultima.predicted_at.isoformat() if ultima else None,
+            "loop_activo": total > 0,
+            "accuracy": get_model_accuracy(n=20) if res_30 >= 5 else None,
+            "bias":     get_adaptive_bias(),
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({"ok": False, "error": str(e),
+                        "tabla_existe": False,
+                        "trace": traceback.format_exc()}), 500
 
 
 @bp.route("/api/diagnostico", endpoint="api_diagnostico")

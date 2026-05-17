@@ -140,30 +140,9 @@ with app.app_context():
             conn.execute(text("ALTER TABLE activities ADD COLUMN exercise_type VARCHAR(20)"))
             conn.commit()
         # Migración: tabla glucose_predictions (feedback del modelo)
+        # db.create_all() ya la crea si no existe — esto es solo un guard extra
         if "glucose_predictions" not in existing_tables:
-            conn.execute(text("""
-                CREATE TABLE glucose_predictions (
-                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                    predicted_at DATETIME NOT NULL,
-                    g_actual     REAL,
-                    iob          REAL,
-                    cob          REAL,
-                    roc          REAL,
-                    isf_used     REAL,
-                    icr_used     REAL,
-                    ex_factor    REAL,
-                    g_pred_30    REAL,
-                    g_pred_60    REAL,
-                    g_real_30    REAL,
-                    g_real_60    REAL,
-                    error_30     REAL,
-                    error_60     REAL,
-                    resolved_30  INTEGER DEFAULT 0,
-                    resolved_60  INTEGER DEFAULT 0,
-                    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            """))
-            conn.commit()
+            db.create_all()   # dialect-aware: funciona en SQLite y PostgreSQL
 
 
 # ── Configuración LibreLinkUp ─────────────────────────────────────────────────
