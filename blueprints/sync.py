@@ -583,22 +583,33 @@ def api_kinetics():
 
         snap = get_kinetics_snapshot(hours_lookback=6)
 
-        # Debug: dosis basales usadas en el cálculo de IOB
+        # Debug: replicamos exactamente lo que current_basal_iob() computa
         tipo = (_get_setting("basal_tipo") or "glargina").lower().strip()
         dia  = _BASAL_DIA_MIN.get(tipo, _BASAL_DIA_DEFAULT)
-        now  = datetime.utcnow()
-        cutoff = now - timedelta(minutes=dia)
+        # Usar datetime.now() igual que current_basal_iob — NO utcnow()
+        now_local = datetime.now()
+        now_utc   = datetime.utcnow()
+        cutoff = now_local - timedelta(minutes=dia)
         dosis_db = (InsulinDose.query
             .filter(InsulinDose.type == "basal",
                     InsulinDose.timestamp >= cutoff,
-                    InsulinDose.timestamp <= now)
+                    InsulinDose.timestamp <= now_local)
             .order_by(InsulinDose.timestamp.desc())
             .all())
-        dosis_info = [
-            {"ts": d.timestamp.isoformat(), "units": d.units,
-             "elapsed_h": round((now - d.timestamp).total_seconds() / 3600, 2)}
-            for d in dosis_db
-        ]
+        dosis_info = []
+        iob_recalc = 0.0
+        for d in dosis_db:
+            elapsed_min = (now_local - d.timestamp).total_seconds() / 60.0
+            frac = max(0.0, 1.0 - elapsed_min / dia)
+            contrib = round(d.units * frac, 3)
+            iob_recalc += contrib
+            dosis_info.append({
+                "ts":         d.timestamp.isoformat(),
+                "units":      d.units,
+                "elapsed_h":  round(elapsed_min / 60, 3),
+                "frac":       round(frac, 4),
+                "iob_contrib": contrib,
+            })
 
         return jsonify({
             "ok":        True,
@@ -612,10 +623,15 @@ def api_kinetics():
             "context":      snap["context"],
             "dia_min":      snap["dia_min"],
             "basal_debug": {
-                "tipo": tipo,
-                "dia_h": round(dia / 60, 1),
-                "ventana_desde": cutoff.isoformat(),
+                "tipo":             tipo,
+                "dia_min":          dia,
+                "dia_h":            round(dia / 60, 1),
+                "now_local":        now_local.isoformat(),
+                "now_utc":          now_utc.isoformat(),
+                "tz_offset_h":      round((now_local - now_utc).total_seconds() / 3600, 2),
+                "ventana_desde":    cutoff.isoformat(),
                 "dosis_encontradas": dosis_info,
+                "iob_recalc":       round(iob_recalc, 2),
             },
         })
     except Exception as e:
