@@ -377,16 +377,16 @@ def current_basal_iob(at_time: Optional[datetime] = None) -> float:
     tipo = (_get_setting("basal_tipo") or "glargina").lower().strip()
     dia  = _BASAL_DIA_MIN.get(tipo, _BASAL_DIA_DEFAULT)
 
-    # ── Prioridad 1: inyección basal más reciente en la DB ───────────────────
-    # Usamos solo la más reciente (no acumulamos días anteriores) porque
-    # el efecto residual de dosis previas ya está capturado en el ROC del CGM.
-    # Sumar múltiples días produce IOB > dosis_real, lo que es confuso y
-    # puede llevar a sub-corrección.
+    # ── Prioridad 1: dosis basales registradas en la DB ─────────────────────
+    # Sumamos todas las dosis dentro del DIA para capturar el residual real
+    # (importante en insulinas largas como Degludec/Toujeo). Para evitar que
+    # el total supere la dosis del día actual (que sería confuso), capiamos
+    # el IOB acumulado al valor de la inyección más reciente.
     try:
         from models import InsulinDose
-        # Ventana: DIA + 2h de buffer para asegurar que encontramos la última dosis
+        # Ventana: DIA + 2h de buffer para capturar dosis del día anterior
         cutoff = at_time - timedelta(minutes=dia + 120)
-        ultima = (
+        dosis = (
             InsulinDose.query
             .filter(
                 InsulinDose.type      == "basal",
@@ -394,13 +394,21 @@ def current_basal_iob(at_time: Optional[datetime] = None) -> float:
                 InsulinDose.timestamp <= at_time,
             )
             .order_by(InsulinDose.timestamp.desc())
-            .first()
+            .all()
         )
 
-        if ultima:
-            elapsed = (at_time - ultima.timestamp).total_seconds() / 60.0
-            frac    = max(0.0, 1.0 - elapsed / dia)
-            return round(ultima.units * frac, 2)
+        if dosis:
+            # Dosis más reciente define el techo del IOB mostrado
+            dosis_reciente = dosis[0].units
+
+            total = 0.0
+            for d in dosis:
+                elapsed = (at_time - d.timestamp).total_seconds() / 60.0
+                frac    = max(0.0, 1.0 - elapsed / dia)
+                total  += d.units * frac
+
+            # Capear al valor de la dosis más reciente para evitar IOB > dosis_diaria
+            return round(min(total, dosis_reciente), 2)
     except Exception:
         pass   # DB no disponible (tests, migraciones) → fallback
 
