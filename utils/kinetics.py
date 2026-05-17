@@ -378,14 +378,13 @@ def current_basal_iob(at_time: Optional[datetime] = None) -> float:
     dia  = _BASAL_DIA_MIN.get(tipo, _BASAL_DIA_DEFAULT)
 
     # ── Prioridad 1: dosis basales registradas en la DB ─────────────────────
-    # Sumamos todas las dosis dentro del DIA para capturar el residual real
-    # (importante en insulinas largas como Degludec/Toujeo). Para evitar que
-    # el total supere la dosis del día actual (que sería confuso), capiamos
-    # el IOB acumulado al valor de la inyección más reciente.
+    # Sumamos todas las dosis dentro del DIA. Esto es fisiológicamente correcto:
+    # - Glargina (DIA=24h): dosis de ayer tiene frac≈0 al momento de la nueva → total ≈ dosis actual
+    # - Toujeo/Degludec (DIA=36-42h): acumula entre días → IOB total > una sola dosis (esperado)
     try:
         from models import InsulinDose
-        # Ventana: DIA + 2h de buffer para capturar dosis del día anterior
-        cutoff = at_time - timedelta(minutes=dia + 120)
+        # Ventana = DIA completo (sin buffer extra para no capturar dosis irrelevantes)
+        cutoff = at_time - timedelta(minutes=dia)
         dosis = (
             InsulinDose.query
             .filter(
@@ -398,17 +397,12 @@ def current_basal_iob(at_time: Optional[datetime] = None) -> float:
         )
 
         if dosis:
-            # Dosis más reciente define el techo del IOB mostrado
-            dosis_reciente = dosis[0].units
-
             total = 0.0
             for d in dosis:
                 elapsed = (at_time - d.timestamp).total_seconds() / 60.0
                 frac    = max(0.0, 1.0 - elapsed / dia)
                 total  += d.units * frac
-
-            # Capear al valor de la dosis más reciente para evitar IOB > dosis_diaria
-            return round(min(total, dosis_reciente), 2)
+            return round(total, 2)
     except Exception:
         pass   # DB no disponible (tests, migraciones) → fallback
 
