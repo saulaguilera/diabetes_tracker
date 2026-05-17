@@ -159,36 +159,45 @@
 
       {# ── Panel manual ──────────────────────────────────────────── #}
       <div id="panel-manual">
-        {# Nombre con estimación automática #}
+        {# Nombre + cantidad en un solo campo inteligente #}
         <div class="ql-manual-row mb-1">
           <input type="text" id="manual-nombre" class="ql-manual-input"
-                 placeholder="Nombre del alimento..." autocomplete="off"
-                 oninput="onNombreInput()">
+                 placeholder="Ej: manzana 150g · arroz 1 taza · 1/2 palta"
+                 autocomplete="off" oninput="onNombreInput()">
           <div class="ql-estimar-spinner" id="estimar-spinner" style="display:none;">
             <i class="bi bi-arrow-repeat cfg-spin"></i>
           </div>
         </div>
+
         {# Badge de resultado de estimación #}
         <div id="estimar-badge" class="ql-estimar-badge" style="display:none;"></div>
 
-        {# Macros (se auto-rellenan con la estimación) #}
+        {# Fila de cantidad + macros #}
         <div class="ql-manual-macros mb-2">
+          <div class="ql-macro-field ql-macro-grams">
+            <span class="ql-macro-label">Gramos</span>
+            <input type="number" id="manual-grams" class="ql-macro-input"
+                   placeholder="100" min="1" max="2000" step="5" value="100"
+                   oninput="onGramsInput()">
+            <span class="ql-macro-unit">g</span>
+          </div>
+          <div class="ql-macro-sep">→</div>
           <div class="ql-macro-field">
             <span class="ql-macro-label">CH</span>
             <input type="number" id="manual-carbs" class="ql-macro-input"
-                   placeholder="0" min="0" max="500" step="1">
+                   placeholder="0" min="0" max="500" step="0.5">
             <span class="ql-macro-unit">g</span>
           </div>
           <div class="ql-macro-field">
             <span class="ql-macro-label">Prot</span>
             <input type="number" id="manual-prot" class="ql-macro-input"
-                   placeholder="0" min="0" max="200" step="1">
+                   placeholder="0" min="0" max="200" step="0.5">
             <span class="ql-macro-unit">g</span>
           </div>
           <div class="ql-macro-field">
             <span class="ql-macro-label">Grasa</span>
             <input type="number" id="manual-fat" class="ql-macro-input"
-                   placeholder="0" min="0" max="200" step="1">
+                   placeholder="0" min="0" max="200" step="0.5">
             <span class="ql-macro-unit">g</span>
           </div>
           <div class="ql-macro-field" id="gi-field" style="display:none;">
@@ -498,11 +507,18 @@
   color: var(--text); outline: none;
 }
 .ql-manual-input:focus { border-color: #22c55e; }
-.ql-manual-macros { display: flex; gap: .5rem; align-items: center; }
+.ql-manual-macros { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; }
 .ql-macro-field {
   display: flex; align-items: center; gap: .25rem;
   background: var(--surface2); border: 1.5px solid var(--border);
   border-radius: 9px; padding: .3rem .5rem;
+}
+.ql-macro-grams {
+  border-color: #6366f1; background: rgba(99,102,241,.06);
+}
+.ql-macro-grams .ql-macro-label { color: #6366f1; }
+.ql-macro-sep {
+  font-size: .8rem; color: var(--text-muted); flex-shrink: 0;
 }
 .ql-macro-label { font-size: .68rem; font-weight: 700; color: var(--text-muted); white-space: nowrap; }
 .ql-macro-input {
@@ -691,7 +707,7 @@ document.addEventListener('DOMContentLoaded', () => {
   qlPurposeChange();
 
   // Enter en campos manuales → agregar
-  ['manual-nombre','manual-carbs','manual-prot','manual-fat'].forEach(id => {
+  ['manual-nombre','manual-grams','manual-carbs','manual-prot','manual-fat'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addManual(); } });
   });
@@ -869,34 +885,128 @@ function switchFoodTab(tab) {
   document.getElementById('tab-buscar').classList.toggle('active', tab === 'buscar');
 }
 
-/* ── Estimación automática de macros ────────────────────────────────────── */
-let estimarTimer;
-let currentGI = null;
+/* ── Parser de cantidad desde texto ─────────────────────────────────────── */
+const UNIT_TO_G = {
+  'taza': 240, 'tazas': 240, 'cup': 240, 'cups': 240,
+  'cucharada': 15, 'cucharadas': 15, 'cda': 15, 'tbsp': 15,
+  'cucharadita': 5, 'cucharaditas': 5, 'cdta': 5, 'tsp': 5,
+  'porcion': 150, 'porciones': 150, 'porción': 150, 'porciones': 150,
+  'unidad': 100, 'unidades': 100,
+  'rebanada': 30, 'rebanadas': 30, 'rodaja': 50, 'rodajas': 50,
+  'puñado': 30, 'puñados': 30,
+};
 
-function onNombreInput() {
-  const nombre = document.getElementById('manual-nombre').value.trim();
-  clearTimeout(estimarTimer);
-  hideBadge();
-  if (nombre.length < 3) return;
-  estimarTimer = setTimeout(() => estimarMacros(nombre), 500);
+function parseCantidad(texto) {
+  // Retorna { nombre, grams } extrayendo cantidad del texto
+  let t = texto.trim();
+  let grams = null;
+  let cleanName = t;
+
+  // Patrón 1: "150g", "150 g", "150gr", "150grs", "150 gramos"
+  const gPat = /(\d+(?:[.,]\d+)?)\s*(?:g(?:r(?:s|amos)?)?)\b/i;
+  let m = t.match(gPat);
+  if (m) {
+    grams = parseFloat(m[1].replace(',', '.'));
+    cleanName = t.replace(m[0], '').trim().replace(/^[-,\s]+|[-,\s]+$/g, '');
+    return { nombre: cleanName || t, grams };
+  }
+
+  // Patrón 2: fracción o número + unidad ("1/4 taza", "2 cucharadas", "1.5 porciones")
+  const unitPat = /(\d+(?:[.,]\d+)?(?:\/\d+)?)\s+(taza|tazas|cucharada|cucharadas|cda|cucharadita|cucharaditas|cdta|porci[oó]n|porciones|unidad|unidades|rebanada|rebanadas|rodaja|rodajas|pu[ñn]ado|cup|cups|tbsp|tsp)s?\b/i;
+  m = t.match(unitPat);
+  if (m) {
+    const num = evalFrac(m[1]);
+    const unit = m[2].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+    const unitNorm = Object.keys(UNIT_TO_G).find(k =>
+      k.normalize('NFD').replace(/[̀-ͯ]/g,'') === unit) || unit;
+    grams = +(num * (UNIT_TO_G[unitNorm] || 100)).toFixed(0);
+    cleanName = t.replace(m[0], '').trim().replace(/^[-,\s]+|[-,\s]+$/g, '');
+    return { nombre: cleanName || t, grams };
+  }
+
+  // Patrón 3: fracción sola al inicio "1/4 manzana", "1/2 palta"
+  const fracPat = /^(\d+)\/(\d+)\s+(.+)/;
+  m = t.match(fracPat);
+  if (m) {
+    grams = +(parseInt(m[1]) / parseInt(m[2]) * 100).toFixed(0);
+    cleanName = m[3].trim();
+    return { nombre: cleanName, grams };
+  }
+
+  // Patrón 4: número al inicio sin unidad "2 huevos", "3 galletas"
+  const numPat = /^(\d+(?:[.,]\d+)?)\s+(.+)/;
+  m = t.match(numPat);
+  if (m) {
+    const num = parseFloat(m[1].replace(',', '.'));
+    if (num <= 20) { // probablemente unidades, no gramos
+      grams = +(num * 100).toFixed(0);
+      cleanName = m[2].trim();
+      return { nombre: cleanName, grams };
+    }
+  }
+
+  return { nombre: t, grams: null };
 }
 
-async function estimarMacros(nombre) {
+function evalFrac(str) {
+  if (str.includes('/')) {
+    const [a, b] = str.split('/').map(Number);
+    return a / b;
+  }
+  return parseFloat(str.replace(',', '.'));
+}
+
+/* ── Macros base por 100g (cache de estimación) ──────────────────────────── */
+let macroBase100 = null;   // { carbs, prot, fat } por 100g
+let currentGI    = null;
+let estimarTimer;
+
+function onNombreInput() {
+  const texto = document.getElementById('manual-nombre').value.trim();
+  clearTimeout(estimarTimer);
+  hideBadge();
+  macroBase100 = null;
+  if (texto.length < 2) return;
+  estimarTimer = setTimeout(() => {
+    const { nombre, grams } = parseCantidad(texto);
+    // Actualizar campo gramos si se detectó cantidad
+    if (grams !== null) {
+      document.getElementById('manual-grams').value = grams;
+    }
+    estimarMacros(nombre, parseFloat(document.getElementById('manual-grams').value) || 100);
+  }, 450);
+}
+
+function onGramsInput() {
+  // Cuando cambia gramos, re-escala los macros si hay base
+  if (!macroBase100) return;
+  const g = parseFloat(document.getElementById('manual-grams').value) || 100;
+  aplicarMacrosEscalados(g);
+}
+
+function aplicarMacrosEscalados(g) {
+  if (!macroBase100) return;
+  const f = g / 100;
+  document.getElementById('manual-carbs').value = +(macroBase100.carbs * f).toFixed(1);
+  document.getElementById('manual-prot').value  = +(macroBase100.prot  * f).toFixed(1);
+  document.getElementById('manual-fat').value   = +(macroBase100.fat   * f).toFixed(1);
+}
+
+async function estimarMacros(nombre, grams) {
   const spinner = document.getElementById('estimar-spinner');
   spinner.style.display = 'flex';
   try {
-    const res  = await fetch(`/api/estimar-macros?nombre=${encodeURIComponent(nombre)}`);
+    // Siempre pedimos macros por 100g para poder re-escalar cuando cambian los gramos
+    const res  = await fetch(`/api/estimar-macros?nombre=${encodeURIComponent(nombre)}&grams=100`);
     const data = await res.json();
     spinner.style.display = 'none';
     if (data.error) { hideBadge(); return; }
 
-    // Rellenar campos (solo si están vacíos o vienen de estimación previa)
-    const carbsEl = document.getElementById('manual-carbs');
-    const protEl  = document.getElementById('manual-prot');
-    const fatEl   = document.getElementById('manual-fat');
-    if (data.carbs_g  > 0) carbsEl.value = data.carbs_g;
-    if (data.protein_g > 0) protEl.value = data.protein_g;
-    if (data.fat_g    > 0) fatEl.value  = data.fat_g;
+    // Guardar base por 100g
+    macroBase100 = { carbs: data.carbs_g || 0, prot: data.protein_g || 0, fat: data.fat_g || 0 };
+
+    // Aplicar escalado a los gramos actuales
+    aplicarMacrosEscalados(grams);
 
     // IG
     currentGI = data.glycemic_index || null;
@@ -905,15 +1015,14 @@ async function estimarMacros(nombre) {
     if (currentGI) {
       giField.style.display = '';
       const cls = currentGI < 55 ? 'gi-bajo' : currentGI <= 70 ? 'gi-medio' : 'gi-alto';
-      const lbl = currentGI < 55 ? 'Bajo' : currentGI <= 70 ? 'Medio' : 'Alto';
-      giVal.textContent  = currentGI;
-      giVal.className    = 'ql-gi-val ' + cls;
-      giField.title      = `IG ${lbl} (${currentGI})`;
+      giVal.textContent = currentGI;
+      giVal.className   = 'ql-gi-val ' + cls;
+      giField.title     = `IG ${currentGI < 55 ? 'Bajo' : currentGI <= 70 ? 'Medio' : 'Alto'} (${currentGI})`;
     } else {
       giField.style.display = 'none';
     }
 
-    // Badge de origen
+    // Badge origen + fibra
     const badge  = document.getElementById('estimar-badge');
     const origen = data.origin === 'interno' ? '📊 Base nutricional interna'
                  : data.origin === 'mis_alimentos' ? '⭐ Tus alimentos'
@@ -936,23 +1045,27 @@ function hideBadge() {
 
 /* ── Entrada manual de comida ───────────────────────────────────────────── */
 function addManual() {
-  const nombre = document.getElementById('manual-nombre').value.trim() || 'Comida';
-  const carbs  = parseFloat(document.getElementById('manual-carbs').value) || 0;
-  const prot   = parseFloat(document.getElementById('manual-prot').value)  || 0;
-  const fat    = parseFloat(document.getElementById('manual-fat').value)   || 0;
-  const cal    = Math.round(carbs * 4 + prot * 4 + fat * 9);
+  const textoRaw = document.getElementById('manual-nombre').value.trim();
+  const { nombre } = parseCantidad(textoRaw);
+  const grams = parseFloat(document.getElementById('manual-grams').value) || 100;
+  const carbs = parseFloat(document.getElementById('manual-carbs').value) || 0;
+  const prot  = parseFloat(document.getElementById('manual-prot').value)  || 0;
+  const fat   = parseFloat(document.getElementById('manual-fat').value)   || 0;
+  const cal   = Math.round(carbs * 4 + prot * 4 + fat * 9);
 
   if (carbs === 0 && prot === 0 && fat === 0) {
     document.getElementById('manual-carbs').focus();
     return;
   }
 
+  // Los macros ingresados ya corresponden a `grams` gramos.
+  // Guardamos como serving_g=grams para que el escalado en la lista sea 1:1.
   const ing = {
     id:        Date.now(),
-    name:      nombre,
+    name:      nombre || textoRaw || 'Comida',
     food_id:   '',
-    grams:     100,
-    serving_g: 100,
+    grams:     grams,
+    serving_g: grams,
     carbs_s:   carbs,
     protein_s: prot,
     fat_s:     fat,
@@ -961,11 +1074,13 @@ function addManual() {
   };
   ingredientes.push(ing);
 
-  // Limpiar campos y estado
+  // Limpiar campos
   document.getElementById('manual-nombre').value = '';
+  document.getElementById('manual-grams').value  = 100;
   document.getElementById('manual-carbs').value  = '';
   document.getElementById('manual-prot').value   = '';
   document.getElementById('manual-fat').value    = '';
+  macroBase100 = null;
   hideBadge();
   document.getElementById('manual-nombre').focus();
 
@@ -1002,17 +1117,19 @@ function addIngredient(item) {
   // serving_g = gramos de referencia para los macros devueltos por la API
   // Usamos eso como porción inicial y escalamos proporcionalmente al cambiar gramos.
   const servingG = item.serving_g || 100;
+  // Normalizar siempre a 100g para consistencia visual
+  const factor = 100 / servingG;
 
   const ing = {
     id:          Date.now(),
     name:        item.name,
     food_id:     item.id || '',
-    grams:       servingG,          // porción inicial = porción de referencia
-    serving_g:   servingG,
-    carbs_s:     item.carbs    || 0,   // macros por serving_g gramos
-    protein_s:   item.protein  || 0,
-    fat_s:       item.fat      || 0,
-    cal_s:       item.calories || 0,
+    grams:       100,
+    serving_g:   100,
+    carbs_s:     +((item.carbs    || 0) * factor).toFixed(2),
+    protein_s:   +((item.protein  || 0) * factor).toFixed(2),
+    fat_s:       +((item.fat      || 0) * factor).toFixed(2),
+    cal_s:       +((item.calories || 0) * factor).toFixed(2),
   };
   ingredientes.push(ing);
   renderIngredients();
