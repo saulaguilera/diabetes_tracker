@@ -741,8 +741,9 @@ def api_predict_glucose():
         snap = get_kinetics_snapshot(hours_lookback=6, dia_min=dia_min, peak_min=peak_min)
         g_raw          = snap["last_glucose"]
         roc_regression = snap["roc"]        # mg/dL/min — regresión ponderada
-        iob_now        = snap["iob"]        # total: bolus + basal
-        iob_basal_now  = snap["iob_basal"]  # solo basal (para desglose)
+        iob_now        = snap["iob"]         # total bolus + basal (para mostrar)
+        iob_bolus_now  = snap["iob_bolus"]   # solo bolus (para predicción de trayectoria)
+        iob_basal_now  = snap["iob_basal"]   # solo basal (para desglose informativo)
         cob_now        = snap["cob"]
 
         if g_raw is None:
@@ -810,10 +811,12 @@ def api_predict_glucose():
             t_fut    = now + timedelta(minutes=delta_min)
             iob_fut  = current_iob(boluses,   at_time=t_fut, peak_min=peak_min, dia_min=dia_min)
             cob_fut  = current_cob(meals_ext, at_time=t_fut)
-            # ΔIOB total = bolo + basal
-            # El basal decae lentamente (lineal): Δbasal = dose × Δt/dia_basal
+            # ΔIOB para predicción: solo bolus.
+            # La basal cubre la producción hepática de glucosa (efecto neto ≈ 0
+            # en estado estable) — incluirla generaría caídas artificiales.
+            # El IOB basal se muestra en el desglose pero NO entra en la trayectoria.
             iob_basal_fut = current_basal_iob(at_time=t_fut)
-            d_iob    = (iob_now - iob_fut) + (iob_basal_now - iob_basal_fut)
+            d_iob    = iob_bolus_now - iob_fut
             d_cob    = cob_now - cob_fut   # carbos absorbidos en Δt  (> 0 → sube glucosa)
 
             # ROC con decaimiento exponencial + supresión por COB activo
