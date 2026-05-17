@@ -1092,7 +1092,7 @@ def api_diagnostico():
         # ── 1. IOB: desglose por bolus ──────────────────────────────────────
         from utils.kinetics import _iob_fraction, _DEFAULT_PEAK_MIN, _DEFAULT_DIA_MIN
         saved_dia   = _get_setting("dia_min")
-        dia_min     = int(saved_dia) if saved_dia else _DEFAULT_DIA_MIN
+        dia_min     = int(float(saved_dia)) if saved_dia else _DEFAULT_DIA_MIN
         peak_min    = _DEFAULT_PEAK_MIN
         cutoff_iob  = now - timedelta(minutes=dia_min)
         boluses_raw = InsulinDose.query.filter(
