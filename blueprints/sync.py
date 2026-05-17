@@ -577,8 +577,29 @@ def api_kinetics():
     Útil para actualización periódica en el navegador sin recargar la página.
     """
     try:
-        from utils.kinetics import get_kinetics_snapshot
+        from utils.kinetics import get_kinetics_snapshot, _BASAL_DIA_MIN, _BASAL_DIA_DEFAULT
+        from models import InsulinDose
+        from helpers import _get_setting
+
         snap = get_kinetics_snapshot(hours_lookback=6)
+
+        # Debug: dosis basales usadas en el cálculo de IOB
+        tipo = (_get_setting("basal_tipo") or "glargina").lower().strip()
+        dia  = _BASAL_DIA_MIN.get(tipo, _BASAL_DIA_DEFAULT)
+        now  = datetime.utcnow()
+        cutoff = now - timedelta(minutes=dia)
+        dosis_db = (InsulinDose.query
+            .filter(InsulinDose.type == "basal",
+                    InsulinDose.timestamp >= cutoff,
+                    InsulinDose.timestamp <= now)
+            .order_by(InsulinDose.timestamp.desc())
+            .all())
+        dosis_info = [
+            {"ts": d.timestamp.isoformat(), "units": d.units,
+             "elapsed_h": round((now - d.timestamp).total_seconds() / 3600, 2)}
+            for d in dosis_db
+        ]
+
         return jsonify({
             "ok":        True,
             "iob":       snap["iob"],
@@ -590,6 +611,12 @@ def api_kinetics():
             "last_glucose": snap["last_glucose"],
             "context":      snap["context"],
             "dia_min":      snap["dia_min"],
+            "basal_debug": {
+                "tipo": tipo,
+                "dia_h": round(dia / 60, 1),
+                "ventana_desde": cutoff.isoformat(),
+                "dosis_encontradas": dosis_info,
+            },
         })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
