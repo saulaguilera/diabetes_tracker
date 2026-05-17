@@ -159,10 +159,19 @@
 
       {# ── Panel manual ──────────────────────────────────────────── #}
       <div id="panel-manual">
-        <div class="ql-manual-row mb-2">
+        {# Nombre con estimación automática #}
+        <div class="ql-manual-row mb-1">
           <input type="text" id="manual-nombre" class="ql-manual-input"
-                 placeholder="Nombre (ej: Arroz con pollo)" autocomplete="off">
+                 placeholder="Nombre del alimento..." autocomplete="off"
+                 oninput="onNombreInput()">
+          <div class="ql-estimar-spinner" id="estimar-spinner" style="display:none;">
+            <i class="bi bi-arrow-repeat cfg-spin"></i>
+          </div>
         </div>
+        {# Badge de resultado de estimación #}
+        <div id="estimar-badge" class="ql-estimar-badge" style="display:none;"></div>
+
+        {# Macros (se auto-rellenan con la estimación) #}
         <div class="ql-manual-macros mb-2">
           <div class="ql-macro-field">
             <span class="ql-macro-label">CH</span>
@@ -181,6 +190,10 @@
             <input type="number" id="manual-fat" class="ql-macro-input"
                    placeholder="0" min="0" max="200" step="1">
             <span class="ql-macro-unit">g</span>
+          </div>
+          <div class="ql-macro-field" id="gi-field" style="display:none;">
+            <span class="ql-macro-label">IG</span>
+            <span id="gi-val" class="ql-gi-val">—</span>
           </div>
         </div>
         <button type="button" class="ql-add-manual-btn" onclick="addManual()">
@@ -504,6 +517,24 @@
   gap: .4rem; transition: all .12s;
 }
 .ql-add-manual-btn:hover { background: #22c55e; color: #fff; }
+
+/* Estimación automática */
+.ql-manual-row { position: relative; }
+.ql-estimar-spinner {
+  position: absolute; right: .6rem; top: 50%; transform: translateY(-50%);
+  color: var(--text-muted); font-size: .9rem;
+}
+.ql-estimar-badge {
+  font-size: .72rem; color: var(--text-muted); margin-bottom: .4rem;
+  padding: .2rem .5rem; background: var(--surface2); border-radius: 6px;
+  display: flex; align-items: center; gap: .35rem;
+}
+.ql-gi-val {
+  font-size: .9rem; font-weight: 800; min-width: 28px; text-align: center;
+}
+.gi-bajo  { color: #22c55e; }
+.gi-medio { color: #f59e0b; }
+.gi-alto  { color: #ef4444; }
 
 /* Food search */
 .ql-search-wrap { position: relative; }
@@ -838,6 +869,71 @@ function switchFoodTab(tab) {
   document.getElementById('tab-buscar').classList.toggle('active', tab === 'buscar');
 }
 
+/* ── Estimación automática de macros ────────────────────────────────────── */
+let estimarTimer;
+let currentGI = null;
+
+function onNombreInput() {
+  const nombre = document.getElementById('manual-nombre').value.trim();
+  clearTimeout(estimarTimer);
+  hideBadge();
+  if (nombre.length < 3) return;
+  estimarTimer = setTimeout(() => estimarMacros(nombre), 500);
+}
+
+async function estimarMacros(nombre) {
+  const spinner = document.getElementById('estimar-spinner');
+  spinner.style.display = 'flex';
+  try {
+    const res  = await fetch(`/api/estimar-macros?nombre=${encodeURIComponent(nombre)}`);
+    const data = await res.json();
+    spinner.style.display = 'none';
+    if (data.error) { hideBadge(); return; }
+
+    // Rellenar campos (solo si están vacíos o vienen de estimación previa)
+    const carbsEl = document.getElementById('manual-carbs');
+    const protEl  = document.getElementById('manual-prot');
+    const fatEl   = document.getElementById('manual-fat');
+    if (data.carbs_g  > 0) carbsEl.value = data.carbs_g;
+    if (data.protein_g > 0) protEl.value = data.protein_g;
+    if (data.fat_g    > 0) fatEl.value  = data.fat_g;
+
+    // IG
+    currentGI = data.glycemic_index || null;
+    const giField = document.getElementById('gi-field');
+    const giVal   = document.getElementById('gi-val');
+    if (currentGI) {
+      giField.style.display = '';
+      const cls = currentGI < 55 ? 'gi-bajo' : currentGI <= 70 ? 'gi-medio' : 'gi-alto';
+      const lbl = currentGI < 55 ? 'Bajo' : currentGI <= 70 ? 'Medio' : 'Alto';
+      giVal.textContent  = currentGI;
+      giVal.className    = 'ql-gi-val ' + cls;
+      giField.title      = `IG ${lbl} (${currentGI})`;
+    } else {
+      giField.style.display = 'none';
+    }
+
+    // Badge de origen
+    const badge  = document.getElementById('estimar-badge');
+    const origen = data.origin === 'interno' ? '📊 Base nutricional interna'
+                 : data.origin === 'mis_alimentos' ? '⭐ Tus alimentos'
+                 : '🌐 Open Food Facts';
+    const fibra  = data.fibra_g > 0 ? ` · Fibra ${data.fibra_g}g` : '';
+    badge.innerHTML = `<i class="bi bi-magic"></i> ${origen}${fibra}`;
+    badge.style.display = 'flex';
+
+  } catch(e) {
+    document.getElementById('estimar-spinner').style.display = 'none';
+  }
+}
+
+function hideBadge() {
+  document.getElementById('estimar-badge').style.display = 'none';
+  document.getElementById('gi-field').style.display = 'none';
+  document.getElementById('estimar-spinner').style.display = 'none';
+  currentGI = null;
+}
+
 /* ── Entrada manual de comida ───────────────────────────────────────────── */
 function addManual() {
   const nombre = document.getElementById('manual-nombre').value.trim() || 'Comida';
@@ -861,14 +957,16 @@ function addManual() {
     protein_s: prot,
     fat_s:     fat,
     cal_s:     cal,
+    gi:        currentGI,
   };
   ingredientes.push(ing);
 
-  // Limpiar campos
+  // Limpiar campos y estado
   document.getElementById('manual-nombre').value = '';
   document.getElementById('manual-carbs').value  = '';
   document.getElementById('manual-prot').value   = '';
   document.getElementById('manual-fat').value    = '';
+  hideBadge();
   document.getElementById('manual-nombre').focus();
 
   renderIngredients();
@@ -955,7 +1053,8 @@ function renderIngredients() {
       <input type="hidden" name="comp_protein[]"  value="${m.protein}">
       <input type="hidden" name="comp_fat[]"      value="${m.fat}">
       <input type="hidden" name="comp_calories[]" value="${m.cal}">
-      <input type="hidden" name="comp_grams[]"    value="${ing.grams}">`;
+      <input type="hidden" name="comp_grams[]"    value="${ing.grams}">
+      <input type="hidden" name="comp_gi[]"       value="${ing.gi ?? ''}">`;
     list.appendChild(div);
   });
   recalcTotals();
