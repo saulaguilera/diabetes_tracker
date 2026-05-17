@@ -710,7 +710,7 @@ def api_predict_glucose():
         from utils.kinetics import (
             get_kinetics_snapshot, exercise_sensitivity_factor,
             current_iob, current_cob, current_basal_iob,
-            dawn_roc_mgdl_min,
+            dawn_roc_mgdl_min, _basal_inyeccion_reciente,
             _DEFAULT_PEAK_MIN, _DEFAULT_DIA_MIN,
         )
 
@@ -811,12 +811,15 @@ def api_predict_glucose():
             t_fut    = now + timedelta(minutes=delta_min)
             iob_fut  = current_iob(boluses,   at_time=t_fut, peak_min=peak_min, dia_min=dia_min)
             cob_fut  = current_cob(meals_ext, at_time=t_fut)
-            # ΔIOB para predicción: solo bolus.
-            # La basal cubre la producción hepática de glucosa (efecto neto ≈ 0
-            # en estado estable) — incluirla generaría caídas artificiales.
-            # El IOB basal se muestra en el desglose pero NO entra en la trayectoria.
+            # ΔIOB para predicción: bolus siempre + basal solo si es reciente.
+            #
+            # La basal en estado estable (> 4h) ya está capturada en el ROC del
+            # CGM → sumarla sería doble conteo. Pero si la inyección fue hace
+            # < 4h, el sensor aún no registró todo el efecto → hay que incluirla.
             iob_basal_fut = current_basal_iob(at_time=t_fut)
-            d_iob    = iob_bolus_now - iob_fut
+            basal_es_reciente = _basal_inyeccion_reciente(now, umbral_h=4)
+            d_iob_basal = (iob_basal_now - iob_basal_fut) if basal_es_reciente else 0.0
+            d_iob = (iob_bolus_now - iob_fut) + d_iob_basal
             d_cob    = cob_now - cob_fut   # carbos absorbidos en Δt  (> 0 → sube glucosa)
 
             # ROC con decaimiento exponencial + supresión por COB activo
@@ -898,6 +901,8 @@ def api_predict_glucose():
                     "insulin_effect":  round(-insulin_effect,   1),
                     "carb_effect":     round(carb_effect,       1),
                     "dawn_effect":     round(dawn_effect_total, 1),
+                    "basal_reciente":  basal_es_reciente,
+                    "d_iob_basal":     round(d_iob_basal,       3),
                     "roc_eff_min":     round(roc_eff_min,       1),
                     "cob_suppression": round(cob_suppression,   2),
                 },

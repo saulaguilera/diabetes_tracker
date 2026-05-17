@@ -668,6 +668,34 @@ def current_cob_detailed(
     }
 
 
+# ── Basal recency check ───────────────────────────────────────────────────────
+
+def _basal_inyeccion_reciente(at_time: Optional[datetime] = None,
+                               umbral_h: float = 4.0) -> bool:
+    """
+    Retorna True si la inyección basal más reciente fue hace menos de `umbral_h` horas.
+
+    Lógica de predicción:
+    - Basal reciente (< 4h): el CGM aún no capturó todo el efecto → incluir
+      delta basal en d_iob para la predicción de trayectoria.
+    - Basal en estado estable (≥ 4h): el efecto ya está reflejado en el ROC
+      del sensor → no sumar (sería doble conteo).
+    """
+    if at_time is None:
+        at_time = datetime.now()
+    try:
+        from models import InsulinDose
+        cutoff = at_time - timedelta(hours=umbral_h)
+        reciente = InsulinDose.query.filter(
+            InsulinDose.type      == "basal",
+            InsulinDose.timestamp >= cutoff,
+            InsulinDose.timestamp <= at_time,
+        ).first()
+        return reciente is not None
+    except Exception:
+        return False
+
+
 # ── Dawn phenomenon (fenómeno del alba) ──────────────────────────────────────
 
 def dawn_roc_mgdl_min(at_time: datetime | None = None) -> float:
