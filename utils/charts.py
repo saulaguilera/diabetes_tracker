@@ -25,7 +25,7 @@ def _to_json(fig) -> dict:
 def _get_readings(hours=168):
     """Obtiene lecturas de glucosa del período dado."""
     from models import GlucoseReading
-    desde = datetime.utcnow() - timedelta(hours=hours)
+    desde = datetime.now() - timedelta(hours=hours)
     return (
         GlucoseReading.query
         .filter(GlucoseReading.timestamp >= desde)
@@ -245,7 +245,7 @@ def chart_meal_impact(days=30) -> dict:
     """
     from models import Meal, GlucoseReading
 
-    desde = datetime.utcnow() - timedelta(days=days)
+    desde = datetime.now() - timedelta(days=days)
     comidas = Meal.query.filter(Meal.timestamp >= desde).order_by(Meal.timestamp).all()
 
     if not comidas:
@@ -353,7 +353,7 @@ def chart_timeline_eventos(hours=168) -> dict:
     """Timeline completa: glucosa + marcadores de comidas, insulina y ejercicio."""
     from models import GlucoseReading, Meal, InsulinDose, Activity
 
-    desde = datetime.utcnow() - timedelta(hours=hours)
+    desde = datetime.now() - timedelta(hours=hours)
     readings = _get_readings(hours=hours)
 
     if not readings:
@@ -456,7 +456,7 @@ def chart_activity_glucose_impact(days=30) -> dict:
     from models import Activity, GlucoseReading
     from collections import defaultdict
 
-    desde = datetime.utcnow() - timedelta(days=days)
+    desde = datetime.now() - timedelta(days=days)
     actividades = Activity.query.filter(Activity.timestamp >= desde).all()
 
     if not actividades:
@@ -590,7 +590,7 @@ def chart_glucose_vs_carbs(days=90) -> dict:
     """Scatter: carbohidratos vs alza de glucosa post-comida."""
     from models import Meal, GlucoseReading
 
-    desde = datetime.utcnow() - timedelta(days=days)
+    desde = datetime.now() - timedelta(days=days)
     comidas = Meal.query.filter(Meal.timestamp >= desde).all()
 
     puntos_carbs = []
