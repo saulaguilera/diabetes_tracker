@@ -749,6 +749,7 @@ def api_predict_glucose():
         from helpers import (
             _get_setting, _calcular_isf_personal, _calcular_icr_personal,
             _calcular_isf_circadiano, _isf_para_hora,
+            _calcular_icr_circadiano, _icr_para_hora,
         )
         from utils.kinetics import (
             get_kinetics_snapshot, exercise_sensitivity_factor,
@@ -769,10 +770,16 @@ def api_predict_glucose():
         icr_personal, n_icr = _calcular_icr_personal()
         isf_guardado = float(_get_setting("isf_manual")) if _get_setting("isf_manual") else None
         icr_guardado = float(_get_setting("icr"))        if _get_setting("icr")        else None
+
+        # ISF circadiano por hora actual
         isf_circ = _calcular_isf_circadiano(days=90)
         isf_bloque, bloque_label, _ = _isf_para_hora(hora, isf_circ, isf_personal)
         isf_base = isf_guardado or isf_bloque or isf_personal
-        icr      = icr_guardado or icr_personal
+
+        # ICR circadiano por hora actual (prioridad: guardado > circadiano > global)
+        icr_circ = _calcular_icr_circadiano(days=90)
+        icr_bloque, icr_bloque_label, fuente_icr = _icr_para_hora(hora, icr_circ, icr_personal)
+        icr = icr_guardado or icr_bloque or icr_personal
 
         # Factor de ejercicio
         act_cutoff = now - timedelta(hours=24)
@@ -1124,6 +1131,7 @@ def api_diagnostico():
         from helpers import (
             _get_setting, _calcular_isf_personal, _calcular_icr_personal,
             _calcular_isf_circadiano, _isf_para_hora,
+            _calcular_icr_circadiano, _icr_para_hora,
         )
         from utils.kinetics import (
             get_kinetics_snapshot, exercise_sensitivity_factor,
@@ -1212,10 +1220,25 @@ def api_diagnostico():
             })
 
         # ── 4. ICR ───────────────────────────────────────────────────────────
-        icr_personal, n_icr = _calcular_icr_personal()
-        icr_guardado_raw    = _get_setting("icr")
-        icr_guardado        = float(icr_guardado_raw) if icr_guardado_raw else None
-        icr_efectivo        = icr_guardado or icr_personal
+        icr_personal, n_icr  = _calcular_icr_personal()
+        icr_guardado_raw     = _get_setting("icr")
+        icr_guardado         = float(icr_guardado_raw) if icr_guardado_raw else None
+        icr_circ_diag        = _calcular_icr_circadiano(days=90)
+        icr_bloque_d, icr_bloque_label_d, fuente_icr_d = _icr_para_hora(
+            hora, icr_circ_diag, icr_personal
+        )
+        icr_efectivo = icr_guardado or icr_bloque_d or icr_personal
+
+        # Tabla circadiana de ICR por bloque
+        icr_circ_bloques = []
+        for blk, data in sorted(icr_circ_diag.items()):
+            icr_circ_bloques.append({
+                "bloque_h":  blk,
+                "label":     data["label"],
+                "icr":       data["icr"],
+                "n":         data["n"],
+                "es_actual": blk == (hora // 4) * 4,
+            })
 
         # ── 5. Ejercicio ─────────────────────────────────────────────────────
         act_cutoff  = now - timedelta(hours=24)
@@ -1298,11 +1321,13 @@ def api_diagnostico():
             },
 
             "icr": {
-                "efectivo":          icr_efectivo,
-                "calculado":         icr_personal,
-                "n_comidas":         n_icr,
-                "guardado_usuario":  icr_guardado,
-                "fuente":            "guardado" if icr_guardado else "calculado",
+                "efectivo":           icr_efectivo,
+                "calculado":          icr_personal,
+                "n_comidas":          n_icr,
+                "guardado_usuario":   icr_guardado,
+                "fuente":             "guardado" if icr_guardado else fuente_icr_d,
+                "circadiano_bloques": icr_circ_bloques,
+                "bloque_activo":      icr_bloque_label_d,
             },
 
             "ejercicio": {

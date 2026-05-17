@@ -6,6 +6,7 @@ from helpers import (
     _get_setting, _set_setting,
     _calcular_isf_personal, _calcular_icr_personal,
     _calcular_isf_circadiano, _isf_para_hora,
+    _calcular_icr_circadiano, _icr_para_hora,
 )
 from utils.recommendations import generate_recommendations
 
@@ -29,10 +30,16 @@ def calculadora():
     # ISF circadiano
     isf_circ = _calcular_isf_circadiano(days=90)
 
-    # ISF recomendado para la hora actual
+    # ICR circadiano
+    icr_circ = _calcular_icr_circadiano(days=90)
+
+    # ISF e ICR recomendados para la hora actual
     hora_actual = datetime.now().hour
     isf_ahora, bloque_label, fuente_isf_ahora = _isf_para_hora(
         hora_actual, isf_circ, isf_personal
+    )
+    icr_ahora, icr_bloque_label, fuente_icr_ahora = _icr_para_hora(
+        hora_actual, icr_circ, icr_personal
     )
 
     # IOB actual para descontar de la dosis sugerida
@@ -61,6 +68,10 @@ def calculadora():
         bloque_label=bloque_label,
         fuente_isf_ahora=fuente_isf_ahora,
         hora_actual=hora_actual,
+        icr_circ=icr_circ,
+        icr_ahora=icr_ahora,
+        icr_bloque_label=icr_bloque_label,
+        fuente_icr_ahora=fuente_icr_ahora,
     )
 
 
@@ -97,7 +108,19 @@ def api_calculadora_correccion():
         "calculado"
     )
 
-    icr = icr_manual or (float(_get_setting("icr")) if _get_setting("icr") else None) or icr_personal
+    # ICR: manual > guardado > circadiano para la hora actual > global calculado
+    icr_guardado_raw = _get_setting("icr")
+    icr_guardado_val = float(icr_guardado_raw) if icr_guardado_raw else None
+    icr_circ         = _calcular_icr_circadiano(days=90)
+    icr_bloque, icr_bloque_label, fuente_icr_circ = _icr_para_hora(hora, icr_circ, icr_personal)
+
+    icr = icr_manual or icr_guardado_val or icr_bloque or icr_personal
+    icr_fuente = (
+        "manual"      if icr_manual        else
+        "guardado"    if icr_guardado_val  else
+        "circadiano"  if (icr_bloque and fuente_icr_circ == "circadiano") else
+        "calculado"
+    )
 
     if not glucemia or glucemia <= 0:
         return jsonify({"error": "Glucemia inválida"})
@@ -186,11 +209,14 @@ def api_calculadora_correccion():
         "n_isf":        n_isf,
         "n_icr":        n_icr,
         "fuente_isf":   isf_fuente,
-        "fuente_icr":   "manual" if icr_manual else ("guardado" if _get_setting("icr") else "calculado"),
-        "isf_bloque":   isf_bloque,
-        "isf_global":   isf_personal,
-        "bloque_label": bloque_label,
-        "hora":         hora,
+        "fuente_icr":      icr_fuente,
+        "icr_bloque":      icr_bloque,
+        "icr_global":      icr_personal,
+        "icr_bloque_label": icr_bloque_label,
+        "isf_bloque":      isf_bloque,
+        "isf_global":      isf_personal,
+        "bloque_label":    bloque_label,
+        "hora":            hora,
         "resultado_esperado": resultado_esperado,
         # Fat+protein split bolus
         "fat":              fat or 0,

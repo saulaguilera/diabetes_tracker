@@ -631,6 +631,116 @@ def _calcular_icr_personal(days=90):
     return None, len(muestras)
 
 
+def _calcular_icr_circadiano(days=90):
+    """
+    Calcula el ICR personal por bloque horario (6 bloques de 4h).
+
+    Mismo algoritmo que _calcular_icr_personal pero agrupa los pares
+    (comida, bolus) por la hora en que se hizo la comida, para detectar
+    variación circadiana (ej. mayor resistencia en el desayuno).
+
+    Retorna dict:
+        {
+          0:  {"icr": float|None, "n": int, "label": "00–04h", "cv": float|None},
+          4:  {...},
+          ...
+          20: {...},
+        }
+    """
+    desde = datetime.now() - timedelta(days=days)
+    isf_personal, _ = _calcular_isf_personal(days=days)
+    objetivo = float(_get_setting("objetivo", 100))
+    isf = isf_personal or 40
+
+    comidas = Meal.query.filter(
+        Meal.timestamp >= desde,
+        Meal.carbs_g > 0,
+    ).all()
+
+    # Batch load lecturas y boluses para evitar N queries
+    all_readings = GlucoseReading.query.filter(
+        GlucoseReading.timestamp >= desde - timedelta(minutes=30),
+    ).order_by(GlucoseReading.timestamp).all()
+
+    all_boluses = InsulinDose.query.filter(
+        InsulinDose.type == "bolus",
+        InsulinDose.timestamp >= desde - timedelta(minutes=30),
+    ).order_by(InsulinDose.timestamp).all()
+
+    blocks = {b: [] for b in _ISF_BLOCK_LABELS}
+
+    for c in comidas:
+        if not c.carbs_g or c.carbs_g < 5:
+            continue
+
+        # Lectura pre-comida
+        pre_list = [
+            r for r in all_readings
+            if c.timestamp - timedelta(minutes=30) <= r.timestamp <= c.timestamp + timedelta(minutes=5)
+        ]
+        if not pre_list:
+            continue
+        pre = pre_list[-1].value_mgdl
+
+        # Bolus cercano a la comida
+        bolus_q = [
+            b for b in all_boluses
+            if c.timestamp - timedelta(minutes=30) <= b.timestamp <= c.timestamp + timedelta(minutes=45)
+        ]
+        if not bolus_q:
+            continue
+
+        # Preferir bolus etiquetado como comida o mixto
+        bolus = next((b for b in bolus_q if b.purpose in ("comida", "mixto")), bolus_q[0])
+        if bolus.purpose == "correccion" or bolus.units <= 0:
+            continue
+
+        correccion  = max(0, (pre - objetivo) / isf)
+        bolo_comida = bolus.units - correccion
+        if bolo_comida <= 0.2:
+            continue
+
+        icr_val = c.carbs_g / bolo_comida
+        if 3 <= icr_val <= 30:
+            block = (c.timestamp.hour // 4) * 4
+            blocks[block].append(round(icr_val, 1))
+
+    result = {}
+    for block, values in blocks.items():
+        n = len(values)
+        if n >= 2:
+            mean     = round(sum(values) / n, 1)
+            variance = sum((v - mean) ** 2 for v in values) / (n - 1) if n > 1 else 0
+            cv       = round(100 * variance ** 0.5 / mean, 0) if mean > 0 else None
+        else:
+            mean = None
+            cv   = None
+        result[block] = {
+            "icr":   mean,
+            "n":     n,
+            "label": _ISF_BLOCK_LABELS[block],
+            "cv":    cv,
+        }
+    return result
+
+
+def _icr_para_hora(hora: int, icr_circ: dict, icr_global=None):
+    """
+    Devuelve el ICR más apropiado para una hora dada (0–23).
+    Prioridad: bloque circadiano con datos ≥ 2 → ICR global → None.
+    También retorna el label del bloque y la fuente.
+    """
+    block       = (hora // 4) * 4
+    bloque_data = icr_circ.get(block, {}) if icr_circ else {}
+    icr_bloque  = bloque_data.get("icr")
+
+    if icr_bloque:
+        return icr_bloque, bloque_data.get("label", ""), "circadiano"
+    if icr_global:
+        return icr_global, "global", "global"
+    return None, "", "sin_datos"
+
+
 # ─── Insights para dashboard ──────────────────────────────────────────────────
 
 def _dashboard_insights():
