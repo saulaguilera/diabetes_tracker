@@ -719,7 +719,7 @@ def api_predict_glucose():
 
         # ── Parámetros del modelo ─────────────────────────────────────────
         saved_dia = _get_setting("dia_min")
-        dia_min   = int(saved_dia) if saved_dia else _DEFAULT_DIA_MIN
+        dia_min   = int(float(saved_dia)) if saved_dia else _DEFAULT_DIA_MIN
         peak_min  = _DEFAULT_PEAK_MIN
 
         isf_personal, n_isf = _calcular_isf_personal()

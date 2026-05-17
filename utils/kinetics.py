@@ -1009,7 +1009,7 @@ def get_kinetics_snapshot(
     # Resolve DIA from settings or default
     if dia_min is None:
         saved_dia = _get_setting("dia_min")
-        dia_min = int(saved_dia) if saved_dia else _DEFAULT_DIA_MIN
+        dia_min = int(float(saved_dia)) if saved_dia else _DEFAULT_DIA_MIN
     if peak_min is None:
         peak_min = _DEFAULT_PEAK_MIN
 
