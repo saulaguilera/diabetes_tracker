@@ -1089,8 +1089,10 @@ def api_diagnostico():
         now   = datetime.now()
         hora  = now.hour
 
-        # ── 1. IOB: desglose por bolus ──────────────────────────────────────
-        from utils.kinetics import _iob_fraction, _DEFAULT_PEAK_MIN, _DEFAULT_DIA_MIN
+        # ── 1. IOB: desglose por bolus (solo bolus se deduce de corrección) ──
+        from utils.kinetics import (
+            _iob_fraction, _DEFAULT_PEAK_MIN, _DEFAULT_DIA_MIN, current_basal_iob
+        )
         saved_dia   = _get_setting("dia_min")
         dia_min     = int(float(saved_dia)) if saved_dia else _DEFAULT_DIA_MIN
         peak_min    = _DEFAULT_PEAK_MIN
@@ -1115,6 +1117,9 @@ def api_diagnostico():
                 "frac_activa": round(frac, 3),
                 "contribucion_U": contrib,
             })
+
+        # IOB basal (informativo — no se resta de la corrección)
+        iob_basal_U = current_basal_iob(at_time=now)
 
         # ── 2. COB: desglose por comida ──────────────────────────────────────
         fat_cutoff  = now - timedelta(hours=8)
@@ -1214,7 +1219,10 @@ def api_diagnostico():
             "hora_actual": hora,
 
             "iob": {
-                "total_U":     round(iob_total, 3),
+                "bolus_U":     round(iob_total, 3),
+                "basal_U":     iob_basal_U,
+                "total_U":     round(iob_total + iob_basal_U, 3),
+                "nota":        "bolus_U es el que se deduce de la corrección. basal_U es informativo (cubre producción hepática, no exceso de glucosa).",
                 "dia_min":     dia_min,
                 "peak_min":    peak_min,
                 "dia_fuente":  dia_fuente,

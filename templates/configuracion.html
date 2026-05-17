@@ -215,7 +215,15 @@
           Default NovoRapid / Humalog
         {% endif %}
         {% if dia_estimado and dia_estimado.get('ok') %}
-          · Estimado de tus datos: <strong>{{ dia_estimado.dia_min_estimado }}min</strong>
+          · Estimado de tus datos:
+          <strong>{{ dia_estimado.dia_min_estimado }}min</strong>
+          <button type="button"
+                  onclick="setDia({{ dia_estimado.dia_min_estimado }})"
+                  style="margin-left:.4rem;padding:.1rem .45rem;font-size:.72rem;font-weight:700;
+                         border-radius:6px;border:1.5px solid #6366f1;background:rgba(99,102,241,.1);
+                         color:#6366f1;cursor:pointer;">
+            Aplicar
+          </button>
         {% endif %}
       </div>
     </div>
