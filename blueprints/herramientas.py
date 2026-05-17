@@ -146,11 +146,14 @@ def api_calculadora_correccion():
             pass
 
     # ── IOB deduction ────────────────────────────────────────────────────────
+    # Solo se deduce IOB de bolus (insulina rápida activa).
+    # El IOB basal (Toujeo, Lantus, etc.) NO se resta porque cubre la producción
+    # hepática basal, no el exceso de glucosa que estamos corrigiendo.
     iob_actual = 0.0
     try:
         from utils.kinetics import get_kinetics_snapshot
         snap = get_kinetics_snapshot(hours_lookback=6)
-        iob_actual = snap.get("iob", 0.0)
+        iob_actual = snap.get("iob_bolus", 0.0)  # solo bolus, nunca basal
     except Exception:
         pass
     iob_deduccion = min(iob_actual, correccion_exacta + bolo_comida_exacto)  # no restar más de lo que se daría

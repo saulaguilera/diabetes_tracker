@@ -87,7 +87,7 @@ def _set_setting(key, value):
     s = UserSettings.query.filter_by(key=key).first()
     if s:
         s.value = str(value)
-        s.updated_at = _dt.utcnow()
+        s.updated_at = _dt.now()
     else:
         db.session.add(UserSettings(key=key, value=str(value)))
     db.session.commit()
