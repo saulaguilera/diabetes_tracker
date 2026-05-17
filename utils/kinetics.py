@@ -78,7 +78,7 @@ _AEROBIC_KEYWORDS = {
     "natacion", "natación", "nadar", "ciclismo", "bicicleta", "cycling",
     "cardio", "yoga", "pilates", "baile", "danza", "zumba", "eliptica",
     "elíptica", "remo", "senderismo", "marcha", "aerobico", "aeróbico",
-    "tennis", "tenis", "futbol", "fútbol", "basket", "basquetbol",
+    "futbol", "fútbol",
 }
 
 _ANAEROBIC_KEYWORDS = {
@@ -86,6 +86,16 @@ _ANAEROBIC_KEYWORDS = {
     "press", "curl", "mancuernas", "barra", "levantamiento", "powerlifting",
     "sprint", "sprints", "velocidad", "fuerza", "musculacion", "musculación",
     "funcional", "calistenia",
+}
+
+# Deportes de conjunto / raqueta → mixto (aeróbico + anaeróbico intermitente)
+_MIXED_KEYWORDS = {
+    "tenis", "tennis", "padel", "pádel", "squash",
+    "basket", "basquetbol", "basketball",
+    "voleibol", "volleyball", "voley",
+    "handball", "balonmano",
+    "rugby", "hockey",
+    "artes marciales", "judo", "boxeo", "karate", "muay thai",
 }
 
 # Intensity → effect magnitude multiplier
@@ -102,6 +112,9 @@ def _classify_exercise(name: str, exercise_type: Optional[str]) -> str:
         return exercise_type
     name_lower = (name or "").lower()
     words = set(name_lower.replace(",", " ").replace(";", " ").split())
+    # Primero: keywords explícitamente mixtos (deportes de conjunto/raqueta)
+    if words & _MIXED_KEYWORDS or name_lower in _MIXED_KEYWORDS:
+        return "mixto"
     is_aerobic   = bool(words & _AEROBIC_KEYWORDS)
     is_anaerobic = bool(words & _ANAEROBIC_KEYWORDS)
     if is_aerobic and is_anaerobic:
