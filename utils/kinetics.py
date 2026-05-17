@@ -377,24 +377,30 @@ def current_basal_iob(at_time: Optional[datetime] = None) -> float:
     tipo = (_get_setting("basal_tipo") or "glargina").lower().strip()
     dia  = _BASAL_DIA_MIN.get(tipo, _BASAL_DIA_DEFAULT)
 
-    # ── Prioridad 1: inyecciones basales registradas en la DB ─────────────────
+    # ── Prioridad 1: inyección basal más reciente en la DB ───────────────────
+    # Usamos solo la más reciente (no acumulamos días anteriores) porque
+    # el efecto residual de dosis previas ya está capturado en el ROC del CGM.
+    # Sumar múltiples días produce IOB > dosis_real, lo que es confuso y
+    # puede llevar a sub-corrección.
     try:
         from models import InsulinDose
-        # Ventana: DIA + 2h de buffer para capturar la dosis más reciente
+        # Ventana: DIA + 2h de buffer para asegurar que encontramos la última dosis
         cutoff = at_time - timedelta(minutes=dia + 120)
-        doses  = InsulinDose.query.filter(
-            InsulinDose.type      == "basal",
-            InsulinDose.timestamp >= cutoff,
-            InsulinDose.timestamp <= at_time,
-        ).all()
+        ultima = (
+            InsulinDose.query
+            .filter(
+                InsulinDose.type      == "basal",
+                InsulinDose.timestamp >= cutoff,
+                InsulinDose.timestamp <= at_time,
+            )
+            .order_by(InsulinDose.timestamp.desc())
+            .first()
+        )
 
-        if doses:
-            total = 0.0
-            for d in doses:
-                elapsed = (at_time - d.timestamp).total_seconds() / 60.0
-                frac    = max(0.0, 1.0 - elapsed / dia)
-                total  += d.units * frac
-            return round(total, 2)
+        if ultima:
+            elapsed = (at_time - ultima.timestamp).total_seconds() / 60.0
+            frac    = max(0.0, 1.0 - elapsed / dia)
+            return round(ultima.units * frac, 2)
     except Exception:
         pass   # DB no disponible (tests, migraciones) → fallback
 
