@@ -573,20 +573,20 @@ async function updateBasalPreview() {
   if (!preview || !txt) return;
   try {
     const res  = await fetch('/api/kinetics');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
+    const data = await res.json();   // parsear siempre, incluso en errores 5xx
     if (data.ok) {
-      const iobB = data.iob_basal ?? '—';
-      const iobT = data.iob      ?? '—';
+      const iobB = (data.iob_basal ?? '—');
+      const iobT = (data.iob      ?? '—');
       preview.innerHTML =
         `<i class="bi bi-activity"></i>` +
         ` IOB basal: <strong>${iobB} U</strong>` +
         ` &nbsp;·&nbsp; IOB total (basal + bolo): <strong>${iobT} U</strong>`;
     } else {
-      preview.innerHTML = `<i class="bi bi-exclamation-circle"></i> ${data.error || 'Sin datos'}`;
+      preview.innerHTML =
+        `<i class="bi bi-exclamation-circle"></i> Error: ${data.error || 'desconocido'}`;
     }
   } catch(e) {
-    preview.innerHTML = `<i class="bi bi-wifi-off"></i> No se pudo cargar el IOB — recargá la página`;
+    preview.innerHTML = `<i class="bi bi-wifi-off"></i> Error de red: ${e.message}`;
   }
 }
 document.addEventListener('DOMContentLoaded', updateBasalPreview);
