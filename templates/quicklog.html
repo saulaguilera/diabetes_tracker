@@ -1195,7 +1195,7 @@ function renderIngredients() {
     div.dataset.id = ing.id;
     div.innerHTML = `
       <span class="ql-ing-name" title="${escH(ing.name)}">${escH(ing.name)}</span>
-      <input type="number" class="ql-ing-grams" value="${ing.grams}" min="1" max="2000" step="5"
+      <input type="number" class="ql-ing-grams" value="${ing.grams}" min="1" max="2000" step="any"
              onchange="updateGrams(${ing.id}, this.value)">
       <span class="qli-unit" style="font-size:.65rem;color:var(--text-muted);">g</span>
       <span class="ql-ing-carbs">${m.carbs}g</span>
