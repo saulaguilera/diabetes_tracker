@@ -185,19 +185,19 @@
           <div class="ql-macro-field">
             <span class="ql-macro-label">CH</span>
             <input type="number" id="manual-carbs" class="ql-macro-input"
-                   placeholder="0" min="0" max="500" step="0.5">
+                   placeholder="0" min="0" max="500" step="any">
             <span class="ql-macro-unit">g</span>
           </div>
           <div class="ql-macro-field">
             <span class="ql-macro-label">Prot</span>
             <input type="number" id="manual-prot" class="ql-macro-input"
-                   placeholder="0" min="0" max="200" step="0.5">
+                   placeholder="0" min="0" max="200" step="any">
             <span class="ql-macro-unit">g</span>
           </div>
           <div class="ql-macro-field">
             <span class="ql-macro-label">Grasa</span>
             <input type="number" id="manual-fat" class="ql-macro-input"
-                   placeholder="0" min="0" max="200" step="0.5">
+                   placeholder="0" min="0" max="200" step="any">
             <span class="ql-macro-unit">g</span>
           </div>
           <div class="ql-macro-field" id="gi-field" style="display:none;">
@@ -890,10 +890,41 @@ const UNIT_TO_G = {
   'taza': 240, 'tazas': 240, 'cup': 240, 'cups': 240,
   'cucharada': 15, 'cucharadas': 15, 'cda': 15, 'tbsp': 15,
   'cucharadita': 5, 'cucharaditas': 5, 'cdta': 5, 'tsp': 5,
-  'porcion': 150, 'porciones': 150, 'porción': 150, 'porciones': 150,
+  'porcion': 150, 'porciones': 150, 'porción': 150,
   'unidad': 100, 'unidades': 100,
   'rebanada': 30, 'rebanadas': 30, 'rodaja': 50, 'rodajas': 50,
   'puñado': 30, 'puñados': 30,
+};
+
+// Peso aproximado por unidad para alimentos comunes (en gramos)
+// Se usa en Pattern 4: "1 huevo", "2 manzanas", etc.
+const UNIT_WEIGHT_G = {
+  // Huevos
+  'huevo': 55, 'huevos': 55,
+  // Frutas
+  'manzana': 150, 'manzanas': 150,
+  'banana': 120, 'bananas': 120, 'platano': 120, 'platanos': 120,
+  'naranja': 180, 'naranjas': 180,
+  'mandarina': 80, 'mandarinas': 80,
+  'pera': 170, 'peras': 170,
+  'kiwi': 80, 'kiwis': 80,
+  'durazno': 150, 'duraznos': 150,
+  'damasco': 40, 'damascos': 40,
+  'ciruela': 50, 'ciruelas': 50,
+  'palta': 200, 'paltas': 200, 'aguacate': 200, 'aguacates': 200,
+  'limon': 80, 'limones': 80,
+  'lima': 70, 'limas': 70,
+  'pomelo': 280, 'pomelos': 280,
+  'frutilla': 15, 'frutillas': 15, 'fresa': 15, 'fresas': 15,
+  // Verduras
+  'tomate': 120, 'tomates': 120,
+  'zanahoria': 80, 'zanahorias': 80,
+  'pepino': 200, 'pepinos': 200,
+  'choclo': 250, 'choclos': 250,
+  // Pan y crackers
+  'tostada': 25, 'tostadas': 25,
+  'galleta': 10, 'galletas': 10,
+  'marraqueta': 80, 'marraquetas': 80,
 };
 
 function parseCantidad(texto) {
@@ -933,16 +964,23 @@ function parseCantidad(texto) {
     return { nombre: cleanName, grams };
   }
 
-  // Patrón 4: número al inicio sin unidad "2 huevos", "3 galletas"
+  // Patrón 4: número al inicio sin unidad "2 huevos", "1 tomate", "3 galletas"
+  // Usamos tabla de pesos conocidos por unidad; si no está en la tabla no asumimos nada.
   const numPat = /^(\d+(?:[.,]\d+)?)\s+(.+)/;
   m = t.match(numPat);
   if (m) {
-    const num = parseFloat(m[1].replace(',', '.'));
-    if (num <= 20) { // probablemente unidades, no gramos
-      grams = +(num * 100).toFixed(0);
-      cleanName = m[2].trim();
+    const num      = parseFloat(m[1].replace(',', '.'));
+    cleanName      = m[2].trim();
+    const keyNorm  = cleanName.toLowerCase()
+                      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+                      .replace(/s$/, '');   // singularizar básico
+    const unitW    = UNIT_WEIGHT_G[keyNorm] || UNIT_WEIGHT_G[cleanName.toLowerCase()];
+    if (num <= 20 && unitW) {
+      grams = +(num * unitW).toFixed(0);
       return { nombre: cleanName, grams };
     }
+    // No conocemos el peso por unidad → devolver nombre limpio sin asumir gramos
+    return { nombre: cleanName, grams: null };
   }
 
   return { nombre: t, grams: null };
