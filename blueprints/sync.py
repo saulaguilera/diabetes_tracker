@@ -703,6 +703,12 @@ def api_kinetics():
                 "iob_contrib": contrib,
             })
 
+        from utils.kinetics import biexp_vs_bilinear, _DEFAULT_PEAK_MIN
+        modelo_comparacion = biexp_vs_bilinear(
+            peak_min=_DEFAULT_PEAK_MIN,
+            dia_min=snap["dia_min"],
+        )
+
         return jsonify({
             "ok":        True,
             "iob":       snap["iob"],
@@ -714,6 +720,8 @@ def api_kinetics():
             "last_glucose": snap["last_glucose"],
             "context":      snap["context"],
             "dia_min":      snap["dia_min"],
+            "modelo_iob":   "biexponencial",
+            "modelo_comparacion": modelo_comparacion,
             "basal_debug": {
                 "tipo":             tipo,
                 "dia_min":          dia,
@@ -1235,7 +1243,7 @@ def api_diagnostico():
 
         # ── 1. IOB: desglose por bolus (solo bolus se deduce de corrección) ──
         from utils.kinetics import (
-            _iob_fraction, _DEFAULT_PEAK_MIN, _DEFAULT_DIA_MIN, current_basal_iob
+            _biexp_iob_fraction, _DEFAULT_PEAK_MIN, _DEFAULT_DIA_MIN, current_basal_iob
         )
         saved_dia   = _get_setting("dia_min")
         dia_min     = int(float(saved_dia)) if saved_dia else _DEFAULT_DIA_MIN
@@ -1250,7 +1258,7 @@ def api_diagnostico():
         iob_total   = 0.0
         for b in boluses_raw:
             elapsed = (now - b.timestamp).total_seconds() / 60
-            frac    = _iob_fraction(elapsed, peak_min, dia_min)
+            frac    = _biexp_iob_fraction(elapsed, peak_min, dia_min)
             contrib = round(b.units * frac, 3)
             iob_total += contrib
             iob_detalle.append({
