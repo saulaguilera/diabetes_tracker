@@ -50,6 +50,15 @@ def calculadora():
     except Exception:
         pass
 
+    # Última inyección basal registrada (para mostrar en la card)
+    from datetime import timedelta
+    ultima_basal = (
+        InsulinDose.query
+        .filter(InsulinDose.type == "basal")
+        .order_by(InsulinDose.timestamp.desc())
+        .first()
+    )
+
     return render_template("calculadora.html",
         isf_personal=isf_personal,
         n_isf=n_isf,
@@ -61,6 +70,7 @@ def calculadora():
         basal_dose_guard=basal_dose_guard,
         basal_hora_guard=basal_hora_guard,
         basal_tipo_guard=basal_tipo_guard,
+        ultima_basal=ultima_basal,
         ultima=ultima,
         kinetics=kinetics,
         isf_circ=isf_circ,

@@ -104,66 +104,55 @@
       {# ── Insulina basal ── #}
       <div class="row g-3 mt-1">
         <div class="col-12">
-          <div class="d-flex align-items-center gap-2 mb-2">
+          <div class="d-flex align-items-center gap-2 mb-1">
             <i class="bi bi-moon-stars text-secondary"></i>
             <span style="font-size:.82rem; font-weight:600;">Insulina basal (acción prolongada)</span>
-            <span class="text-muted" style="font-size:.75rem;">
-              — configura para mejorar las predicciones nocturnas y en ayunas
-            </span>
           </div>
-        </div>
 
-        <!-- Tipo -->
-        <div class="col-md-3">
-          <label class="form-label mb-1" style="font-size:.82rem;">Tipo</label>
-          <select id="cfg-basal-tipo" class="form-select form-select-sm">
-            <option value=""          {% if not basal_dose_guard %}selected{% endif %}>— Sin basal —</option>
-            <option value="glargina"  {% if basal_tipo_guard == 'glargina'  %}selected{% endif %}>Glargina (Lantus / Basaglar) 24h</option>
-            <option value="toujeo"    {% if basal_tipo_guard == 'toujeo'    %}selected{% endif %}>Toujeo (Glargina U-300) 36h</option>
-            <option value="detemir"   {% if basal_tipo_guard == 'detemir'   %}selected{% endif %}>Detemir (Levemir) 16h</option>
-            <option value="degludec"  {% if basal_tipo_guard == 'degludec'  %}selected{% endif %}>Degludec (Tresiba) 42h</option>
-            <option value="nph"       {% if basal_tipo_guard == 'nph'       %}selected{% endif %}>NPH 12h</option>
-          </select>
-        </div>
-
-        <!-- Dosis -->
-        <div class="col-md-3">
-          <label class="form-label mb-1" style="font-size:.82rem;">Dosis diaria</label>
-          <div class="input-group input-group-sm">
-            <input type="number" id="cfg-basal-dosis" class="form-control"
-                   min="0" max="150" step="0.5"
-                   placeholder="ej. 12"
-                   value="{{ basal_dose_guard or '' }}">
-            <span class="input-group-text text-muted">U</span>
-          </div>
-        </div>
-
-        <!-- Hora -->
-        <div class="col-md-3">
-          <label class="form-label mb-1" style="font-size:.82rem;">Hora de aplicación</label>
-          <div class="input-group input-group-sm">
-            <input type="number" id="cfg-basal-hora" class="form-control"
-                   min="0" max="23" step="1"
-                   placeholder="22"
-                   value="{{ basal_hora_guard }}">
-            <span class="input-group-text text-muted">h</span>
-          </div>
-        </div>
-
-        <!-- IOB basal actual -->
-        <div class="col-md-3 d-flex align-items-end">
-          {% if basal_dose_guard %}
-          <div class="alert alert-secondary mb-0 py-1 px-2 w-100" style="font-size:.78rem;">
-            <i class="bi bi-cpu me-1"></i>
-            IOB basal ahora:<br>
-            <strong id="iob-basal-display">calculando…</strong>
+          {# Última inyección leída de los registros reales #}
+          {% if ultima_basal %}
+          <div class="alert alert-success py-2 px-3 mb-2 d-flex align-items-center gap-3"
+               style="font-size:.82rem;">
+            <i class="bi bi-check-circle-fill text-success fs-5"></i>
+            <div>
+              <strong>{{ ultima_basal.units | int }} U</strong>
+              registradas el {{ ultima_basal.timestamp | local_ts }}
+              {% if ultima_basal.brand %} · {{ ultima_basal.brand }}{% endif %}
+              — la dosis y hora se leen automáticamente de tus registros.
+            </div>
+            <div class="ms-auto text-nowrap">
+              IOB basal ahora: <strong id="iob-basal-display">…</strong>
+            </div>
           </div>
           {% else %}
-          <div class="text-muted" style="font-size:.75rem; padding:.4rem 0;">
-            <i class="bi bi-info-circle me-1"></i>Sin basal configurada — el modelo asume 0 U basal activa
+          <div class="alert alert-warning py-2 px-3 mb-2" style="font-size:.82rem;">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            No hay inyecciones basales registradas.
+            Registrá tu basal en
+            <a href="{{ url_for('insulina') }}">Insulina</a>
+            y el IOB se calculará automáticamente.
           </div>
           {% endif %}
         </div>
+
+        <!-- Tipo (siempre visible para elegir DIA) -->
+        <div class="col-md-4">
+          <label class="form-label mb-1" style="font-size:.82rem;">Tipo de insulina basal</label>
+          <select id="cfg-basal-tipo" class="form-select form-select-sm">
+            <option value="glargina"  {% if basal_tipo_guard == 'glargina'  %}selected{% endif %}>Glargina (Lantus / Basaglar) — 24h</option>
+            <option value="toujeo"    {% if basal_tipo_guard == 'toujeo'    %}selected{% endif %}>Toujeo (Glargina U-300) — 36h</option>
+            <option value="detemir"   {% if basal_tipo_guard == 'detemir'   %}selected{% endif %}>Detemir (Levemir) — 16h</option>
+            <option value="degludec"  {% if basal_tipo_guard == 'degludec'  %}selected{% endif %}>Degludec (Tresiba) — 42h</option>
+            <option value="nph"       {% if basal_tipo_guard == 'nph'       %}selected{% endif %}>NPH (Insulina N) — 12h</option>
+          </select>
+          <div class="text-muted mt-1" style="font-size:.72rem;">
+            Solo necesitás elegir el tipo — dosis y hora se leen de tus registros.
+          </div>
+        </div>
+
+        {# Campos legacy ocultos — se mantienen para no romper guardarConfig() #}
+        <input type="hidden" id="cfg-basal-dosis" value="{{ basal_dose_guard or '' }}">
+        <input type="hidden" id="cfg-basal-hora"  value="{{ basal_hora_guard }}">
       </div>
 
       <div class="mt-3">
