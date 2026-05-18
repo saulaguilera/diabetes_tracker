@@ -168,25 +168,75 @@ def api_calculadora_correccion():
         except Exception:
             pass
 
-    # ── IOB deduction ────────────────────────────────────────────────────────
+    # ── IOB + ROC (ambos del mismo snapshot) ─────────────────────────────────
     # Solo se deduce IOB de bolus (insulina rápida activa).
     # El IOB basal (Toujeo, Lantus, etc.) NO se resta porque cubre la producción
     # hepática basal, no el exceso de glucosa que estamos corrigiendo.
     iob_actual = 0.0
+    roc_mgdl_min = None   # mg/dL/min — None si no hay lecturas CGM recientes
     try:
         from utils.kinetics import get_kinetics_snapshot
-        snap = get_kinetics_snapshot(hours_lookback=6)
+        snap       = get_kinetics_snapshot(hours_lookback=6)
         iob_actual = snap.get("iob_bolus", 0.0)  # solo bolus, nunca basal
+        roc_mgdl_min = snap.get("roc")            # puede ser None
     except Exception:
         pass
-    iob_deduccion = min(iob_actual, correccion_exacta + bolo_comida_exacto)  # no restar más de lo que se daría
+
+    # ── Ajuste por tendencia (ROC) ────────────────────────────────────────────
+    # La corrección se calcula sobre la glucemia PROYECTADA a +30 min,
+    # no sobre la glucemia actual. Si está bajando a 2 mg/dL/min, en 30 min
+    # estará 60 mg/dL más baja — dar una corrección completa causaría hipo.
+    #
+    # Horizonte conservador: 30 min (tiempo mínimo de inicio de acción del bolo).
+    # Clip: ±60 mg/dL máximo de ajuste (evita proyecciones absurdas con lecturas ruidosas).
+    ROC_HORIZON_MIN = 30
+    ROC_MAX_ADJ     = 60   # mg/dL
+
+    roc_adj      = 0.0     # ajuste aplicado en mg/dL
+    roc_arrow    = "→"
+    roc_label    = None
+    roc_alerta   = None    # aviso visible al usuario
+
+    if roc_mgdl_min is not None:
+        roc_adj_raw = roc_mgdl_min * ROC_HORIZON_MIN
+        roc_adj     = max(-ROC_MAX_ADJ, min(ROC_MAX_ADJ, roc_adj_raw))
+
+        # Flecha de tendencia (mismos umbrales que el dashboard)
+        if   roc_mgdl_min >  2.0: roc_arrow = "↑↑"
+        elif roc_mgdl_min >  1.0: roc_arrow = "↑"
+        elif roc_mgdl_min >  0.5: roc_arrow = "↗"
+        elif roc_mgdl_min < -2.0: roc_arrow = "↓↓"
+        elif roc_mgdl_min < -1.0: roc_arrow = "↓"
+        elif roc_mgdl_min < -0.5: roc_arrow = "↘"
+        else:                     roc_arrow = "→"
+
+        roc_label = f"{roc_arrow} {roc_mgdl_min:+.1f} mg/dL/min"
+
+        # Alertas por tendencia pronunciada
+        if roc_mgdl_min < -2.0:
+            roc_alerta = "caida_rapida"   # bajando >2 mg/dL/min — considerar omitir corrección
+        elif roc_mgdl_min < -1.0:
+            roc_alerta = "bajando"        # bajando — corrección reducida automáticamente
+        elif roc_mgdl_min > 2.0:
+            roc_alerta = "subida_rapida"  # subiendo >2 mg/dL/min
+
+    # Glucemia proyectada a 30 min (para corrección)
+    glucemia_proyectada = max(40.0, min(400.0, glucemia + roc_adj))
+
+    # Recalcular corrección sobre la glucemia proyectada
+    if glucemia_proyectada > objetivo:
+        correccion_exacta = (glucemia_proyectada - objetivo) / isf
+    else:
+        correccion_exacta = 0.0
+
+    iob_deduccion = min(iob_actual, correccion_exacta + bolo_comida_exacto)
 
     # ── Total ─────────────────────────────────────────────────────────────────
     total_exacto      = correccion_exacta + bolo_comida_exacto
     total_neto_exacto = max(0.0, total_exacto - iob_deduccion)
     total_redondeado  = round(total_neto_exacto * 2) / 2  # redondear a 0.5U
 
-    resultado_esperado = round(glucemia - correccion_exacta * isf, 0)
+    resultado_esperado = round(glucemia_proyectada - correccion_exacta * isf, 0)
 
     return jsonify({
         # Totales
@@ -229,6 +279,13 @@ def api_calculadora_correccion():
         "exercise_factor":  round(exercise_factor, 3),
         "exercise_label":   exercise_label or "",
         "isf_base":         isf_base,
+        # ROC — tendencia de glucemia
+        "roc_mgdl_min":        round(roc_mgdl_min, 2) if roc_mgdl_min is not None else None,
+        "roc_adj_mgdl":        round(roc_adj, 1),
+        "roc_arrow":           roc_arrow,
+        "roc_label":           roc_label or "",
+        "roc_alerta":          roc_alerta or "",
+        "glucemia_proyectada": glucemia_proyectada,
     })
 
 
