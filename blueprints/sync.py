@@ -127,6 +127,98 @@ def api_ultima_lectura():
     })
 
 
+@bp.route("/api/resumen-dia", endpoint="api_resumen_dia")
+def api_resumen_dia():
+    """
+    Resumen del día de hoy (desde medianoche) para el dashboard.
+    Incluye: TIR, glucemia promedio/min/max, insulina total, CH totales,
+    número de correcciones, hipos y hipers.
+    """
+    from datetime import datetime, timedelta
+    from models import GlucoseReading, InsulinDose, Meal
+
+    now   = datetime.now()
+    hoy   = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    ayer  = hoy - timedelta(days=1)
+
+    # ── Glucemia de hoy ──────────────────────────────────────────────────────
+    lecturas = GlucoseReading.query.filter(
+        GlucoseReading.timestamp >= hoy
+    ).all()
+    vals = [r.value_mgdl for r in lecturas]
+
+    tir = hipo_pct = hiper_pct = promedio = g_min = g_max = None
+    n_hipos = n_hipers = 0
+    if vals:
+        n      = len(vals)
+        tir    = round(len([v for v in vals if 70 <= v <= 180]) / n * 100, 1)
+        hipo_pct  = round(len([v for v in vals if v < 70])  / n * 100, 1)
+        hiper_pct = round(len([v for v in vals if v > 180]) / n * 100, 1)
+        promedio  = round(sum(vals) / n, 0)
+        g_min     = round(min(vals), 0)
+        g_max     = round(max(vals), 0)
+        # Eventos: contar rachas, no lecturas individuales
+        en_hipo = en_hiper = False
+        for v in vals:
+            if v < 70:
+                if not en_hipo: n_hipos += 1
+                en_hipo = True; en_hiper = False
+            elif v > 180:
+                if not en_hiper: n_hipers += 1
+                en_hiper = True; en_hipo = False
+            else:
+                en_hipo = en_hiper = False
+
+    # ── Insulina de hoy ──────────────────────────────────────────────────────
+    dosis_hoy = InsulinDose.query.filter(
+        InsulinDose.timestamp >= hoy
+    ).all()
+    bolus_u   = round(sum(d.units for d in dosis_hoy if d.type == "bolus"), 1)
+    basal_u   = round(sum(d.units for d in dosis_hoy if d.type == "basal"), 1)
+    total_u   = round(bolus_u + basal_u, 1)
+    n_correc  = sum(1 for d in dosis_hoy
+                    if d.type == "bolus" and d.purpose == "correccion")
+    n_bolus   = sum(1 for d in dosis_hoy if d.type == "bolus")
+
+    # ── Comidas de hoy ───────────────────────────────────────────────────────
+    comidas_hoy = Meal.query.filter(Meal.timestamp >= hoy).all()
+    carbs_hoy   = round(sum(m.carbs_g or 0 for m in comidas_hoy), 0)
+    n_comidas   = len(comidas_hoy)
+
+    # ── TIR ayer (para comparar) ─────────────────────────────────────────────
+    vals_ayer = [r.value_mgdl for r in GlucoseReading.query.filter(
+        GlucoseReading.timestamp >= ayer,
+        GlucoseReading.timestamp <  hoy,
+    ).all()]
+    tir_ayer = round(len([v for v in vals_ayer if 70 <= v <= 180]) / len(vals_ayer) * 100, 1) \
+               if vals_ayer else None
+
+    return jsonify({
+        "ok": True,
+        "fecha": hoy.strftime("%d/%m/%Y"),
+        "lecturas_n": len(vals),
+        # Glucemia
+        "tir":       tir,
+        "tir_ayer":  tir_ayer,
+        "hipo_pct":  hipo_pct,
+        "hiper_pct": hiper_pct,
+        "promedio":  promedio,
+        "g_min":     g_min,
+        "g_max":     g_max,
+        "n_hipos":   n_hipos,
+        "n_hipers":  n_hipers,
+        # Insulina
+        "bolus_u":   bolus_u,
+        "basal_u":   basal_u,
+        "total_u":   total_u,
+        "n_bolus":   n_bolus,
+        "n_correc":  n_correc,
+        # Comidas
+        "carbs_g":   carbs_hoy,
+        "n_comidas": n_comidas,
+    })
+
+
 @bp.route("/api/sync/libre/reset", endpoint="api_sync_libre_reset")
 def api_sync_libre_reset():
     """Borra el caché de token para forzar un login fresco."""

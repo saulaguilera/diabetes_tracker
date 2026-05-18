@@ -253,6 +253,20 @@
   </div>
 </div>
 
+{# ── Resumen del día ───────────────────────────────────────────────────────── #}
+<div id="resumen-dia-wrap" class="mb-3" style="display:none;">
+  <div class="chart-box py-3 px-3">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <span style="font-size:.72rem;font-weight:700;text-transform:uppercase;
+                   letter-spacing:.07em;color:var(--text-muted);">
+        <i class="bi bi-calendar-check me-1"></i>Hoy
+      </span>
+      <span id="resumen-fecha" style="font-size:.7rem;color:var(--text-muted);"></span>
+    </div>
+    <div id="resumen-dia-inner" class="d-flex flex-wrap gap-2"></div>
+  </div>
+</div>
+
 {# ── Insights 7d ──────────────────────────────────────────────────────────── #}
 {% if insights and insights.tir7 is not none %}
 <div class="row g-2 mb-3">
@@ -1057,6 +1071,71 @@ a.insight-chip:hover {
     }).catch(() => {});
   });
   {% endif %}
+
+  // ── Resumen del día ─────────────────────────────────────────────────────────
+  (async function cargarResumenDia() {
+    try {
+      const d = await fetch('/api/resumen-dia').then(r => r.json());
+      if (!d.ok || !d.lecturas_n) return;
+
+      document.getElementById('resumen-fecha').textContent = d.fecha;
+
+      const tirColor = d.tir >= 70 ? '#16a34a' : d.tir >= 50 ? '#d97706' : '#dc2626';
+      const tirDelta = d.tir_ayer !== null
+        ? `<span style="font-size:.65rem;color:${d.tir - d.tir_ayer >= 0 ? '#16a34a' : '#dc2626'}">
+             ${d.tir - d.tir_ayer >= 0 ? '▲' : '▼'}${Math.abs((d.tir - d.tir_ayer).toFixed(1))}%
+           </span>` : '';
+
+      const chips = [
+        // TIR
+        { icon: 'bi-bullseye', val: `${d.tir}%`, sub: `TIR${tirDelta ? ' ' + tirDelta : ''}`,
+          color: tirColor, bg: tirColor + '15', important: true },
+        // Promedio glucemia
+        { icon: 'bi-droplet-half', val: `${d.promedio}`, sub: 'prom. mg/dL',
+          color: 'var(--text)', bg: 'var(--surface2)' },
+        // Rango
+        { icon: 'bi-arrows-collapse-vertical', val: `${d.g_min}–${d.g_max}`,
+          sub: 'rango mg/dL', color: 'var(--text-muted)', bg: 'var(--surface2)' },
+        // Hipos
+        ...(d.n_hipos > 0 ? [{
+          icon: 'bi-arrow-down-circle-fill', val: d.n_hipos,
+          sub: d.n_hipos === 1 ? 'hipo' : 'hipos',
+          color: '#dc2626', bg: 'rgba(239,68,68,.1)'
+        }] : []),
+        // Insulina bolus
+        ...(d.bolus_u > 0 ? [{
+          icon: 'bi-capsule-pill', val: `${d.bolus_u}U`,
+          sub: `bolus · ${d.n_bolus} dosis`,
+          color: '#6366f1', bg: 'rgba(99,102,241,.1)'
+        }] : []),
+        // Basal (solo si se inyectó hoy)
+        ...(d.basal_u > 0 ? [{
+          icon: 'bi-capsule', val: `${d.basal_u}U`,
+          sub: 'basal',
+          color: '#8b5cf6', bg: 'rgba(139,92,246,.1)'
+        }] : []),
+        // CH
+        ...(d.carbs_g > 0 ? [{
+          icon: 'bi-egg-fried', val: `${d.carbs_g}g`,
+          sub: `CH · ${d.n_comidas} comida${d.n_comidas !== 1 ? 's' : ''}`,
+          color: '#d97706', bg: 'rgba(217,119,6,.1)'
+        }] : []),
+      ];
+
+      document.getElementById('resumen-dia-inner').innerHTML = chips.map(c => `
+        <div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .7rem;
+                    background:${c.bg};border-radius:10px;min-width:fit-content;">
+          <i class="bi ${c.icon}" style="color:${c.color};font-size:.9rem;flex-shrink:0;"></i>
+          <div>
+            <div style="font-size:${c.important ? '1.05rem' : '.92rem'};
+                        font-weight:700;color:${c.color};line-height:1.1;">${c.val}</div>
+            <div style="font-size:.62rem;color:var(--text-muted);line-height:1.2;">${c.sub}</div>
+          </div>
+        </div>`).join('');
+
+      document.getElementById('resumen-dia-wrap').style.display = '';
+    } catch(e) {}
+  })();
 
   // Badge de alertas: ocultar si ya fue visto
   const NOTIF_KEY  = 'dt_notif_read_count';
