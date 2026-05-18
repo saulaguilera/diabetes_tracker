@@ -184,6 +184,41 @@ class GlucosePrediction(db.Model):
         return f"<Prediccion {self.predicted_at} pred30={self.g_pred_30} real={self.g_real_30}>"
 
 
+class MealPreset(db.Model):
+    """
+    Comidas favoritas / presets para registro rápido.
+
+    Almacena una comida tipo plantilla con sus ingredientes en JSON,
+    de modo que el usuario puede cargarla en QuickLog con un solo click.
+    """
+    __tablename__ = "meal_presets"
+
+    id           = db.Column(db.Integer, primary_key=True)
+    name         = db.Column(db.String(200), nullable=False)
+    # Ingredientes como JSON: [{"name":str, "carbs_g":float, "protein_g":float,
+    #                           "fat_g":float, "calories":float, "grams":float}]
+    components   = db.Column(db.Text, nullable=False, default="[]")
+    # Macros totales (desnormalizados para mostrar en chips rápidamente)
+    carbs_g      = db.Column(db.Float, default=0)
+    fat_g        = db.Column(db.Float, default=0)
+    protein_g    = db.Column(db.Float, default=0)
+    calories     = db.Column(db.Float, default=0)
+    # Estadísticas de uso
+    use_count    = db.Column(db.Integer, default=0)
+    last_used_at = db.Column(db.DateTime, nullable=True)
+    created_at   = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def components_list(self):
+        import json
+        try:
+            return json.loads(self.components or "[]")
+        except Exception:
+            return []
+
+    def __repr__(self):
+        return f"<MealPreset {self.name} {self.carbs_g}g CH>"
+
+
 class CGMImport(db.Model):
     """Registro de archivos CSV importados desde Freestyle Libre."""
     __tablename__ = "cgm_imports"

@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from datetime import datetime, timedelta
-from models import db, GlucoseReading, Meal, InsulinDose, MealComponent
+from models import db, GlucoseReading, Meal, InsulinDose, MealComponent, MealPreset
 from helpers import (
     parse_datetime, _auto_categorizar, _save_meal_components,
     _get_setting, _set_setting,
@@ -482,3 +482,84 @@ def recomendaciones():
     dias = request.args.get("dias", 30, type=int)
     recs = generate_recommendations(days=dias)
     return render_template("recomendaciones.html", recs=recs, dias=dias)
+
+
+# ── Meal Presets (Comidas favoritas) ────────────────────────────────────────
+
+@bp.route("/api/meal-presets", endpoint="api_meal_presets_list")
+def api_meal_presets_list():
+    """Devuelve todos los presets ordenados por frecuencia de uso."""
+    presets = MealPreset.query.order_by(
+        MealPreset.use_count.desc(), MealPreset.created_at.desc()
+    ).all()
+    return jsonify({
+        "ok": True,
+        "presets": [
+            {
+                "id":        p.id,
+                "name":      p.name,
+                "carbs_g":   round(p.carbs_g or 0, 1),
+                "fat_g":     round(p.fat_g or 0, 1),
+                "protein_g": round(p.protein_g or 0, 1),
+                "calories":  round(p.calories or 0, 1),
+                "use_count": p.use_count or 0,
+                "components": p.components_list(),
+            }
+            for p in presets
+        ],
+    })
+
+
+@bp.route("/api/meal-presets", methods=["POST"], endpoint="api_meal_presets_create")
+def api_meal_presets_create():
+    """Guarda un nuevo preset a partir de la lista de ingredientes del QuickLog."""
+    data = request.get_json(silent=True) or {}
+    name       = (data.get("name") or "").strip()
+    components = data.get("components") or []
+
+    if not name:
+        return jsonify({"ok": False, "error": "Nombre requerido"}), 400
+    if not components:
+        return jsonify({"ok": False, "error": "Al menos un ingrediente requerido"}), 400
+
+    import json
+
+    # Totals
+    carbs_g    = sum(float(c.get("carbs_g") or 0)    for c in components)
+    fat_g      = sum(float(c.get("fat_g") or 0)      for c in components)
+    protein_g  = sum(float(c.get("protein_g") or 0)  for c in components)
+    calories   = sum(float(c.get("calories") or 0)   for c in components)
+
+    preset = MealPreset(
+        name       = name,
+        components = json.dumps(components, ensure_ascii=False),
+        carbs_g    = round(carbs_g, 2),
+        fat_g      = round(fat_g, 2),
+        protein_g  = round(protein_g, 2),
+        calories   = round(calories, 2),
+    )
+    db.session.add(preset)
+    db.session.commit()
+
+    return jsonify({"ok": True, "id": preset.id, "name": preset.name})
+
+
+@bp.route("/api/meal-presets/<int:preset_id>", methods=["DELETE"],
+          endpoint="api_meal_presets_delete")
+def api_meal_presets_delete(preset_id):
+    """Elimina un preset."""
+    preset = MealPreset.query.get_or_404(preset_id)
+    db.session.delete(preset)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/meal-presets/<int:preset_id>/use", methods=["POST"],
+          endpoint="api_meal_presets_use")
+def api_meal_presets_use(preset_id):
+    """Registra un uso del preset (incrementa contador y actualiza timestamp)."""
+    preset = MealPreset.query.get_or_404(preset_id)
+    preset.use_count    = (preset.use_count or 0) + 1
+    preset.last_used_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"ok": True, "use_count": preset.use_count})

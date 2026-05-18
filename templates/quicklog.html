@@ -222,8 +222,24 @@
         </div>
       </div>
 
+      {# ── Comidas favoritas ──────────────────────────────────── #}
+      <div id="presets-row" style="display:none;" class="mb-2">
+        <div class="ql-presets-label">
+          <i class="bi bi-star-fill" style="color:#f59e0b;font-size:.75rem;"></i>
+          Favoritas
+        </div>
+        <div id="presets-chips" class="ql-presets-chips"></div>
+      </div>
+
       {# Lista de ingredientes agregados (compartida entre tabs) #}
       <div id="ing-list"></div>
+
+      {# Botón guardar favorito — aparece cuando hay ≥1 ingrediente #}
+      <div id="preset-save-wrap" style="display:none;" class="mt-2">
+        <button type="button" class="ql-preset-save-btn" onclick="openSavePreset()">
+          <i class="bi bi-star"></i> Guardar como favorita
+        </button>
+      </div>
     </div>
   </div>
 
@@ -577,6 +593,44 @@
 }
 .ql-drop-item:last-child { border-bottom: none; }
 .ql-drop-item:hover { background: var(--surface2); }
+
+/* Presets / Comidas favoritas */
+.ql-presets-label {
+  font-size: .72rem; font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: .04em; margin-bottom: .3rem;
+  display: flex; align-items: center; gap: .3rem;
+}
+.ql-presets-chips {
+  display: flex; gap: .4rem; overflow-x: auto; padding-bottom: .2rem;
+  scrollbar-width: none;
+}
+.ql-presets-chips::-webkit-scrollbar { display: none; }
+.ql-preset-chip {
+  flex-shrink: 0; display: flex; align-items: center; gap: .4rem;
+  background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: 20px; padding: .3rem .7rem; cursor: pointer;
+  font-size: .78rem; font-weight: 600; transition: all .12s;
+  white-space: nowrap; user-select: none;
+}
+.ql-preset-chip:hover { border-color: #f59e0b; background: rgba(245,158,11,.08); }
+.ql-preset-chip .preset-carbs {
+  font-size: .7rem; color: #16a34a; font-weight: 700;
+}
+.ql-preset-chip .preset-del {
+  color: var(--text-muted); font-size: .8rem; margin-left: .15rem;
+  opacity: 0; transition: opacity .1s;
+}
+.ql-preset-chip:hover .preset-del { opacity: 1; }
+.ql-preset-save-btn {
+  background: none; border: 1.5px dashed var(--border);
+  border-radius: 10px; padding: .35rem .8rem;
+  font-size: .78rem; color: var(--text-muted); cursor: pointer;
+  display: flex; align-items: center; gap: .35rem; width: 100%;
+  justify-content: center; transition: all .12s;
+}
+.ql-preset-save-btn:hover {
+  border-color: #f59e0b; color: #f59e0b; background: rgba(245,158,11,.05);
+}
 
 /* Ingredient items */
 .ql-ing-item {
@@ -1252,8 +1306,135 @@ function recalcTotals() {
   if (nombres.length > 3) nombre += ` +${nombres.length-3}`;
   document.getElementById('comida_nombre').value = nombre;
 
+  // Mostrar / ocultar botón de guardar favorita
+  const saveWrap = document.getElementById('preset-save-wrap');
+  if (saveWrap) saveWrap.style.display = ingredientes.length > 0 ? '' : 'none';
+
   sugerirBolo();
 }
+
+/* ── Comidas favoritas (Presets) ─────────────────────────────────────────── */
+let _presets = [];
+
+async function loadPresets() {
+  try {
+    const res = await fetch('/api/meal-presets');
+    const data = await res.json();
+    if (!data.ok) return;
+    _presets = data.presets;
+    renderPresets();
+  } catch(e) { /* silencioso */ }
+}
+
+function renderPresets() {
+  const row   = document.getElementById('presets-row');
+  const chips = document.getElementById('presets-chips');
+  if (!row || !chips) return;
+  chips.innerHTML = '';
+  if (_presets.length === 0) { row.style.display = 'none'; return; }
+  row.style.display = '';
+  _presets.forEach(p => {
+    const btn = document.createElement('div');
+    btn.className = 'ql-preset-chip';
+    btn.title     = `${p.name} — ${p.carbs_g}g CH`;
+    btn.innerHTML  = `<i class="bi bi-star-fill" style="color:#f59e0b;font-size:.75rem;"></i>
+      <span>${escH(p.name)}</span>
+      <span class="preset-carbs">${p.carbs_g}g</span>
+      <span class="preset-del" title="Eliminar" onclick="deletePreset(event,${p.id})">
+        <i class="bi bi-x-circle-fill"></i>
+      </span>`;
+    btn.addEventListener('click', (e) => {
+      if (e.target.closest('.preset-del')) return;
+      applyPreset(p);
+    });
+    chips.appendChild(btn);
+  });
+}
+
+function applyPreset(p) {
+  // Cargar todos los componentes del preset en la lista de ingredientes
+  (p.components || []).forEach(c => {
+    const grams = c.grams || 100;
+    const base  = 100;
+    ingredientes.push({
+      id:        Date.now() + Math.random(),
+      name:      c.name,
+      food_id:   c.food_item_id || '',
+      grams:     grams,
+      serving_g: base,
+      carbs_s:   +(c.carbs_g   || 0),
+      protein_s: +(c.protein_g || 0),
+      fat_s:     +(c.fat_g     || 0),
+      cal_s:     +(c.calories  || 0),
+    });
+  });
+  renderIngredients();
+
+  // Registrar uso
+  fetch(`/api/meal-presets/${p.id}/use`, { method: 'POST' }).catch(()=>{});
+}
+
+async function deletePreset(e, id) {
+  e.stopPropagation();
+  if (!confirm('¿Eliminar este favorito?')) return;
+  try {
+    await fetch(`/api/meal-presets/${id}`, { method: 'DELETE' });
+    _presets = _presets.filter(p => p.id !== id);
+    renderPresets();
+  } catch(err) { alert('Error al eliminar'); }
+}
+
+function openSavePreset() {
+  if (ingredientes.length === 0) return;
+  const autoName = ingredientes.slice(0,3).map(i => i.name).join(' + ');
+  const nombre = prompt('Nombre para esta comida favorita:', autoName);
+  if (!nombre || !nombre.trim()) return;
+  savePreset(nombre.trim());
+}
+
+async function savePreset(nombre) {
+  const components = ingredientes.map(ing => {
+    const m = macros(ing);
+    return {
+      name:      ing.name,
+      food_item_id: ing.food_id || null,
+      grams:     ing.grams,
+      carbs_g:   m.carbs,
+      protein_g: m.protein,
+      fat_g:     m.fat,
+      calories:  m.cal,
+    };
+  });
+  try {
+    const res  = await fetch('/api/meal-presets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: nombre, components }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      await loadPresets();   // recargar lista
+    } else {
+      alert('Error: ' + (data.error || 'desconocido'));
+    }
+  } catch(err) { alert('Error de red'); }
+}
+
+// Cargar presets al abrir la tarjeta de comida
+document.addEventListener('DOMContentLoaded', () => {
+  const cardComida = document.getElementById('card-comida');
+  if (cardComida) {
+    const obs = new MutationObserver(() => {
+      if (cardComida.style.display !== 'none' && _presets.length === 0) {
+        loadPresets();
+        obs.disconnect();
+      }
+    });
+    obs.observe(cardComida, { attributes: true, attributeFilter: ['style'] });
+    // También cargar si ya está abierta
+    if (cardComida.style.display !== 'none') loadPresets();
+  }
+});
 
 /* ── Actividad ──────────────────────────────────────────────────────────── */
 function setActTipo(nombre) {
