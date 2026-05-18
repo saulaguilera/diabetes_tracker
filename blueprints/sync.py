@@ -1219,6 +1219,23 @@ def api_feedback_stats():
                         "trace": traceback.format_exc()}), 500
 
 
+@bp.route("/api/recalibration", endpoint="api_recalibration")
+def api_recalibration():
+    """
+    Sugerencias de recalibración automática de ISF e ICR.
+    Compara los valores calculados desde datos reales vs los configurados
+    y genera recomendaciones accionables.
+    """
+    try:
+        from utils.prediction_feedback import get_recalibration_suggestions
+        result = get_recalibration_suggestions()
+        return jsonify({"ok": True, **result})
+    except Exception as e:
+        import traceback
+        return jsonify({"ok": False, "error": str(e),
+                        "trace": traceback.format_exc()}), 500
+
+
 @bp.route("/api/diagnostico", endpoint="api_diagnostico")
 def api_diagnostico():
     """

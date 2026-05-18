@@ -443,6 +443,33 @@
   </div>
 </div>
 
+<!-- ── Recalibración automática ── -->
+<div class="row g-3 mt-1">
+  <div class="col-12">
+    <div class="chart-box">
+      <div class="d-flex justify-content-between align-items-center">
+        <h6 class="fw-semibold mb-0">
+          <i class="bi bi-arrow-repeat me-2" style="color:#6366f1;"></i>
+          Recalibración automática
+          <span class="badge ms-1" style="font-size:.65rem;vertical-align:middle;
+                background:rgba(99,102,241,.12);color:#6366f1;">
+            ISF · ICR
+          </span>
+        </h6>
+        <button class="btn btn-sm btn-outline-secondary" onclick="cargarRecalibracion()"
+                id="btn-recalib">
+          <i class="bi bi-search me-1"></i>Analizar
+        </button>
+      </div>
+      <p class="text-muted mb-2" style="font-size:.78rem;margin-top:.4rem;">
+        Compara tus parámetros configurados con lo que sugieren tus datos reales
+        de correcciones y comidas de los últimos 60–90 días.
+      </p>
+      <div id="recalib-contenido"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ── Explicación ── -->
 <div class="chart-box mt-3">
   <h6 class="fw-semibold mb-3">¿Cómo se calcula el bolo total?</h6>
@@ -915,6 +942,125 @@
                ${d.roc_label}
              </span>` : ''}
       </div>`;
+  }
+
+  // ── Recalibración automática ──────────────────────────────────────────────
+  async function cargarRecalibracion() {
+    const btn = document.getElementById('btn-recalib');
+    const box = document.getElementById('recalib-contenido');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" style="width:.8rem;height:.8rem;"></span>Analizando…';
+    box.innerHTML = '';
+
+    try {
+      const d = await fetch('/api/recalibration').then(r => r.json());
+      if (!d.ok) { box.innerHTML = `<div class="text-danger">${d.error}</div>`; return; }
+
+      if (!d.hay_algo) {
+        box.innerHTML = `
+          <div class="d-flex align-items-center gap-2 p-2 rounded"
+               style="background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);font-size:.82rem;">
+            <i class="bi bi-check-circle-fill text-success"></i>
+            <div>
+              <strong>Sin ajustes necesarios</strong> —
+              ${d.resumen}
+              <span class="text-muted">
+                (ISF calculado: ${d.isf_calc ?? '—'} con ${d.isf_n} correcciones ·
+                 ICR calculado: ${d.icr_calc ?? '—'} con ${d.icr_n} comidas)
+              </span>
+            </div>
+          </div>`;
+        return;
+      }
+
+      const confColor = { alta: '#16a34a', media: '#d97706', baja: '#6b7280' };
+      const confIcon  = { alta: 'bi-shield-check', media: 'bi-shield-exclamation', baja: 'bi-shield' };
+
+      let html = '';
+      for (const s of d.sugerencias) {
+        const cc = confColor[s.confianza] || '#6b7280';
+        const ci = confIcon[s.confianza]  || 'bi-shield';
+
+        const aplicarBtn = s.setting_key && s.valor_sugerido ? `
+          <button class="btn btn-sm mt-2"
+                  style="background:rgba(99,102,241,.12);color:#6366f1;border:1px solid rgba(99,102,241,.3);font-size:.75rem;"
+                  onclick="aplicarRecalibracion('${s.setting_key}', ${s.valor_sugerido}, this)">
+            <i class="bi bi-check2 me-1"></i>Aplicar ${s.valor_sugerido}
+            ${s.tipo === 'ISF' ? 'mg/dL·U' : s.tipo === 'ICR' ? 'g/U' : ''}
+          </button>` : '';
+
+        const diffBadge = s.diferencia_pct !== null
+          ? `<span class="badge ms-2" style="font-size:.65rem;background:rgba(239,68,68,.12);color:#dc2626;">
+               ${s.diferencia_abs > 0 ? '+' : ''}${s.diferencia_abs} (${s.diferencia_pct}% diferencia)
+             </span>` : '';
+
+        html += `
+          <div class="p-3 rounded mb-2"
+               style="background:var(--surface2);border:1px solid var(--border);">
+            <div class="d-flex align-items-start justify-content-between gap-2">
+              <div>
+                <div style="font-size:.82rem;font-weight:700;color:var(--text);">
+                  ${s.titulo}
+                  <span style="font-size:.7rem;font-weight:400;color:${cc};" class="ms-1">
+                    <i class="bi ${ci}"></i> confianza ${s.confianza}
+                    · ${s.n_muestras} muestras
+                  </span>
+                </div>
+                <div style="font-size:.78rem;color:var(--text-muted);margin-top:.3rem;">
+                  ${s.mensaje}
+                </div>
+                ${s.valor_actual !== null ? `
+                <div style="font-size:.75rem;margin-top:.5rem;">
+                  <span style="color:var(--text-muted);">Actual:</span>
+                  <strong>${s.valor_actual}</strong>${diffBadge}
+                  &nbsp;→&nbsp;
+                  <span style="color:var(--text-muted);">Sugerido:</span>
+                  <strong style="color:#6366f1;">${s.valor_sugerido}</strong>
+                </div>` : ''}
+                <div style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem;font-style:italic;">
+                  ${s.impacto}
+                </div>
+              </div>
+            </div>
+            ${aplicarBtn}
+          </div>`;
+      }
+      box.innerHTML = html;
+
+    } catch(e) {
+      box.innerHTML = `<div class="text-danger" style="font-size:.82rem;">Error: ${e.message}</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-search me-1"></i>Analizar';
+    }
+  }
+
+  async function aplicarRecalibracion(key, valor, btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:.7rem;height:.7rem;"></span>';
+    try {
+      const res = await fetch('/api/settings/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [key]: valor }),
+      });
+      const d = await res.json();
+      if (d.ok) {
+        btn.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>Aplicado';
+        btn.style.background = 'rgba(34,197,94,.15)';
+        btn.style.color = '#16a34a';
+        btn.style.borderColor = 'rgba(34,197,94,.3)';
+        // Recalcular si hay glucemia ingresada
+        const g = parseFloat(document.getElementById('inp-glucemia')?.value);
+        if (g > 0) setTimeout(calcular, 400);
+      } else {
+        btn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Error';
+        btn.disabled = false;
+      }
+    } catch(e) {
+      btn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Error';
+      btn.disabled = false;
+    }
   }
 
   function mostrarError(msg) {

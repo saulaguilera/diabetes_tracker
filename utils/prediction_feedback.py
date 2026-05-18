@@ -465,3 +465,181 @@ def prediction_probabilities(
         "ci_90":    [round(g_pred - 1.645 * sigma), round(g_pred + 1.645 * sigma)],
         "sigma":    sigma,
     }
+
+
+# ── Recalibración automática ───────────────────────────────────────────────────
+
+def get_recalibration_suggestions() -> dict:
+    """
+    Analiza datos reales de correcciones y comidas para detectar si el ISF
+    o el ICR configurados difieren significativamente de lo que los datos sugieren.
+
+    Genera sugerencias accionables con botón "Aplicar" en la UI.
+
+    Fuentes de análisis
+    -------------------
+    1. ISF calculado vs ISF configurado
+       — Usa _calcular_isf_personal() sobre los últimos 60 días.
+       — Sugiere ajuste si la diferencia es ≥ 10% y hay ≥ 5 correcciones.
+
+    2. ICR calculado vs ICR configurado
+       — Usa _calcular_icr_personal() sobre los últimos 90 días.
+       — Sugiere ajuste si la diferencia es ≥ 10% y hay ≥ 5 comidas.
+
+    3. Bias sistemático del feedback loop
+       — Si el bias a +30min es ≥ 15 mg/dL con ≥ 10 predicciones,
+         estima el ajuste de ISF necesario para eliminarlo.
+
+    Niveles de confianza
+    --------------------
+    alta  : ≥ 15 muestras — cambio recomendado
+    media : 7–14 muestras — cambio razonable
+    baja  :  5–6 muestras — dato orientativo, usar con criterio
+
+    Returns
+    -------
+    dict con:
+        sugerencias : list[dict] — lista de sugerencias ordenadas por prioridad
+        resumen     : str        — texto corto para mostrar en UI
+        hay_algo    : bool       — True si hay al menos una sugerencia
+    """
+    from helpers import (
+        _calcular_isf_personal, _calcular_icr_personal, _get_setting,
+    )
+
+    sugerencias = []
+
+    # ── 1. ISF ────────────────────────────────────────────────────────────────
+    isf_calc, n_isf   = _calcular_isf_personal(days=60)
+    isf_config_raw    = _get_setting("isf_manual")
+    isf_config        = float(isf_config_raw) if isf_config_raw else None
+
+    if isf_calc and n_isf >= 5:
+        referencia_isf = isf_config or isf_calc   # para calcular diferencia %
+        if isf_config:
+            diff_abs = isf_calc - isf_config
+            diff_pct = abs(diff_abs) / isf_config * 100
+            if diff_pct >= 10:
+                confianza = "alta" if n_isf >= 15 else "media" if n_isf >= 7 else "baja"
+                direccion = "más sensible" if diff_abs > 0 else "más resistente"
+                sugerencias.append({
+                    "tipo":           "ISF",
+                    "setting_key":    "isf_manual",
+                    "valor_actual":   isf_config,
+                    "valor_sugerido": round(isf_calc, 1),
+                    "diferencia_pct": round(diff_pct, 1),
+                    "diferencia_abs": round(diff_abs, 1),
+                    "n_muestras":     n_isf,
+                    "confianza":      confianza,
+                    "titulo":         "ISF puede estar desactualizado",
+                    "mensaje": (
+                        f"Tus últimas {n_isf} correcciones reales sugieren un ISF de "
+                        f"{isf_calc:.1f} mg/dL·U — un {diff_pct:.0f}% "
+                        f"{'mayor' if diff_abs > 0 else 'menor'} que el configurado "
+                        f"({isf_config}). Tu glucemia responde {direccion} a la insulina "
+                        f"de lo que el modelo asume."
+                    ),
+                    "impacto": (
+                        f"Actualizar ISF a {isf_calc:.1f} haría que las correcciones "
+                        f"{'sean más pequeñas' if diff_abs > 0 else 'sean más grandes'}, "
+                        f"reduciendo el error sistemático en la calculadora."
+                    ),
+                })
+
+    # ── 2. ICR ────────────────────────────────────────────────────────────────
+    icr_calc, n_icr = _calcular_icr_personal(days=90)
+    icr_config_raw  = _get_setting("icr")
+    icr_config      = float(icr_config_raw) if icr_config_raw else None
+
+    if icr_calc and n_icr >= 5:
+        if icr_config:
+            diff_abs = icr_calc - icr_config
+            diff_pct = abs(diff_abs) / icr_config * 100
+            if diff_pct >= 10:
+                confianza = "alta" if n_icr >= 15 else "media" if n_icr >= 7 else "baja"
+                # ICR mayor = menos insulina por gramo = más resistente post-comida
+                # ICR menor = más insulina por gramo = más sensible post-comida
+                if diff_abs > 0:
+                    interpretacion = "necesitás menos insulina por gramo de CH de lo que el modelo asume"
+                else:
+                    interpretacion = "necesitás más insulina por gramo de CH de lo que el modelo asume"
+                sugerencias.append({
+                    "tipo":           "ICR",
+                    "setting_key":    "icr",
+                    "valor_actual":   icr_config,
+                    "valor_sugerido": round(icr_calc, 1),
+                    "diferencia_pct": round(diff_pct, 1),
+                    "diferencia_abs": round(diff_abs, 1),
+                    "n_muestras":     n_icr,
+                    "confianza":      confianza,
+                    "titulo":         "ICR puede estar desactualizado",
+                    "mensaje": (
+                        f"Tus últimas {n_icr} comidas con bolus sugieren un ICR de "
+                        f"{icr_calc:.1f} g/U — un {diff_pct:.0f}% "
+                        f"{'mayor' if diff_abs > 0 else 'menor'} que el configurado "
+                        f"({icr_config}). Parece que {interpretacion}."
+                    ),
+                    "impacto": (
+                        f"Con ICR {icr_calc:.1f} el bolo de comida "
+                        f"{'sería menor' if diff_abs > 0 else 'sería mayor'} — "
+                        f"reduciendo el desvío post-prandial."
+                    ),
+                })
+
+    # ── 3. Bias sistemático del feedback loop → inferir ajuste de ISF ─────────
+    try:
+        accuracy  = get_model_accuracy(n=30)
+        bias_30   = accuracy.get("bias_30")    # positivo = modelo subestima (pred < real)
+        n_pred_30 = accuracy.get("n_30", 0)
+
+        # Bias significativo: ≥15 mg/dL y ≥10 predicciones resueltas
+        if bias_30 is not None and abs(bias_30) >= 15 and n_pred_30 >= 10:
+            # Si el modelo sistemáticamente predice bajo (bias>0), el ISF real
+            # podría ser mayor (insulina menos potente de lo asumido).
+            # Estimación: si bias ≈ error_corrección ≈ delta_ISF × bolus_promedio / ISF
+            # Para simplificar: mostramos el bias y dejamos la interpretación al usuario.
+            direccion_bias = "subestima" if bias_30 > 0 else "sobreestima"
+            sugerencias.append({
+                "tipo":           "BIAS_LOOP",
+                "setting_key":    None,   # no hay setting directo para aplicar
+                "valor_actual":   None,
+                "valor_sugerido": None,
+                "diferencia_pct": None,
+                "diferencia_abs": round(bias_30, 1),
+                "n_muestras":     n_pred_30,
+                "confianza":      "media" if n_pred_30 >= 20 else "baja",
+                "titulo":         f"Bias sistemático detectado en predicciones",
+                "mensaje": (
+                    f"El modelo {direccion_bias} la glucemia real por "
+                    f"{abs(bias_30):.1f} mg/dL en promedio a +30min "
+                    f"(sobre {n_pred_30} predicciones). "
+                    f"El bias adaptivo ya corrige esto automáticamente, pero un "
+                    f"bias persistente puede indicar que el ISF o el ICR necesitan ajuste."
+                ),
+                "impacto": (
+                    "Revisá si tu ISF está generando correcciones "
+                    f"{'insuficientes' if bias_30 > 0 else 'excesivas'}. "
+                    "Si el bias persiste >30 días, considerá recalibrarlo."
+                ),
+            })
+    except Exception:
+        pass
+
+    # ── Resumen ───────────────────────────────────────────────────────────────
+    n_sug = len(sugerencias)
+    if n_sug == 0:
+        resumen = "Tus parámetros están alineados con los datos reales."
+    elif n_sug == 1:
+        resumen = f"1 parámetro con diferencia significativa detectada."
+    else:
+        resumen = f"{n_sug} parámetros con diferencias significativas detectadas."
+
+    return {
+        "sugerencias": sugerencias,
+        "resumen":     resumen,
+        "hay_algo":    n_sug > 0,
+        "isf_calc":    round(isf_calc, 1) if isf_calc else None,
+        "isf_n":       n_isf,
+        "icr_calc":    round(icr_calc, 1) if icr_calc else None,
+        "icr_n":       n_icr,
+    }
