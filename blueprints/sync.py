@@ -1170,7 +1170,7 @@ def api_model_accuracy():
         from utils.prediction_feedback import get_model_accuracy, get_adaptive_bias
         return jsonify({
             "ok":       True,
-            "accuracy": get_model_accuracy(n=50),
+            "accuracy": get_model_accuracy(n=500),
             "bias":     get_adaptive_bias(),
         })
     except Exception as e:
@@ -1195,7 +1195,7 @@ def api_feedback_stats():
             GlucosePrediction.predicted_at.desc()
         ).first()
 
-        accuracy = get_model_accuracy(n=50) if res_30 >= 5 else None
+        accuracy = get_model_accuracy(n=500) if res_30 >= 5 else None
 
         return jsonify({
             "ok": True,

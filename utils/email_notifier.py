@@ -353,7 +353,7 @@ def send_weekly_accuracy_report() -> dict:
         from utils.kinetics import dawn_roc_mgdl_min
         from helpers import _get_setting
 
-        accuracy = get_model_accuracy(n=50)
+        accuracy = get_model_accuracy(n=500)
 
         # Estado del fenómeno del alba
         mag_raw = _get_setting("dawn_magnitude")
