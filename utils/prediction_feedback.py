@@ -290,13 +290,17 @@ def get_model_accuracy(n: int = _BIAS_WINDOW) -> dict:
     # Tendencia: comparar MAE de la mitad más reciente vs la más antigua.
     # Mínimo 30 predicciones para que la división en mitades tenga al menos 15
     # muestras cada una — por debajo de eso el resultado es ruido estadístico.
-    tendencia = "insuficiente"
+    tendencia  = "insuficiente"
+    mae_rec_val = None
+    mae_ant_val = None
     if m30["n"] >= 30:
         mitad = m30["n"] // 2
         recientes = resueltas_30[:mitad]
         antiguas  = resueltas_30[mitad:]
         mae_rec = sum(abs(i.error_30) for i in recientes) / len(recientes)
         mae_ant = sum(abs(i.error_30) for i in antiguas)  / len(antiguas)
+        mae_rec_val = round(mae_rec, 1)
+        mae_ant_val = round(mae_ant, 1)
         if mae_rec < mae_ant * 0.90:
             tendencia = "mejorando"
         elif mae_rec > mae_ant * 1.10:
@@ -330,6 +334,8 @@ def get_model_accuracy(n: int = _BIAS_WINDOW) -> dict:
         "rmse_60":        m60["rmse"],
         "pct_dentro_20_60": m60["pct_20"],
         "tendencia":      tendencia,
+        "mae_reciente":   mae_rec_val,   # MAE mitad más reciente
+        "mae_anterior":   mae_ant_val,   # MAE mitad más antigua
         # Clarke Error Grid — horizonte +30 min
         "ceg_30":         ceg_30,
         # Clarke Error Grid — horizonte +60 min

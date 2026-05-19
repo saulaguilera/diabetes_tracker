@@ -904,11 +904,16 @@ async function cargarAccuracy() {
         <div class="col-6 col-md-3">
           <div class="p-3 rounded text-center" style="background:var(--surface2);">
             <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;">Tendencia del error</div>
-            <div style="font-size:1.4rem;font-weight:800;color:${tendColor[tend]};">
+            <div style="font-size:1.25rem;font-weight:800;color:${tendColor[tend]};">
               ${tendIcon[tend] || '—'}
             </div>
-            <div style="font-size:.72rem;color:var(--text-muted);">
-              ${tend === 'insuficiente' ? 'necesita ≥30 muestras' : 'vs predicciones anteriores'}
+            <div style="font-size:.72rem;color:var(--text-muted);margin-top:.25rem;">
+              ${tend === 'insuficiente'
+                ? `necesita ≥30 muestras (${a.n_30} hasta ahora)`
+                : a.mae_reciente !== undefined && a.mae_anterior !== undefined
+                  ? `±${a.mae_reciente} → ±${a.mae_anterior} mg/dL`
+                  : `${a.n_30} muestras`
+              }
             </div>
           </div>
         </div>
