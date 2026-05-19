@@ -37,20 +37,56 @@
   </div>
   <div class="cfg-body">
 
-    {# Valor en uso #}
+    {# Jerarquía en uso — una sola lectura clara #}
     <div class="cfg-current-row">
-      <div class="cfg-current-val">
-        {{ (isf_manual | float | round(1)) if isf_manual else (isf_personal | round(1) if isf_personal else '—') }}
-        <span class="cfg-current-unit">mg/dL/U</span>
-      </div>
-      <div class="cfg-current-label">
-        {% if isf_manual %}
-          Valor manual (sobreescribe el calculado)
-        {% elif isf_personal %}
-          Calculado de {{ n_isf }} correcciones
-        {% else %}
-          Sin datos suficientes aún
-        {% endif %}
+      <div>
+        <div style="font-size:.7rem;color:var(--text-muted);font-weight:600;
+                    text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem;">
+          Jerarquía de uso (de mayor a menor prioridad)
+        </div>
+        <div class="d-flex flex-column gap-1" style="font-size:.82rem;">
+          <div style="opacity:{{ '1' if isf_manual else '0.4' }};">
+            {% if isf_manual %}
+            <i class="bi bi-1-circle-fill me-1" style="color:#f59e0b;"></i>
+            <strong>Manual:</strong> {{ isf_manual | float | round(1) }} mg/dL·U
+            <span class="badge ms-1" style="background:rgba(245,158,11,.15);color:#f59e0b;font-size:.65rem;">EN USO</span>
+            {% else %}
+            <i class="bi bi-1-circle me-1 text-muted"></i>
+            <span class="text-muted">Manual: no configurado</span>
+            {% endif %}
+          </div>
+          <div style="font-size:.75rem;color:var(--text-muted);padding-left:1.3rem;">
+            ↓ si no hay manual, usa el circadiano del horario actual
+          </div>
+          <div>
+            <i class="bi bi-2-circle-fill me-1" style="color:#6366f1;"></i>
+            <strong>Circadiano por hora:</strong>
+            {% if circ_bloques %}
+              varía según el momento del día
+              {% if not isf_manual %}
+              <span class="badge ms-1" style="background:rgba(99,102,241,.15);color:#6366f1;font-size:.65rem;">EN USO</span>
+              {% endif %}
+            {% else %}
+              sin datos suficientes aún
+            {% endif %}
+          </div>
+          <div style="font-size:.75rem;color:var(--text-muted);padding-left:1.3rem;">
+            ↓ si no hay datos en ese bloque horario, usa el promedio global
+          </div>
+          <div>
+            <i class="bi bi-3-circle-fill me-1" style="color:#16a34a;"></i>
+            <strong>Global calculado:</strong>
+            {% if isf_personal %}
+              {{ isf_personal | round(1) }} mg/dL·U
+              <span class="text-muted" style="font-size:.72rem;">({{ n_isf }} correcciones, 90 días)</span>
+              {% if not isf_manual and not circ_bloques %}
+              <span class="badge ms-1" style="background:rgba(22,163,74,.15);color:#16a34a;font-size:.65rem;">EN USO</span>
+              {% endif %}
+            {% else %}
+              sin datos aún
+            {% endif %}
+          </div>
+        </div>
       </div>
     </div>
 

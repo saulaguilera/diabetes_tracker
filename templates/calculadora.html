@@ -30,25 +30,39 @@
             <strong>ISF</strong> — Factor de sensibilidad
             <span class="text-muted">(mg/dL por unidad)</span>
           </label>
-          {% if isf_personal %}
-          <div class="text-success mb-1" style="font-size:.78rem;">
-            <i class="bi bi-cpu me-1"></i>Calculado automáticamente:
-            <strong>{{ isf_personal }}</strong>
-            ({{ n_isf }} correcciones)
+
+          {# ISF activo ahora — único número relevante para el bolo #}
+          {% set isf_activo = isf_manual_guardado or isf_ahora or isf_personal %}
+          {% if isf_activo %}
+          <div class="mb-2 p-2 rounded" style="background:var(--surface2);border:1px solid var(--border);">
+            <div style="font-size:1.4rem;font-weight:800;color:var(--text);line-height:1;">
+              {{ isf_activo | float | round(1) }}
+              <span style="font-size:.75rem;font-weight:400;color:var(--text-muted);">mg/dL·U</span>
+            </div>
+            <div style="font-size:.72rem;color:var(--text-muted);margin-top:.2rem;">
+              {% if isf_manual_guardado %}
+                <i class="bi bi-pencil-fill me-1" style="color:#f59e0b;"></i>Valor manual guardado
+              {% elif fuente_isf_ahora == 'circadiano' %}
+                <i class="bi bi-clock me-1" style="color:#6366f1;"></i>Circadiano {{ bloque_label }} · {{ n_isf }} correcciones
+              {% else %}
+                <i class="bi bi-cpu me-1" style="color:#16a34a;"></i>Global calculado · {{ n_isf }} correcciones
+              {% endif %}
+            </div>
           </div>
           {% else %}
-          <div class="text-warning mb-1" style="font-size:.78rem;">
-            <i class="bi bi-exclamation-triangle me-1"></i>Sin datos suficientes — ingresalo manualmente
+          <div class="text-warning mb-2" style="font-size:.78rem;">
+            <i class="bi bi-exclamation-triangle me-1"></i>Sin datos — ingresalo manualmente abajo
           </div>
           {% endif %}
-          <div class="input-group">
+
+          <div class="input-group input-group-sm">
             <input type="number" id="cfg-isf" class="form-control"
                    min="5" max="200" step="0.5"
-                   placeholder="{{ isf_personal or 'ej. 40' }}"
+                   placeholder="Sobreescribir manualmente…"
                    value="{{ isf_manual_guardado or '' }}">
-            <span class="input-group-text text-muted" style="font-size:.8rem;">mg/dL·U⁻¹</span>
+            <span class="input-group-text text-muted" style="font-size:.75rem;">mg/dL·U</span>
           </div>
-          <div class="form-text">Dejá vacío para usar el calculado automáticamente.</div>
+          <div class="form-text" style="font-size:.7rem;">Solo completá si querés forzar un valor fijo.</div>
         </div>
 
         <!-- I:CH -->
