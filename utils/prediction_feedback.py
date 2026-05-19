@@ -287,9 +287,11 @@ def get_model_accuracy(n: int = _BIAS_WINDOW) -> dict:
     m30 = _metrics(resueltas_30, "error_30")
     m60 = _metrics(resueltas_60, "error_60")
 
-    # Tendencia: comparar MAE de la mitad más reciente vs la más antigua
+    # Tendencia: comparar MAE de la mitad más reciente vs la más antigua.
+    # Mínimo 30 predicciones para que la división en mitades tenga al menos 15
+    # muestras cada una — por debajo de eso el resultado es ruido estadístico.
     tendencia = "insuficiente"
-    if m30["n"] >= 10:
+    if m30["n"] >= 30:
         mitad = m30["n"] // 2
         recientes = resueltas_30[:mitad]
         antiguas  = resueltas_30[mitad:]

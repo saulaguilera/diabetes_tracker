@@ -860,7 +860,8 @@ async function cargarAccuracy() {
       return;
     }
 
-    const tendIcon = { mejorando: '↑ mejorando', empeorando: '↓ empeorando', estable: '→ estable', insuficiente: '—' };
+    const tendIcon = { mejorando: '↑ mejorando', empeorando: '↓ empeorando', estable: '→ estable',
+                        insuficiente: 'acumulando datos…' };
     const tendColor = { mejorando: '#16a34a', empeorando: '#dc2626', estable: '#6366f1', insuficiente: 'var(--text-muted)' };
     const tend = a.tendencia;
 
@@ -906,7 +907,9 @@ async function cargarAccuracy() {
             <div style="font-size:1.4rem;font-weight:800;color:${tendColor[tend]};">
               ${tendIcon[tend] || '—'}
             </div>
-            <div style="font-size:.72rem;color:var(--text-muted);">vs predicciones anteriores</div>
+            <div style="font-size:.72rem;color:var(--text-muted);">
+              ${tend === 'insuficiente' ? 'necesita ≥30 muestras' : 'vs predicciones anteriores'}
+            </div>
           </div>
         </div>
       </div>
