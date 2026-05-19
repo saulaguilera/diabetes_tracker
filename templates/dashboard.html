@@ -255,38 +255,9 @@
 
 {# ── Resumen del día ───────────────────────────────────────────────────────── #}
 <div id="resumen-dia-wrap" class="mb-3" style="display:none;">
-  <div class="resumen-dia-card">
-
-    {# Encabezado #}
-    <div class="rd-header">
-      <div class="rd-title">
-        <i class="bi bi-calendar2-check-fill me-2"></i>Hoy
-      </div>
-      <span id="resumen-fecha" class="rd-fecha"></span>
-    </div>
-
-    {# Métricas principales #}
-    <div class="rd-main-grid" id="resumen-main-grid">
-      <div class="rd-stat" id="rd-tir">
-        <div class="rd-stat-val" id="rd-tir-val">—</div>
-        <div class="rd-stat-bar-wrap"><div class="rd-stat-bar" id="rd-tir-bar"></div></div>
-        <div class="rd-stat-lbl">Tiempo en rango</div>
-      </div>
-      <div class="rd-stat" id="rd-prom">
-        <div class="rd-stat-val" id="rd-prom-val">—</div>
-        <div class="rd-stat-lbl">Promedio mg/dL</div>
-        <div class="rd-stat-sub" id="rd-prom-sub"></div>
-      </div>
-      <div class="rd-stat" id="rd-rango">
-        <div class="rd-stat-val" id="rd-rango-val">—</div>
-        <div class="rd-stat-lbl">Rango mg/dL</div>
-        <div class="rd-stat-sub" id="rd-rango-sub"></div>
-      </div>
-    </div>
-
-    {# Chips secundarios #}
+  <div class="rd-strip">
+    <span class="rd-strip-label"><i class="bi bi-calendar2-check-fill me-1"></i>Hoy</span>
     <div id="resumen-chips" class="rd-chips"></div>
-
   </div>
 </div>
 
@@ -555,85 +526,28 @@
 
 {% block scripts %}
 <style>
-/* ── Resumen del día ─────────────────────────────────────────────────────────── */
-.resumen-dia-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 1rem 1.1rem 0.8rem;
-  position: relative;
-  overflow: hidden;
+/* ── Resumen del día (strip compacto) ───────────────────────────────────────── */
+.rd-strip {
+  display: flex; align-items: center; gap: .6rem;
+  flex-wrap: wrap;
 }
-.resumen-dia-card::before {
-  content: '';
-  position: absolute; top: 0; left: 0; right: 0; height: 3px;
-  background: linear-gradient(90deg, #6366f1, #22c55e, #f59e0b);
-  border-radius: 16px 16px 0 0;
+.rd-strip-label {
+  font-size: .7rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--text-muted);
+  white-space: nowrap; flex-shrink: 0;
 }
-.rd-header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: .75rem;
-}
-.rd-title {
-  font-size: .72rem; font-weight: 800; text-transform: uppercase;
-  letter-spacing: .08em; color: var(--text-muted);
-}
-.rd-fecha {
-  font-size: .7rem; color: var(--text-muted);
-}
-/* Grid de métricas principales */
-.rd-main-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: .6rem;
-  margin-bottom: .7rem;
-}
-.rd-stat {
-  background: var(--surface2);
-  border: 1.5px solid var(--border);
-  border-radius: 12px;
-  padding: .65rem .75rem;
-  transition: border-color .15s;
-}
-.rd-stat-val {
-  font-size: 1.55rem; font-weight: 800; letter-spacing: -1px;
-  line-height: 1.1; margin-bottom: .2rem;
-}
-.rd-stat-bar-wrap {
-  height: 4px; background: var(--border); border-radius: 4px;
-  margin-bottom: .35rem; overflow: hidden;
-}
-.rd-stat-bar {
-  height: 100%; border-radius: 4px;
-  transition: width .4s ease, background .3s;
-}
-.rd-stat-lbl {
-  font-size: .7rem; color: var(--text-muted); font-weight: 600;
-}
-.rd-stat-sub {
-  font-size: .68rem; margin-top: .1rem; font-weight: 600;
-}
-.rd-delta {
-  font-size: .65rem; font-weight: 700; vertical-align: middle;
-  margin-left: .2rem;
-}
-.rd-delta-up { color: #16a34a; }
-.rd-delta-dn { color: #dc2626; }
-/* Chips secundarios */
 .rd-chips {
-  display: flex; flex-wrap: wrap; gap: .4rem;
+  display: flex; flex-wrap: wrap; gap: .35rem;
 }
 .rd-chip {
-  display: flex; align-items: center; gap: .45rem;
-  border-radius: 10px; padding: .35rem .65rem;
-  font-size: .78rem;
+  display: flex; align-items: center; gap: .35rem;
+  border-radius: 20px; padding: .25rem .6rem;
 }
-.rd-chip-val { font-weight: 700; line-height: 1.1; }
-.rd-chip-sub { font-size: .65rem; color: var(--text-muted); line-height: 1.2; }
-@media (max-width: 480px) {
-  .rd-main-grid { grid-template-columns: repeat(3,1fr); gap: .4rem; }
-  .rd-stat-val  { font-size: 1.25rem; }
-}
+.rd-chip-val { font-size: .82rem; font-weight: 700; line-height: 1.1; }
+.rd-chip-sub { font-size: .62rem; color: var(--text-muted); line-height: 1.2; }
+.rd-delta { font-size: .65rem; font-weight: 700; vertical-align: middle; }
+.rd-delta-up { color: #16a34a; }
+.rd-delta-dn { color: #dc2626; }
 
 /* ── Hero card ──────────────────────────────────────────────────────────────── */
 .glucose-hero-card {
@@ -1181,54 +1095,37 @@ a.insight-chip:hover {
       const d = await fetch('/api/resumen-dia').then(r => r.json());
       if (!d.ok || !d.lecturas_n) return;
 
-      // Fecha
-      document.getElementById('resumen-fecha').textContent = d.fecha;
-
-      // ── TIR ──────────────────────────────────────────────────────────────
+      // ── TIR hoy (badge) ───────────────────────────────────────────────────
       const tirColor = d.tir >= 70 ? '#16a34a' : d.tir >= 50 ? '#d97706' : '#dc2626';
       const tirDelta = d.tir_ayer !== null
         ? (d.tir - d.tir_ayer >= 0
-            ? `<span class="rd-delta rd-delta-up">▲${Math.abs((d.tir - d.tir_ayer).toFixed(1))}%</span>`
-            : `<span class="rd-delta rd-delta-dn">▼${Math.abs((d.tir - d.tir_ayer).toFixed(1))}%</span>`)
+            ? ` <span class="rd-delta rd-delta-up">▲${Math.abs((d.tir - d.tir_ayer).toFixed(1))}%</span>`
+            : ` <span class="rd-delta rd-delta-dn">▼${Math.abs((d.tir - d.tir_ayer).toFixed(1))}%</span>`)
         : '';
 
-      const tirEl  = document.getElementById('rd-tir');
-      const tirVal = document.getElementById('rd-tir-val');
-      const tirBar = document.getElementById('rd-tir-bar');
-      tirVal.innerHTML  = `${d.tir}%${tirDelta ? ' ' + tirDelta : ''}`;
-      tirVal.style.color = tirColor;
-      tirBar.style.width = `${d.tir}%`;
-      tirBar.style.background = tirColor;
-      tirEl.style.borderColor  = tirColor + '50';
-      tirEl.style.background   = tirColor + '0d';
-
-      // ── Promedio ──────────────────────────────────────────────────────────
-      const promColor = d.promedio < 70 ? '#dc2626' : d.promedio <= 180 ? '#16a34a' : '#d97706';
-      document.getElementById('rd-prom-val').textContent = d.promedio;
-      document.getElementById('rd-prom-val').style.color  = promColor;
-      document.getElementById('rd-prom-sub').textContent  = `${d.lecturas_n} lecturas`;
-
-      // ── Rango ────────────────────────────────────────────────────────────
-      document.getElementById('rd-rango-val').textContent = `${d.g_min}–${d.g_max}`;
-      document.getElementById('rd-rango-sub').textContent =
-        d.n_hipos > 0
-          ? `⚠ ${d.n_hipos} hipo${d.n_hipos > 1 ? 's' : ''}`
-          : 'sin hipos ✓';
-      document.getElementById('rd-rango-sub').style.color =
-        d.n_hipos > 0 ? '#dc2626' : '#16a34a';
-
-      // ── Chips secundarios ─────────────────────────────────────────────────
       const chips = [
+        // TIR hoy
+        { icon: 'bi-bullseye', val: `${d.tir}%${tirDelta}`, sub: 'TIR hoy',
+          color: tirColor, bg: tirColor + '18' },
+        // Hipos (solo si hay)
+        ...(d.n_hipos > 0 ? [{
+          icon: 'bi-arrow-down-circle-fill', val: `${d.n_hipos}`,
+          sub: d.n_hipos === 1 ? 'hipo' : 'hipos',
+          color: '#dc2626', bg: 'rgba(239,68,68,.12)'
+        }] : []),
+        // Bolus
         ...(d.bolus_u > 0 ? [{
           icon: 'bi-capsule-pill', val: `${d.bolus_u} U`,
-          sub: `bolus · ${d.n_bolus} dosis`,
+          sub: `bolus · ${d.n_bolus}×`,
           color: '#6366f1', bg: 'rgba(99,102,241,.1)'
         }] : []),
+        // Basal
         ...(d.basal_u > 0 ? [{
           icon: 'bi-capsule', val: `${d.basal_u} U`,
           sub: 'basal',
           color: '#8b5cf6', bg: 'rgba(139,92,246,.1)'
         }] : []),
+        // CH
         ...(d.carbs_g > 0 ? [{
           icon: 'bi-egg-fried', val: `${d.carbs_g} g`,
           sub: `CH · ${d.n_comidas} comida${d.n_comidas !== 1 ? 's' : ''}`,
@@ -1238,7 +1135,7 @@ a.insight-chip:hover {
 
       document.getElementById('resumen-chips').innerHTML = chips.map(c => `
         <div class="rd-chip" style="background:${c.bg};">
-          <i class="bi ${c.icon}" style="color:${c.color};"></i>
+          <i class="bi ${c.icon}" style="color:${c.color};font-size:.85rem;flex-shrink:0;"></i>
           <div>
             <div class="rd-chip-val" style="color:${c.color};">${c.val}</div>
             <div class="rd-chip-sub">${c.sub}</div>
