@@ -1293,7 +1293,8 @@ def api_diagnostico():
         # ── 2. COB: desglose por comida ──────────────────────────────────────
         fat_cutoff  = now - timedelta(hours=8)
         meals_raw   = Meal.query.filter(Meal.timestamp >= fat_cutoff).all()
-        cob_data    = current_cob_detailed(meals_raw, at_time=now)
+        snap_roc    = get_kinetics_snapshot(hours_lookback=1).get("roc")
+        cob_data    = current_cob_detailed(meals_raw, at_time=now, roc=snap_roc)
 
         cob_detalle = []
         for m in cob_data["meals_detail"]:

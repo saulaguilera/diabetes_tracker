@@ -58,18 +58,20 @@ _GI_ABSORPTION: dict[str, int] = {
 _DEFAULT_ABSORPTION_MIN = 120   # used when GI is unknown
 
 # ── 2-compartment absorption constants ───────────────────────────────────────
-# Stomach → Gut → Blood model (Dalla Man et al. 2007, simplified)
+# Stomach → Gut → Blood model (Dalla Man et al. 2007, validated in T1D)
 #   dS/dt = -k_a * S                  (gastric emptying)
 #   dI/dt =  k_a * S - k_g * I        (gut absorption)
 #   COB(t) = S(t) + I(t)              (total still in GI tract)
 #
 # k_a: gastric emptying rate — depends on GI, fat, fiber
-# k_g: gut→blood transfer rate — roughly constant for mixed meals
-_K_GUT     = 0.025   # min⁻¹, intestinal absorption rate (half-life ~28 min)
-_K_A_HIGH  = 0.030   # min⁻¹, high GI  (>70) — half-life ~23 min
-_K_A_MED   = 0.020   # min⁻¹, medium GI (55-70) — half-life ~35 min
-_K_A_LOW   = 0.013   # min⁻¹, low GI   (<55)  — half-life ~53 min
-_K_A_DEF   = 0.020   # default when GI unknown
+# k_g: gut→blood transfer rate — Dalla Man 2007 value: 0.063 min⁻¹
+#      (half-life ~11 min). Previous value 0.025 gave absorption 2.5x
+#      slower than clinical data — causing COB overestimation vs CGM.
+_K_GUT     = 0.063   # min⁻¹, intestinal→blood rate (Dalla Man 2007)
+_K_A_HIGH  = 0.040   # min⁻¹, high GI  (>70)   — half-life ~17 min
+_K_A_MED   = 0.025   # min⁻¹, medium GI (55-70) — half-life ~28 min
+_K_A_LOW   = 0.015   # min⁻¹, low GI   (<55)   — half-life ~46 min
+_K_A_DEF   = 0.025   # default when GI unknown
 
 # ── Dawn phenomenon constants ─────────────────────────────────────────────────
 # Cortisol + GH secretion pulse 3–8am causes hepatic glucose output.
@@ -697,18 +699,22 @@ def extended_bolus_recommendation(fat_g: float, protein_g: float, icr: float) ->
 def current_cob(
     meal_list,
     at_time: Optional[datetime] = None,
+    roc: Optional[float] = None,
 ) -> float:
     """
     Compute total active carbohydrates (grams) at `at_time`.
     Includes only fast carbohydrate absorption (legacy compatible).
     For full fat+protein picture use current_cob_detailed().
+    roc: Rate of Change mg/dL/min from CGM (negative = falling).
+         If provided, applies dynamic correction when glucose is dropping.
     """
-    return current_cob_detailed(meal_list, at_time)["carbs_cob"]
+    return current_cob_detailed(meal_list, at_time, roc=roc)["carbs_cob"]
 
 
 def current_cob_detailed(
     meal_list,
     at_time: Optional[datetime] = None,
+    roc: Optional[float] = None,
 ) -> dict:
     """
     Full COB breakdown including fat+protein glucose equivalent.
@@ -772,14 +778,29 @@ def current_cob_detailed(
     fp_cob    = round(total_fat + total_prot, 1)
     carbs_cob = round(total_carbs, 1)
 
+    # ── Corrección dinámica por ROC (Rate of Change del CGM) ──────────────
+    # Si la glucosa cae activamente (ROC < -1 mg/dL/min), la insulina está
+    # dominando y los carbos ya pasaron a sangre antes de lo que el modelo
+    # cinético estima. Reducimos el COB efectivo proporcionalmente.
+    #
+    # -1.0 mg/dL/min → reducción 0%   (caída leve, modelo válido)
+    # -2.0 mg/dL/min → reducción 67%  (caída moderada)
+    # ≤-2.5 mg/dL/min → reducción 100% (caída brusca → carbos absorbidos)
+    # Ref: Cobelli et al. (2009) "Artificial Pancreas: Past, Present, Future"
+    roc_factor = 1.0
+    if roc is not None and roc < -1.0 and carbs_cob > 2.0:
+        roc_factor = max(0.0, 1.0 - (abs(roc) - 1.0) / 1.5)
+        carbs_cob  = round(carbs_cob * roc_factor, 1)
+
     return {
-        "carbs_cob":    carbs_cob,
-        "fat_cob":      round(total_fat,  1),
-        "prot_cob":     round(total_prot, 1),
-        "fp_cob":       fp_cob,
-        "total_cob":    round(carbs_cob + fp_cob, 1),
-        "has_extended": fp_cob >= 2.0,
-        "meals_detail": meals_detail,
+        "carbs_cob":      carbs_cob,
+        "fat_cob":        round(total_fat,  1),
+        "prot_cob":       round(total_prot, 1),
+        "fp_cob":         fp_cob,
+        "total_cob":      round(carbs_cob + fp_cob, 1),
+        "has_extended":   fp_cob >= 2.0,
+        "meals_detail":   meals_detail,
+        "roc_factor":     round(roc_factor, 2),  # 1.0 = sin corrección
     }
 
 
@@ -1179,8 +1200,9 @@ def get_kinetics_snapshot(
     iob_bolus   = current_iob(boluses, at_time=now, peak_min=peak_min, dia_min=dia_min)
     iob_basal   = current_basal_iob(at_time=now)
     iob         = round(iob_bolus + iob_basal, 2)
-    cob_data    = current_cob_detailed(meals_extended, at_time=now)
     slope       = glucose_roc(cgm_readings, window_min=20)
+    # Pasar ROC a current_cob_detailed para corrección dinámica
+    cob_data    = current_cob_detailed(meals_extended, at_time=now, roc=slope)
     arrow       = roc_arrow(slope)
     ex_factor   = exercise_sensitivity_factor(activities, at_time=now)
 
