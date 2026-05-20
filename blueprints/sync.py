@@ -1562,3 +1562,26 @@ def api_dia_estimate():
         return jsonify({"ok": True, **result})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ── Capa 2: Detección de patrones fisiológicos ────────────────────────────────
+@bp.route("/api/patrones/analisis", endpoint="api_patrones_analisis")
+def api_patrones_analisis():
+    """
+    Detecta patrones fisiológicos recurrentes (Capa 2 IA):
+    Somogyi, fenómeno del alba, hipo post-ejercicio, rebote grasa/proteína,
+    variabilidad excesiva, hipers pre-comida.
+
+    Query param: days (int, default 30)
+
+    Retorna: { ok, patrones[], resumen{}, serie_glucose[], generado_en }
+    La serie_glucose está disponible para Capa 3 (Claude API).
+    """
+    days = request.args.get("days", 30, type=int)
+    days = max(7, min(days, 90))   # clamp 7–90 días
+    try:
+        from utils.patrones_detector import analizar_patrones
+        resultado = analizar_patrones(days=days)
+        return jsonify({"ok": True, **resultado})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500

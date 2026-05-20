@@ -273,6 +273,79 @@ def _detectar_patrones(days=30):
             "accion":  "Revisá el timing del bolo pre-comida y tu ratio insulina:carbohidratos.",
         })
 
+    # ── 6. Efecto Somogyi (hipo nocturna → hiper matutina) ───────────────────
+    # Somogyi: hipo entre 01:00–04:00 seguida de glucosa > 200 mg/dL entre 07:00–10:00
+    # el mismo día o el día siguiente (rebote por glucagón/cortisol).
+    somogyi_count = 0
+    fechas_somogyi = set()
+    for r in lecturas:
+        if r.value_mgdl >= 70 or r.timestamp.hour not in range(1, 5):
+            continue
+        fecha_hipo = r.timestamp.date()
+        if fecha_hipo in fechas_somogyi:
+            continue
+        # Buscar hiper en la mañana siguiente (misma fecha o fecha+1)
+        for r2 in lecturas:
+            if r2.timestamp <= r.timestamp:
+                continue
+            if r2.timestamp > r.timestamp + timedelta(hours=10):
+                break
+            if r2.timestamp.hour in range(7, 11) and r2.value_mgdl > 200:
+                somogyi_count += 1
+                fechas_somogyi.add(fecha_hipo)
+                break
+
+    if somogyi_count >= 2:
+        alertas.append({
+            "nivel":   "danger",
+            "icono":   "bi-arrow-down-up",
+            "titulo":  "Posible efecto Somogyi",
+            "detalle": (f"En {somogyi_count} ocasiones se detectó hipoglucemia nocturna "
+                        f"(01:00–04:00) seguida de hiperglucemia matutina (07:00–10:00 hs) "
+                        f"en los últimos {days} días. "
+                        f"El cuerpo puede estar liberando glucagón y cortisol en respuesta a la baja."),
+            "accion":  ("Registrá tu glucosa a las 3am durante 3–5 noches para confirmar. "
+                        "Si hay hipoglucemia nocturna recurrente, la insulina basal nocturna "
+                        "puede ser demasiado alta. Consultá tu endocrinólogo antes de ajustar."),
+        })
+
+    # ── 7. Rebote tardío de grasa/proteína ───────────────────────────────────
+    # Detecta si comidas con mucha grasa o proteína (>35g grasa o >50g prot)
+    # tienen una segunda elevación de glucosa a las 3–5h post-comida.
+    # Señal: glucosa a 3–5h > glucosa a 1–2h + 30 mg/dL (rebote tardío).
+    rebote_count = 0
+    comidas_ricas = [c for c in comidas_periodo
+                     if (c.fat_g or 0) > 35 or (c.protein_g or 0) > 50]
+    for c in comidas_ricas:
+        t0 = c.timestamp
+        # Lectura pico temprano (1–2h)
+        early = [r for r in lecturas
+                 if t0 + timedelta(hours=1) <= r.timestamp <= t0 + timedelta(hours=2)]
+        # Lectura tardía (3–5h)
+        late  = [r for r in lecturas
+                 if t0 + timedelta(hours=3) <= r.timestamp <= t0 + timedelta(hours=5)]
+        if not early or not late:
+            continue
+        g_early = max(r.value_mgdl for r in early)
+        g_late  = max(r.value_mgdl for r in late)
+        if g_late > g_early + 30 and g_late > 160:
+            rebote_count += 1
+
+    if rebote_count >= 2:
+        alertas.append({
+            "nivel":   "warning",
+            "icono":   "bi-clock-history",
+            "titulo":  "Rebote tardío de grasa y proteína",
+            "detalle": (f"En {rebote_count} comidas ricas en grasa (>35g) o proteína (>50g) "
+                        f"se detectó una segunda elevación de glucosa a las 3–5 horas post-comida "
+                        f"en los últimos {days} días. "
+                        f"Este es el 'efecto pizza' — la gluconeogénesis de grasa/proteína eleva "
+                        f"la glucosa horas después de que la insulina original ya bajó su efecto."),
+            "accion":  ("Consultá con tu médico la estrategia de bolo dual o extendido para comidas "
+                        "ricas en grasa y proteína. También podés dividir el bolo: 60% al comer "
+                        "y 40% a las 2 horas."),
+        })
+
     return alertas
 
 
