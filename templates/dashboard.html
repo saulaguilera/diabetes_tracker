@@ -3,12 +3,11 @@
 
 {% block content %}
 
-{# ── Área superior: hero + predicciones + gráfico ─────────────────────────── #}
-{# Mobile: hero → predicciones → chart  |  Desktop: hero | predicciones + chart #}
-<div class="dash-top mb-3">
+{# ── Área superior: hero + gráfico ────────────────────────────────────────── #}
+<div class="row g-3 mb-3 align-items-stretch">
 
   {# Glucosa actual #}
-  <div class="dash-hero">
+  <div class="col-12 col-md-4 col-lg-3">
     <div class="glucose-hero-card h-100">
       <div class="d-flex justify-content-between align-items-start mb-1">
         <span class="hero-label">Glucosa ahora</span>
@@ -82,7 +81,7 @@
   </div>
 
   {# Gráfico CGM #}
-  <div class="dash-chart">
+  <div class="col-12 col-md-8 col-lg-9">
     <div class="chart-card h-100">
       <div class="chart-card-header">
         <span class="chart-title">Glucosa — últimas 24h</span>
@@ -92,143 +91,103 @@
           <span class="legend-dot ms-2" style="background:#f97316;"></span> Hiper
         </div>
       </div>
-      <div id="chart-timeline" class="dash-chart-inner"></div>
+      <div id="chart-timeline" style="height:230px;"></div>
     </div>
   </div>
 
-  {# Estado ahora — predicción + contexto + acciones #}
-  <div class="dash-estado">
-  <div class="estado-card h-100" id="estado-card">
+</div>{# /row hero+chart #}
+
+{# ── Estado ahora: predicciones + contexto cinético ───────────────────────── #}
+<div class="en-card mb-3" id="estado-card">
 
   {# Header #}
-  <div class="estado-header">
-    <span class="estado-label">
-      <i class="bi bi-graph-up-arrow me-1"></i>Estado ahora
-    </span>
-    <div class="estado-acciones">
+  <div class="en-header">
+    <span class="en-title"><i class="bi bi-activity me-1"></i>Estado ahora</span>
+    <div class="en-actions">
       <a href="{{ url_for('calculadora') }}" class="btn-ea btn-ea-calc">
-        <i class="bi bi-calculator me-1"></i>Calcular
+        <i class="bi bi-calculator"></i><span class="btn-ea-txt"> Calcular</span>
       </a>
       <button onclick="abrirAnalisisIA()" class="btn-ea btn-ea-ia">
-        <i class="bi bi-stars me-1"></i>Análisis IA
+        <i class="bi bi-stars"></i><span class="btn-ea-txt"> Análisis IA</span>
       </button>
     </div>
   </div>
 
-  {# Body: predicciones + contexto #}
-  <div class="estado-body">
+  {# Predicciones: 2 columnas iguales #}
+  <div class="en-preds">
 
-    {# Predicciones (se llenan por JS) #}
-    <div class="estado-preds">
-      <div class="epred" id="pred-30">
-        <span class="epred-time">+30 min</span>
-        <span class="epred-val">…</span>
-        <div class="epred-detail">
-          <div class="pred-prob-bar">
-            <div class="pred-seg pred-seg-hipo"  style="width:0%"></div>
-            <div class="pred-seg pred-seg-rango" style="width:100%"></div>
-            <div class="pred-seg pred-seg-hiper" style="width:0%"></div>
-          </div>
-          <span class="epred-dom">—</span>
-        </div>
-        <div class="epred-expl"></div>
-        <div class="epred-alerta"></div>
+    <div class="en-pred" id="pred-30">
+      <div class="en-pred-time">+30 min</div>
+      <div class="epred-val">…</div>
+      <div class="pred-prob-bar">
+        <div class="pred-seg pred-seg-hipo"  style="width:0%"></div>
+        <div class="pred-seg pred-seg-rango" style="width:100%"></div>
+        <div class="pred-seg pred-seg-hiper" style="width:0%"></div>
       </div>
-      <div class="epred" id="pred-60">
-        <span class="epred-time">+60 min</span>
-        <span class="epred-val">…</span>
-        <div class="epred-detail">
-          <div class="pred-prob-bar">
-            <div class="pred-seg pred-seg-hipo"  style="width:0%"></div>
-            <div class="pred-seg pred-seg-rango" style="width:100%"></div>
-            <div class="pred-seg pred-seg-hiper" style="width:0%"></div>
-          </div>
-          <span class="epred-dom">—</span>
-        </div>
-        <div class="epred-expl"></div>
-        <div class="epred-alerta"></div>
-      </div>
-      <span id="pred-mc-note" class="pred-mc-note"></span>
+      <div class="epred-dom">—</div>
+      <div class="epred-expl"></div>
+      <div class="epred-alerta"></div>
     </div>
 
-    {# Contexto cinético #}
-    <div class="estado-context">
-      {% if insights and insights.kinetics %}
-      {% set kin = insights.kinetics %}
-
-      {% if kin.iob > 0.05 %}
-      <div class="ectx-item ectx-insulin">
-        <i class="bi bi-capsule-pill"></i>
-        <div>
-          <div class="ectx-val">{{ "%.1f"|format(kin.iob) }} U</div>
-          <div class="ectx-lbl">IOB activo</div>
-        </div>
+    <div class="en-pred en-pred-sep" id="pred-60">
+      <div class="en-pred-time">+60 min</div>
+      <div class="epred-val">…</div>
+      <div class="pred-prob-bar">
+        <div class="pred-seg pred-seg-hipo"  style="width:0%"></div>
+        <div class="pred-seg pred-seg-rango" style="width:100%"></div>
+        <div class="pred-seg pred-seg-hiper" style="width:0%"></div>
       </div>
-      {% else %}
-      <div class="ectx-item ectx-neutral">
-        <i class="bi bi-capsule-pill"></i>
-        <div>
-          <div class="ectx-val">0 U</div>
-          <div class="ectx-lbl">IOB</div>
-        </div>
-      </div>
-      {% endif %}
-
-      {% if kin.cob > 1 %}
-      <div class="ectx-item ectx-carbs">
-        <i class="bi bi-egg-fried"></i>
-        <div>
-          <div class="ectx-val">{{ kin.cob | int }} g</div>
-          <div class="ectx-lbl">COB absorbiendo</div>
-        </div>
-      </div>
-      {% else %}
-      <div class="ectx-item ectx-neutral">
-        <i class="bi bi-egg-fried"></i>
-        <div>
-          <div class="ectx-val">0 g</div>
-          <div class="ectx-lbl">COB</div>
-        </div>
-      </div>
-      {% endif %}
-
-      {% if kin.cob_detail and kin.cob_detail.fp_cob >= 2 %}
-      <div class="ectx-item ectx-fatprot">
-        <i class="bi bi-clock-history"></i>
-        <div>
-          <div class="ectx-val">+{{ kin.cob_detail.fp_cob | int }} g</div>
-          <div class="ectx-lbl">Grasa/prot tardío</div>
-        </div>
-      </div>
-      {% endif %}
-
-      {% if kin.exercise_factor and kin.exercise_factor >= 1.10 %}
-      <div class="ectx-item ectx-exup">
-        <i class="bi bi-heart-pulse-fill"></i>
-        <div>
-          <div class="ectx-val">+{{ ((kin.exercise_factor - 1)*100)|int }}%</div>
-          <div class="ectx-lbl">Sensibilidad</div>
-        </div>
-      </div>
-      {% elif kin.exercise_factor and kin.exercise_factor <= 0.92 %}
-      <div class="ectx-item ectx-exdown">
-        <i class="bi bi-lightning-charge-fill"></i>
-        <div>
-          <div class="ectx-val">−{{ ((1 - kin.exercise_factor)*100)|int }}%</div>
-          <div class="ectx-lbl">Sensibilidad</div>
-        </div>
-      </div>
-      {% endif %}
-
-      {% else %}
-      <div class="ectx-empty text-muted" style="font-size:.8rem;">Sin datos cinéticos</div>
-      {% endif %}
+      <div class="epred-dom">—</div>
+      <div class="epred-expl"></div>
+      <div class="epred-alerta"></div>
     </div>
 
-  </div>{# /estado-body #}
-  </div>{# /estado-card #}
-  </div>{# /dash-estado #}
-</div>{# /dash-top #}
+  </div>
+  <span id="pred-mc-note" class="en-mc-note"></span>
+
+  {# Contexto cinético: pills horizontales #}
+  {% if insights and insights.kinetics %}
+  {% set kin = insights.kinetics %}
+  <div class="en-ctx">
+
+    <div class="en-ctx-pill {% if kin.iob > 0.05 %}en-ctx-insulin{% else %}en-ctx-neutral{% endif %}">
+      <i class="bi bi-capsule-pill"></i>
+      <span class="en-ctx-val">{{ "%.1f"|format(kin.iob) }}U</span>
+      <span class="en-ctx-lbl">IOB</span>
+    </div>
+
+    <div class="en-ctx-pill {% if kin.cob > 1 %}en-ctx-carbs{% else %}en-ctx-neutral{% endif %}">
+      <i class="bi bi-egg-fried"></i>
+      <span class="en-ctx-val">{{ kin.cob | int }}g</span>
+      <span class="en-ctx-lbl">COB</span>
+    </div>
+
+    {% if kin.cob_detail and kin.cob_detail.fp_cob >= 2 %}
+    <div class="en-ctx-pill en-ctx-fatprot">
+      <i class="bi bi-clock-history"></i>
+      <span class="en-ctx-val">+{{ kin.cob_detail.fp_cob | int }}g</span>
+      <span class="en-ctx-lbl">G/P tardío</span>
+    </div>
+    {% endif %}
+
+    {% if kin.exercise_factor and kin.exercise_factor >= 1.10 %}
+    <div class="en-ctx-pill en-ctx-exup">
+      <i class="bi bi-heart-pulse-fill"></i>
+      <span class="en-ctx-val">+{{ ((kin.exercise_factor - 1)*100)|int }}%</span>
+      <span class="en-ctx-lbl">Sensib.</span>
+    </div>
+    {% elif kin.exercise_factor and kin.exercise_factor <= 0.92 %}
+    <div class="en-ctx-pill en-ctx-exdown">
+      <i class="bi bi-lightning-charge-fill"></i>
+      <span class="en-ctx-val">−{{ ((1 - kin.exercise_factor)*100)|int }}%</span>
+      <span class="en-ctx-lbl">Sensib.</span>
+    </div>
+    {% endif %}
+
+  </div>
+  {% endif %}
+
+</div>{# /en-card #}
 
 {# ── Modal Análisis IA ─────────────────────────────────────────────────────── #}
 <div class="modal fade" id="modalAnalisisIA" tabindex="-1" aria-labelledby="modalAnalisisIALabel" aria-hidden="true">
@@ -1321,44 +1280,115 @@ a.insight-chip:hover {
   .estado-context { gap: .35rem; }
 }
 
-/* ── Mobile-first top grid ──────────────────────────────────────────────────── */
-.dash-top {
+/* ── "Estado ahora" rediseñado ──────────────────────────────────────────────── */
+.en-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.en-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .7rem 1rem .55rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+.en-title {
+  font-size: .72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--text-muted);
+}
+.en-actions { display: flex; gap: .4rem; }
+.btn-ea-txt { display: none; }
+@media (min-width: 400px) { .btn-ea-txt { display: inline; } }
+
+/* Predicciones: 2 columnas iguales */
+.en-preds {
   display: grid;
-  gap: .65rem;
-  grid-template-columns: 1fr;
-  grid-template-areas:
-    "hero"
-    "estado"
-    "chart";
+  grid-template-columns: 1fr 1fr;
+  padding: .75rem 1rem .6rem;
+  gap: .5rem;
 }
-@media (min-width: 768px) {
-  .dash-top {
-    grid-template-columns: 280px 1fr;
-    grid-template-rows: auto 1fr;
-    grid-template-areas:
-      "hero estado"
-      "hero chart";
-    gap: .75rem;
-  }
+.en-pred {
+  display: flex; flex-direction: column; gap: .25rem;
+  padding: .6rem .75rem;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--surface2);
+  transition: background .2s, border-color .2s;
 }
-.dash-hero   { grid-area: hero; }
-.dash-estado { grid-area: estado; }
-.dash-chart  { grid-area: chart; }
-
-/* Chart height: compact on mobile, taller on desktop */
-.dash-chart-inner { height: 160px; }
-@media (min-width: 768px) {
-  .dash-chart-inner { height: 220px; }
+.en-pred-sep { border-left: none; border-radius: 12px; }
+.en-pred-time {
+  font-size: .62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-muted);
 }
 
-/* Hero card: tighter on mobile */
-@media (max-width: 767px) {
-  .glucose-hero-card { padding: 1rem 1.1rem; }
-  .hero-value { font-size: 2.6rem; letter-spacing: -1px; }
-  .hero-actions { display: flex; gap: .45rem; flex-wrap: wrap; }
-  .btn-quicklog { font-size: .78rem; padding: .38rem .75rem; }
-  .btn-action-sm { padding: .38rem .5rem; font-size: .78rem; }
+/* Colores de estado en el .en-pred — reutiliza clases que JS ya agrega */
+.en-pred.epred-rango { background: rgba(34,197,94,.08);  border-color: rgba(34,197,94,.3); }
+.en-pred.epred-hiper { background: rgba(249,115,22,.08); border-color: rgba(249,115,22,.3); }
+.en-pred.epred-hipo  { background: rgba(239,68,68,.08);  border-color: rgba(239,68,68,.3); }
+
+/* Valor de predicción grande */
+.en-pred .epred-val {
+  font-size: 1.5rem; font-weight: 800; line-height: 1; color: var(--text);
 }
+.en-pred.epred-rango .epred-val { color: #16a34a; }
+.en-pred.epred-hiper .epred-val { color: #ea580c; }
+.en-pred.epred-hipo  .epred-val { color: #dc2626; }
+
+/* Barra de probabilidades dentro del en-pred */
+.en-pred .pred-prob-bar {
+  height: 5px; border-radius: 3px; overflow: hidden;
+  display: flex; gap: 1px; margin: .1rem 0;
+  background: var(--border);
+}
+
+/* Texto de estado dominante */
+.en-pred .epred-dom {
+  font-size: .68rem; color: var(--text-muted); font-weight: 600;
+}
+.en-pred .epred-expl {
+  font-size: .68rem; color: var(--text-secondary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.en-pred .epred-alerta {
+  font-size: .66rem; color: #dc2626; font-weight: 600;
+}
+.en-mc-note {
+  display: block; text-align: right; font-size: .6rem;
+  color: var(--text-muted); padding: 0 1rem .45rem;
+  opacity: .7;
+}
+
+/* Pills de contexto cinético */
+.en-ctx {
+  display: flex; gap: .4rem; flex-wrap: wrap;
+  padding: .5rem 1rem .75rem;
+  border-top: 1px solid var(--border);
+}
+.en-ctx-pill {
+  display: inline-flex; align-items: center; gap: .3rem;
+  padding: .28rem .6rem;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  font-size: .72rem;
+}
+.en-ctx-pill i { font-size: .75rem; opacity: .75; }
+.en-ctx-val { font-weight: 700; color: var(--text); }
+.en-ctx-lbl { color: var(--text-muted); font-weight: 500; }
+
+/* Variantes de color para pills */
+.en-ctx-insulin  { background: rgba(99,102,241,.10); border-color: rgba(99,102,241,.25); }
+.en-ctx-insulin .en-ctx-val  { color: #6366f1; }
+.en-ctx-carbs    { background: rgba(245,158,11,.10); border-color: rgba(245,158,11,.25); }
+.en-ctx-carbs .en-ctx-val    { color: #d97706; }
+.en-ctx-fatprot  { background: rgba(168,85,247,.10); border-color: rgba(168,85,247,.25); }
+.en-ctx-fatprot .en-ctx-val  { color: #9333ea; }
+.en-ctx-exup     { background: rgba(34,197,94,.10);  border-color: rgba(34,197,94,.25); }
+.en-ctx-exup .en-ctx-val     { color: #16a34a; }
+.en-ctx-exdown   { background: rgba(239,68,68,.10);  border-color: rgba(239,68,68,.25); }
+.en-ctx-exdown .en-ctx-val   { color: #dc2626; }
+.en-ctx-neutral  { opacity: .55; }
 
 /* ── Insights horizontal scroll on mobile ───────────────────────────────────── */
 .insights-scroll-row {
