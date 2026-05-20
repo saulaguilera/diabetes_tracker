@@ -4,7 +4,7 @@ utils/foto_analisis.py
 Capa de visión: analiza una foto de comida con Claude y devuelve
 macronutrientes estimados por ingrediente.
 
-Modelo: claude-3-5-sonnet-20241022  (vision capable, mejor accuracy en comida)
+Modelo: claude-sonnet-4-5  (vision capable, mejor accuracy en comida)
 Costo típico: ~$0.01–0.02 por foto (imagen ~1500 tok + respuesta ~400 tok)
 """
 
@@ -16,7 +16,7 @@ import os
 import anthropic
 
 # ── Config ────────────────────────────────────────────────────────────────────
-_MODELO        = "claude-3-5-sonnet-20241022"
+_MODELO        = "claude-sonnet-4-5"
 _MAX_TOKENS    = 1400
 _MAX_IMG_BYTES = 5 * 1024 * 1024   # 5 MB
 
