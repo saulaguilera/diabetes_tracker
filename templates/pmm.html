@@ -1,0 +1,742 @@
+{% extends "base.html" %}
+{% block title %}Modelo Metabólico Personal{% endblock %}
+
+{% block content %}
+<style>
+/* ── PMM Page ─────────────────────────────────────────────────────────────── */
+.pmm-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  flex-wrap: wrap; gap: .75rem; margin-bottom: 1.25rem;
+}
+.pmm-header-left h2 {
+  font-size: 1.2rem; font-weight: 800; color: var(--text); margin: 0;
+}
+.pmm-header-left p {
+  font-size: .8rem; color: var(--text-muted); margin: .15rem 0 0;
+}
+.pmm-badge {
+  display: inline-flex; align-items: center; gap: .3rem;
+  font-size: .7rem; font-weight: 700; letter-spacing: .05em;
+  padding: .3rem .7rem; border-radius: 20px;
+  background: linear-gradient(135deg,#6366f1,#8b5cf6);
+  color: #fff;
+}
+.pmm-recal-btn {
+  font-size: .78rem; padding: .4rem .9rem; border-radius: 10px;
+  border: 1.5px solid var(--border); background: var(--surface);
+  color: var(--text-muted); cursor: pointer; transition: all .2s;
+}
+.pmm-recal-btn:hover { border-color:#6366f1; color:#6366f1; }
+
+/* ── Status bar ───────────────────────────────────────────────────────────── */
+.pmm-status-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: .6rem; margin-bottom: 1.25rem;
+}
+.psb-card {
+  background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: 12px; padding: .75rem 1rem;
+  display: flex; flex-direction: column; gap: .15rem;
+}
+.psb-label {
+  font-size: .65rem; font-weight: 600; letter-spacing: .06em;
+  color: var(--text-muted); text-transform: uppercase;
+}
+.psb-value {
+  font-size: 1.3rem; font-weight: 800; color: var(--text); line-height: 1.1;
+}
+.psb-sub {
+  font-size: .68rem; color: var(--text-muted);
+}
+.psb-card.psb-active { border-color: #6366f1; background: rgba(99,102,241,.06); }
+.psb-card.psb-warning { border-color: #f97316; background: rgba(249,115,22,.06); }
+.psb-card.psb-ok      { border-color: #22c55e; background: rgba(34,197,94,.06); }
+
+/* ── Section card ─────────────────────────────────────────────────────────── */
+.pmm-section {
+  background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: 14px; overflow: hidden; margin-bottom: 1rem;
+}
+.pmm-section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .8rem 1rem .6rem;
+  border-bottom: 1px solid var(--border);
+}
+.pmm-section-title {
+  font-size: .85rem; font-weight: 700; color: var(--text);
+  display: flex; align-items: center; gap: .5rem;
+}
+.pmm-section-sub {
+  font-size: .7rem; color: var(--text-muted);
+}
+.pmm-section-body { padding: 1rem; }
+
+/* ── Param block grid ─────────────────────────────────────────────────────── */
+.param-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: .75rem;
+  margin-bottom: .75rem;
+}
+@media (max-width:480px) { .param-grid { grid-template-columns: 1fr; } }
+
+.param-block {
+  border: 1.5px solid var(--border); border-radius: 12px;
+  padding: .75rem 1rem;
+}
+.pb-name { font-size: .65rem; font-weight: 700; color: var(--text-muted);
+           text-transform: uppercase; letter-spacing: .06em; }
+.pb-val  { font-size: 1.5rem; font-weight: 800; color: var(--text);
+           line-height: 1.1; }
+.pb-unit { font-size: .75rem; font-weight: 500; color: var(--text-muted); }
+.pb-ci   { font-size: .7rem; color: var(--text-muted); margin-top: .1rem; }
+.pb-conf { margin-top: .4rem; }
+.pb-conf-bar {
+  height: 5px; border-radius: 3px;
+  background: var(--border); overflow: hidden; margin-bottom: .2rem;
+}
+.pb-conf-fill { height: 100%; border-radius: 3px;
+                background: linear-gradient(90deg,#6366f1,#8b5cf6); }
+.pb-conf-label { font-size: .65rem; color: var(--text-muted); }
+.pb-source { font-size: .62rem; color: var(--text-muted); margin-top: .2rem; }
+.pb-source.src-prior  { color: #f59e0b; }
+.pb-source.src-pmm    { color: #6366f1; font-weight: 700; }
+
+/* ── Circadian blocks ─────────────────────────────────────────────────────── */
+.circ-table { width:100%; border-collapse:collapse; font-size:.8rem; }
+.circ-table th {
+  font-size:.65rem; font-weight:700; text-transform:uppercase;
+  letter-spacing:.06em; color:var(--text-muted);
+  padding:.4rem .6rem; text-align:left; border-bottom:1px solid var(--border);
+}
+.circ-table td { padding:.5rem .6rem; border-bottom:1px solid var(--border); }
+.circ-table tr:last-child td { border-bottom:none; }
+.circ-badge-now {
+  font-size:.6rem; font-weight:700; background:rgba(99,102,241,.15);
+  color:#6366f1; padding:.1em .4em; border-radius:5px;
+}
+.circ-conf { display:inline-block; width:50px; height:5px; border-radius:3px;
+             background:var(--border); vertical-align:middle; margin-left:.4rem; }
+.circ-conf-fill { height:100%; border-radius:3px;
+                  background:linear-gradient(90deg,#6366f1,#8b5cf6); }
+
+/* ── Absorption bars ──────────────────────────────────────────────────────── */
+.abs-grid { display:flex; flex-direction:column; gap:.75rem; }
+.abs-row  { display:flex; align-items:center; gap:.75rem; }
+.abs-label { width:80px; font-size:.75rem; font-weight:600; color:var(--text);
+             flex-shrink:0; }
+.abs-bar-wrap { flex:1; position:relative; }
+.abs-bar-bg { height:10px; border-radius:5px; background:var(--border); }
+.abs-bar-fill {
+  height:10px; border-radius:5px;
+  background:linear-gradient(90deg,#6366f1,#8b5cf6);
+  transition:width .5s ease; position:relative;
+}
+.abs-bar-ref { position:absolute; top:-2px; bottom:-2px; width:2px;
+               background:#94a3b8; border-radius:2px; }
+.abs-val { width:56px; text-align:right; font-size:.78rem; font-weight:700;
+           color:var(--text); flex-shrink:0; }
+.abs-interp { font-size:.7rem; color:var(--text-muted); margin-top:.1rem; }
+
+/* ── Drift status ─────────────────────────────────────────────────────────── */
+.drift-card {
+  border-radius:12px; padding:.9rem 1rem;
+  display:flex; gap:.75rem; align-items:flex-start;
+}
+.drift-normal { background:rgba(34,197,94,.07); border:1.5px solid rgba(34,197,94,.3); }
+.drift-resistance { background:rgba(249,115,22,.07); border:1.5px solid rgba(249,115,22,.4); }
+.drift-sensitivity { background:rgba(99,102,241,.07); border:1.5px solid rgba(99,102,241,.4); }
+.drift-icon { font-size:1.4rem; flex-shrink:0; }
+.drift-normal .drift-icon      { color:#22c55e; }
+.drift-resistance .drift-icon  { color:#f97316; }
+.drift-sensitivity .drift-icon { color:#6366f1; }
+.drift-body .drift-title { font-size:.88rem; font-weight:700; color:var(--text); }
+.drift-body .drift-narr  { font-size:.78rem; color:var(--text-secondary);
+                            margin-top:.2rem; line-height:1.45; }
+.drift-metrics { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.6rem; }
+.dm-chip {
+  font-size:.68rem; padding:.2rem .55rem; border-radius:8px;
+  background:var(--surface2); border:1px solid var(--border);
+  color:var(--text-muted); font-weight:600;
+}
+.dm-chip span { color:var(--text); font-weight:800; }
+
+/* ── Anomaly score ────────────────────────────────────────────────────────── */
+.anm-score-ring {
+  width:90px; height:90px; flex-shrink:0;
+  position:relative; display:flex; align-items:center; justify-content:center;
+}
+.anm-score-ring svg { position:absolute; top:0; left:0; }
+.anm-score-num { font-size:1.5rem; font-weight:900; color:var(--text); z-index:1; }
+.anm-grid { display:flex; gap:1rem; align-items:center; flex-wrap:wrap; }
+.anm-components { flex:1; min-width:180px; }
+.anm-comp-row {
+  display:flex; align-items:center; gap:.5rem; margin-bottom:.35rem;
+}
+.anm-comp-label { font-size:.7rem; color:var(--text-muted); width:90px; flex-shrink:0; }
+.anm-comp-bar-wrap { flex:1; }
+.anm-comp-bar { height:6px; border-radius:3px; background:var(--border); }
+.anm-comp-fill { height:6px; border-radius:3px;
+                 background:linear-gradient(90deg,#6366f1,#8b5cf6); }
+.anm-comp-val { font-size:.7rem; font-weight:700; color:var(--text);
+                width:30px; text-align:right; flex-shrink:0; }
+.anm-reasons { margin-top:.75rem; }
+.anm-reason-item {
+  font-size:.75rem; color:var(--text-secondary); padding:.3rem 0;
+  border-top:1px solid var(--border); display:flex; align-items:flex-start;
+  gap:.4rem;
+}
+.anm-reason-item i { color:var(--text-muted); flex-shrink:0; margin-top:.1rem; }
+
+/* ── Spinner de carga ─────────────────────────────────────────────────────── */
+.pmm-loader {
+  text-align:center; padding:2rem; color:var(--text-muted); font-size:.82rem;
+}
+
+/* ── Plotly chart height fix ──────────────────────────────────────────────── */
+.pmm-chart { height:220px; }
+</style>
+
+{# ── Header ────────────────────────────────────────────────────────────────── #}
+<div class="pmm-header">
+  <div class="pmm-header-left">
+    <h2><i class="bi bi-cpu-fill me-2" style="color:#6366f1"></i>Modelo Metabólico Personal</h2>
+    <p>Aprendizaje adaptivo de tu fisiología a partir de datos reales</p>
+  </div>
+  <div class="d-flex align-items-center gap-2">
+    <span class="pmm-badge"><i class="bi bi-activity"></i> PMM activo</span>
+    <button class="pmm-recal-btn" onclick="recalibrar()" id="recal-btn">
+      <i class="bi bi-arrow-clockwise me-1"></i>Recalibrar
+    </button>
+  </div>
+</div>
+
+{# ── Status bar ────────────────────────────────────────────────────────────── #}
+<div class="pmm-status-bar" id="status-bar">
+  <div class="psb-card"><div class="psb-label">ISF personal</div>
+    <div class="psb-value" id="sb-isf">—</div>
+    <div class="psb-sub" id="sb-isf-sub">cargando...</div></div>
+  <div class="psb-card"><div class="psb-label">ICR personal</div>
+    <div class="psb-value" id="sb-icr">—</div>
+    <div class="psb-sub" id="sb-icr-sub">cargando...</div></div>
+  <div class="psb-card"><div class="psb-label">Observaciones ISF</div>
+    <div class="psb-value" id="sb-n-isf">—</div>
+    <div class="psb-sub">correcciones limpias</div></div>
+  <div class="psb-card"><div class="psb-label">Observaciones ICR</div>
+    <div class="psb-value" id="sb-n-icr">—</div>
+    <div class="psb-sub">comidas analizadas</div></div>
+  <div class="psb-card" id="sb-drift-card"><div class="psb-label">Drift metabólico</div>
+    <div class="psb-value" id="sb-drift">—</div>
+    <div class="psb-sub" id="sb-drift-sub">cargando...</div></div>
+  <div class="psb-card" id="sb-anm-card"><div class="psb-label">Score anomalía</div>
+    <div class="psb-value" id="sb-anm">—</div>
+    <div class="psb-sub" id="sb-anm-sub">cargando...</div></div>
+</div>
+
+<div class="row g-3">
+
+{# ── Columna izquierda ─────────────────────────────────────────────────────── #}
+<div class="col-12 col-lg-8">
+
+  {# ISF & ICR — estado actual #}
+  <div class="pmm-section mb-3">
+    <div class="pmm-section-header">
+      <div class="pmm-section-title">
+        <i class="bi bi-graph-up" style="color:#6366f1"></i>
+        Parámetros aprendidos — ahora
+      </div>
+      <span class="pmm-section-sub" id="isf-block-label"></span>
+    </div>
+    <div class="pmm-section-body">
+      <div class="param-grid" id="param-grid">
+        <div class="pmm-loader"><i class="bi bi-arrow-clockwise"></i> Cargando...</div>
+      </div>
+    </div>
+  </div>
+
+  {# Curva de aprendizaje ISF #}
+  <div class="pmm-section mb-3">
+    <div class="pmm-section-header">
+      <div class="pmm-section-title">
+        <i class="bi bi-activity" style="color:#6366f1"></i>
+        Curva de aprendizaje — ISF
+      </div>
+      <div class="d-flex gap-2">
+        <button class="pmm-section-sub" style="background:none;border:none;cursor:pointer;padding:0"
+                onclick="loadCurve('ISF')" id="btn-curve-isf">ISF</button>
+        <span class="pmm-section-sub">·</span>
+        <button class="pmm-section-sub" style="background:none;border:none;cursor:pointer;padding:0"
+                onclick="loadCurve('ICR')" id="btn-curve-icr">ICR</button>
+      </div>
+    </div>
+    <div class="pmm-section-body" style="padding:.5rem .75rem .75rem">
+      <div id="pmm-curve-chart" class="pmm-chart"></div>
+      <div class="pmm-loader" id="curve-loader" style="display:none">
+        <i class="bi bi-arrow-clockwise"></i> Cargando curva...
+      </div>
+    </div>
+  </div>
+
+  {# Bloques circadianos #}
+  <div class="pmm-section mb-3">
+    <div class="pmm-section-header">
+      <div class="pmm-section-title">
+        <i class="bi bi-clock-history" style="color:#6366f1"></i>
+        ISF por bloque horario
+      </div>
+      <span class="pmm-section-sub">6 bloques de 4 horas</span>
+    </div>
+    <div class="pmm-section-body" style="padding:.5rem">
+      <div id="circ-table-wrap">
+        <div class="pmm-loader"><i class="bi bi-arrow-clockwise"></i> Cargando...</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /col-lg-8 -->
+
+{# ── Columna derecha ───────────────────────────────────────────────────────── #}
+<div class="col-12 col-lg-4">
+
+  {# Drift metabólico #}
+  <div class="pmm-section mb-3">
+    <div class="pmm-section-header">
+      <div class="pmm-section-title">
+        <i class="bi bi-radar" style="color:#6366f1"></i>
+        Detector de drift
+      </div>
+    </div>
+    <div class="pmm-section-body">
+      <div id="drift-card-wrap">
+        <div class="pmm-loader"><i class="bi bi-arrow-clockwise"></i></div>
+      </div>
+      <button class="pmm-recal-btn w-100 mt-2" onclick="resetDrift()" id="drift-reset-btn"
+              style="font-size:.73rem">
+        <i class="bi bi-arrow-counterclockwise me-1"></i>Resetear tras cambio de pauta
+      </button>
+    </div>
+  </div>
+
+  {# Score de anomalía #}
+  <div class="pmm-section mb-3">
+    <div class="pmm-section-header">
+      <div class="pmm-section-title">
+        <i class="bi bi-shield-check" style="color:#6366f1"></i>
+        Anomalía metabólica
+      </div>
+    </div>
+    <div class="pmm-section-body">
+      <div id="anomaly-wrap">
+        <div class="pmm-loader"><i class="bi bi-arrow-clockwise"></i></div>
+      </div>
+    </div>
+  </div>
+
+  {# Absorción por categoría #}
+  <div class="pmm-section mb-3">
+    <div class="pmm-section-header">
+      <div class="pmm-section-title">
+        <i class="bi bi-lightning-fill" style="color:#6366f1"></i>
+        Velocidad de absorción
+      </div>
+      <span class="pmm-section-sub">vs. media poblacional</span>
+    </div>
+    <div class="pmm-section-body">
+      <div id="absorption-wrap">
+        <div class="pmm-loader"><i class="bi bi-arrow-clockwise"></i></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /col-lg-4 -->
+</div><!-- /row -->
+
+<script>
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const $  = id => document.getElementById(id);
+const fmt1 = v => v != null ? (+v).toFixed(1) : '—';
+const fmtI = v => v != null ? Math.round(+v) : '—';
+const confPct = v => Math.round((v || 0) * 100);
+
+function confBar(pct, cls='pb-conf-fill') {
+  return `<div class="pb-conf-bar"><div class="${cls}" style="width:${pct}%"></div></div>`;
+}
+
+// ── Cargar estado completo ────────────────────────────────────────────────────
+async function loadAll() {
+  await Promise.all([
+    loadState(),
+    loadDrift(),
+    loadAnomaly(),
+    loadAbsorption(),
+    loadCurve('ISF'),
+  ]);
+}
+
+// ── PMM state ─────────────────────────────────────────────────────────────────
+async function loadState() {
+  try {
+    const d = await fetch('/api/pmm/state').then(r=>r.json());
+    if (!d.ok) return;
+
+    const isf = d.isf, icr = d.icr;
+    const now = new Date().getHours();
+
+    // Status bar
+    $('sb-isf').textContent     = fmtI(isf.mu);
+    $('sb-isf-sub').textContent = `±${fmt1(isf.sigma)} · ${isf.n_obs} obs`;
+    $('sb-icr').textContent     = fmt1(icr.mu) + 'g/U';
+    $('sb-icr-sub').textContent = `±${fmt1(icr.sigma)} · ${icr.n_obs} obs`;
+    $('sb-n-isf').textContent   = d.n_isf_obs;
+    $('sb-n-icr').textContent   = d.n_icr_obs;
+
+    // Marcar card activa si PMM tiene datos
+    if (isf.source !== 'prior') {
+      $('status-bar').querySelectorAll('.psb-card')[0].classList.add('psb-active');
+      $('status-bar').querySelectorAll('.psb-card')[1].classList.add('psb-active');
+    }
+
+    // Block label
+    if (isf.block_label) $('isf-block-label').textContent = isf.block_label;
+
+    // Param grid
+    $('param-grid').innerHTML = `
+      <div class="param-block">
+        <div class="pb-name">ISF — Factor de Sensibilidad</div>
+        <div class="pb-val">${fmtI(isf.mu)} <span class="pb-unit">mg/dL·U</span></div>
+        <div class="pb-ci">IC 95%: ${fmtI(isf.ci_95_lo)} – ${fmtI(isf.ci_95_hi)} mg/dL·U</div>
+        <div class="pb-conf">
+          ${confBar(confPct(isf.confidence))}
+          <div class="pb-conf-label">Confianza: ${confPct(isf.confidence)}% · ${isf.n_obs} observaciones</div>
+        </div>
+        <div class="pb-source ${isf.source==='prior'?'src-prior':'src-pmm'}">
+          ${isf.source==='prior'?'⚠ Prior — sin datos suficientes':'● PMM aprendido — '+isf.source}
+        </div>
+      </div>
+      <div class="param-block">
+        <div class="pb-name">ICR — Ratio Insulina/Carbohidratos</div>
+        <div class="pb-val">${fmt1(icr.mu)} <span class="pb-unit">g CH por U</span></div>
+        <div class="pb-ci">IC 95%: ${fmt1(icr.ci_95_lo)} – ${fmt1(icr.ci_95_hi)} g/U</div>
+        <div class="pb-conf">
+          ${confBar(confPct(icr.confidence))}
+          <div class="pb-conf-label">Confianza: ${confPct(icr.confidence)}% · ${icr.n_obs} observaciones</div>
+        </div>
+        <div class="pb-source ${icr.source==='prior'?'src-prior':'src-pmm'}">
+          ${icr.source==='prior'?'⚠ Prior — sin datos suficientes':'● PMM aprendido — '+icr.source}
+        </div>
+      </div>
+    `;
+
+    // Bloques circadianos
+    renderCircBlocks(d.isf_blocks, now);
+
+  } catch(e) { console.error('PMM state:', e); }
+}
+
+function renderCircBlocks(blocks, nowHour) {
+  if (!blocks || !blocks.length) {
+    $('circ-table-wrap').innerHTML = '<div class="pmm-loader text-muted">Sin datos circadianos aún</div>';
+    return;
+  }
+  const labels = {'-1':'Global','0':'00–04h','4':'04–08h','8':'08–12h',
+                  '12':'12–16h','16':'16–20h','20':'20–24h'};
+  const rows = blocks
+    .filter(b => b.block !== -1)
+    .map(b => {
+      const label   = labels[b.block] || b.block+'h';
+      const isCurr  = nowHour >= +b.block && nowHour < +b.block + 4;
+      const conf    = Math.round((b.confidence||0)*100);
+      const ci      = `${Math.round(b.ci_95_lo||0)}–${Math.round(b.ci_95_hi||0)}`;
+      return `<tr>
+        <td style="font-weight:600">${label}${isCurr?' <span class="circ-badge-now">ahora</span>':''}</td>
+        <td><strong>${Math.round(b.mu||0)}</strong> mg/dL·U</td>
+        <td>${ci}</td>
+        <td>${b.n_obs||0}</td>
+        <td>
+          <div class="circ-conf"><div class="circ-conf-fill" style="width:${conf}%"></div></div>
+          ${conf}%
+        </td>
+      </tr>`;
+    }).join('');
+
+  $('circ-table-wrap').innerHTML = `
+    <table class="circ-table">
+      <thead><tr>
+        <th>Bloque</th><th>ISF μ</th><th>IC 95%</th><th>Obs</th><th>Confianza</th>
+      </tr></thead>
+      <tbody>${rows || '<tr><td colspan="5" class="text-center text-muted py-2">Sin datos por bloque aún</td></tr>'}</tbody>
+    </table>`;
+}
+
+// ── Curva de aprendizaje ──────────────────────────────────────────────────────
+let _curveParam = 'ISF';
+async function loadCurve(param) {
+  _curveParam = param;
+  $('btn-curve-isf').style.fontWeight = param==='ISF' ? '800' : '400';
+  $('btn-curve-icr').style.fontWeight = param==='ICR' ? '800' : '400';
+  $('btn-curve-isf').style.color = param==='ISF' ? '#6366f1' : 'var(--text-muted)';
+  $('btn-curve-icr').style.color = param==='ICR' ? '#6366f1' : 'var(--text-muted)';
+
+  try {
+    const d = await fetch(`/api/pmm/learning-curve?param=${param}`).then(r=>r.json());
+    if (!d.ok || !d.curve || !d.curve.length) {
+      $('pmm-curve-chart').innerHTML = '<div class="pmm-loader text-muted">Sin suficientes datos para la curva</div>';
+      return;
+    }
+
+    const ts   = d.curve.map(p => p.t);
+    const mus  = d.curve.map(p => p.mu);
+    const cilo = d.curve.map(p => p.ci_lo);
+    const cihi = d.curve.map(p => p.ci_hi);
+    const vals = d.curve.map(p => p.obs_val);
+
+    const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+    const bg     = isDark ? '#1e293b' : '#ffffff';
+    const grid   = isDark ? 'rgba(255,255,255,.07)' : 'rgba(0,0,0,.06)';
+    const txt    = isDark ? '#94a3b8' : '#64748b';
+    const unit   = param === 'ISF' ? 'mg/dL·U' : 'g/U';
+
+    Plotly.newPlot('pmm-curve-chart', [
+      {
+        x: ts, y: cihi, name: 'IC 95% alto',
+        type:'scatter', mode:'lines', line:{width:0},
+        showlegend:false, hoverinfo:'skip',
+        fillcolor:'rgba(99,102,241,.12)',
+      },
+      {
+        x: ts, y: cilo, name: 'IC 95%',
+        type:'scatter', mode:'lines', line:{width:0},
+        fill:'tonexty', fillcolor:'rgba(99,102,241,.12)',
+        showlegend:false, hoverinfo:'skip',
+      },
+      {
+        x: ts, y: mus, name: `${param} μ`,
+        type:'scatter', mode:'lines+markers',
+        line:{color:'#6366f1',width:2},
+        marker:{size:5, color:'#6366f1'},
+        hovertemplate:`<b>%{x|%d/%m %H:%M}</b><br>${param}: %{y:.1f} ${unit}<extra></extra>`,
+      },
+      {
+        x: ts, y: vals, name:`Obs. ${param}`,
+        type:'scatter', mode:'markers',
+        marker:{size:6, color:'rgba(139,92,246,.55)', symbol:'circle-open', line:{width:1.5}},
+        hovertemplate:`<b>%{x|%d/%m %H:%M}</b><br>Obs: %{y:.1f} ${unit}<extra></extra>`,
+      },
+    ], {
+      paper_bgcolor: bg, plot_bgcolor: bg,
+      margin:{t:10,b:40,l:45,r:10},
+      xaxis:{color:txt, gridcolor:grid, tickfont:{size:10}},
+      yaxis:{color:txt, gridcolor:grid, tickfont:{size:10},
+             title:{text:unit, font:{size:10,color:txt}}},
+      legend:{font:{size:10,color:txt}, orientation:'h', y:-0.25},
+      hovermode:'closest',
+    }, {responsive:true, displayModeBar:false});
+
+  } catch(e) { console.error('Curva PMM:', e); }
+}
+
+// ── Drift ─────────────────────────────────────────────────────────────────────
+async function loadDrift() {
+  try {
+    const d = await fetch('/api/pmm/drift').then(r=>r.json());
+    if (!d.ok) return;
+
+    // Status bar
+    const driftLabel = d.drift_active
+      ? (d.drift_dir === 'resistance' ? 'Resistencia' : 'Hipersensib.')
+      : 'Normal';
+    $('sb-drift').textContent     = driftLabel;
+    $('sb-drift-sub').textContent = d.drift_active
+      ? `${Math.round((d.intensity||0)*100)}% intensidad`
+      : 'Sin cambio sostenido';
+    $('sb-drift-card').classList.add(d.drift_active ? 'psb-warning' : 'psb-ok');
+
+    // Card
+    const cls = d.drift_active
+      ? `drift-${d.drift_dir}`
+      : 'drift-normal';
+    const icon = d.drift_dir === 'resistance' ? 'bi-graph-up-arrow'
+               : d.drift_dir === 'sensitivity' ? 'bi-graph-down-arrow'
+               : 'bi-check-circle';
+    const title = d.drift_active
+      ? (d.drift_dir === 'resistance' ? 'Resistencia a la insulina' : 'Hipersensibilidad')
+      : 'Metabolismo estable';
+
+    const since = d.drift_hours ? `<div class="dm-chip">Desde hace <span>${Math.round(d.drift_hours)}h</span></div>` : '';
+    const intens = d.drift_active ? `<div class="dm-chip">Intensidad <span>${Math.round((d.intensity||0)*100)}%</span></div>` : '';
+    const factor = d.drift_active ? `<div class="dm-chip">Factor ISF <span>×${d.drift_factor||1}</span></div>` : '';
+    const cusum  = `<div class="dm-chip">C+ <span>${(d.cusum_pos||0).toFixed(1)}</span></div>
+                    <div class="dm-chip">C− <span>${(d.cusum_neg||0).toFixed(1)}</span></div>
+                    <div class="dm-chip">σ <span>${(d.sigma_ref||0).toFixed(1)}</span></div>`;
+
+    $('drift-card-wrap').innerHTML = `
+      <div class="drift-card ${cls}">
+        <div class="drift-icon"><i class="bi ${icon}"></i></div>
+        <div class="drift-body">
+          <div class="drift-title">${title}</div>
+          <div class="drift-narr">${d.narrativa || ''}</div>
+          <div class="drift-metrics">${since}${intens}${factor}${cusum}</div>
+        </div>
+      </div>`;
+  } catch(e) { console.error('Drift:', e); }
+}
+
+// ── Anomaly ───────────────────────────────────────────────────────────────────
+async function loadAnomaly() {
+  try {
+    const d = await fetch('/api/pmm/anomaly').then(r=>r.json());
+    if (!d.ok) return;
+
+    // Status bar
+    const lvlEmoji = {normal:'✓',watch:'👁',alert:'⚠',critical:'🚨'}[d.level] || '';
+    $('sb-anm').textContent     = d.score;
+    $('sb-anm-sub').textContent = `${lvlEmoji} ${d.level}`;
+    const anmCard = $('sb-anm-card');
+    if (d.level === 'critical' || d.level === 'alert') anmCard.classList.add('psb-warning');
+    else if (d.level === 'normal') anmCard.classList.add('psb-ok');
+
+    // Ring colors
+    const ringColor = {
+      normal:'#22c55e', watch:'#f59e0b', alert:'#f97316', critical:'#ef4444'
+    }[d.level] || '#6366f1';
+    const radius = 36, circ = 2 * Math.PI * radius;
+    const dash = (d.score / 100) * circ;
+
+    // Components
+    const c = d.components || {};
+    const compHtml = [
+      {label:'Drift CUSUM', val: c.drift_cusum||0},
+      {label:'Residual pred.', val: c.residual||0},
+      {label:'Mahalanobis', val: c.mahalanobis||0},
+    ].map(({label,val}) => `
+      <div class="anm-comp-row">
+        <div class="anm-comp-label">${label}</div>
+        <div class="anm-comp-bar-wrap">
+          <div class="anm-comp-bar">
+            <div class="anm-comp-fill" style="width:${Math.min(100,val)}%"></div>
+          </div>
+        </div>
+        <div class="anm-comp-val">${Math.round(val)}</div>
+      </div>`).join('');
+
+    // Reasons
+    const reasonsHtml = (d.reasons||[]).map(r =>
+      `<div class="anm-reason-item"><i class="bi bi-dot"></i>${r}</div>`
+    ).join('');
+
+    $('anomaly-wrap').innerHTML = `
+      <div class="anm-grid">
+        <div class="anm-score-ring">
+          <svg width="90" height="90" viewBox="0 0 90 90">
+            <circle cx="45" cy="45" r="${radius}" fill="none" stroke="var(--border)" stroke-width="8"/>
+            <circle cx="45" cy="45" r="${radius}" fill="none"
+              stroke="${ringColor}" stroke-width="8"
+              stroke-dasharray="${dash} ${circ}"
+              stroke-dashoffset="${circ/4}"
+              stroke-linecap="round"
+              transform="rotate(-90 45 45)"/>
+          </svg>
+          <div class="anm-score-num">${d.score}</div>
+        </div>
+        <div class="anm-components">${compHtml}</div>
+      </div>
+      ${reasonsHtml ? `<div class="anm-reasons">${reasonsHtml}</div>` : ''}
+      ${d.narrativa ? `<div style="font-size:.75rem;color:var(--text-secondary);margin-top:.6rem;line-height:1.45">${d.narrativa}</div>` : ''}
+    `;
+  } catch(e) { console.error('Anomaly:', e); }
+}
+
+// ── Absorción ─────────────────────────────────────────────────────────────────
+async function loadAbsorption() {
+  try {
+    const d = await fetch('/api/pmm/absorption').then(r=>r.json());
+    if (!d.ok) return;
+
+    const buckets = [
+      {key:'FAST', label:'Alta GI',  icon:'bi-lightning-fill', color:'#f97316'},
+      {key:'MED',  label:'Media GI', icon:'bi-activity',       color:'#6366f1'},
+      {key:'SLOW', label:'Baja GI',  icon:'bi-hourglass-split',color:'#22c55e'},
+    ];
+
+    const rows = buckets.map(({key,label,icon,color}) => {
+      const b = d.absorption[key] || {};
+      const mu     = b.mu || 1.0;
+      const n      = b.n_obs || 0;
+      const src    = b.source || 'prior';
+      const interp = b.interpretation || '';
+      // Bar: reference (pop = 1.0) at 50%; personal at mu*50%
+      const pct    = Math.min(100, Math.max(5, mu * 50));
+      const refPct = 50;
+      return `
+        <div class="abs-row">
+          <div class="abs-label"><i class="bi ${icon}" style="color:${color}"></i> ${label}</div>
+          <div class="abs-bar-wrap">
+            <div class="abs-bar-bg">
+              <div class="abs-bar-fill" style="width:${pct}%;background:linear-gradient(90deg,${color}99,${color})">
+                <div class="abs-bar-ref" style="left:${refPct}%"></div>
+              </div>
+            </div>
+            <div class="abs-interp">${src==='prior'?'Sin datos — usando media poblacional':interp} ${n>0?`(${n} obs)`:''}</div>
+          </div>
+          <div class="abs-val">${mu.toFixed(2)}×</div>
+        </div>`;
+    }).join('');
+
+    $('absorption-wrap').innerHTML = `
+      <div class="abs-grid">${rows}</div>
+      <div style="font-size:.65rem;color:var(--text-muted);margin-top:.75rem">
+        La barra gris vertical indica la media poblacional (1.0×).<br>
+        Valores >1 significan absorción más rápida de lo esperado.
+      </div>`;
+  } catch(e) { console.error('Absorción:', e); }
+}
+
+// ── Acciones ──────────────────────────────────────────────────────────────────
+async function recalibrar() {
+  const btn = $('recal-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-arrow-clockwise spin me-1"></i>Recalibrando...';
+  try {
+    const d = await fetch('/api/pmm/recalibrate', {
+      method:'POST',
+      headers:{'Content-Type':'application/json', 'X-CSRFToken': getCsrf()},
+      body: JSON.stringify({force:false}),
+    }).then(r=>r.json());
+    if (d.ok) {
+      await loadAll();
+      btn.innerHTML = '<i class="bi bi-check me-1"></i>Listo';
+      setTimeout(()=>{ btn.innerHTML='<i class="bi bi-arrow-clockwise me-1"></i>Recalibrar'; btn.disabled=false; }, 2000);
+    }
+  } catch(e) {
+    btn.innerHTML = '<i class="bi bi-x me-1"></i>Error';
+    setTimeout(()=>{ btn.innerHTML='<i class="bi bi-arrow-clockwise me-1"></i>Recalibrar'; btn.disabled=false; }, 2000);
+  }
+}
+
+async function resetDrift() {
+  if (!confirm('¿Resetear el detector de drift? Hacelo solo si cambiaste la pauta de insulina.')) return;
+  const btn = $('drift-reset-btn');
+  btn.disabled = true;
+  try {
+    await fetch('/api/pmm/drift/reset', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()},
+      body:'{}',
+    });
+    await loadDrift();
+  } finally { btn.disabled = false; }
+}
+
+function getCsrf() {
+  const m = document.cookie.match(/csrf_token=([^;]+)/);
+  return m ? m[1] : '';
+}
+
+// Spinner CSS inline
+const style = document.createElement('style');
+style.textContent = '@keyframes spin{to{transform:rotate(360deg)}}.spin{animation:spin .8s linear infinite;display:inline-block}';
+document.head.appendChild(style);
+
+// Arrancar
+document.addEventListener('DOMContentLoaded', loadAll);
+</script>
+{% endblock %}

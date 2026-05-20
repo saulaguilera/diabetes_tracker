@@ -99,6 +99,23 @@ def dashboard():
 
     insights = _dashboard_insights()
 
+    # ── PMM: señales del modelo metabólico personal ───────────────────────
+    pmm_data = {}
+    try:
+        from datetime import datetime as _dt
+        from pmm.engines.drift import get_drift_status
+        from pmm.engines.anomaly import compute_anomaly_score
+        from pmm.core.parameter_store import get_isf_now, get_icr_now
+        hora = _dt.now().hour
+        pmm_data = {
+            "drift":   get_drift_status(),
+            "anomaly": compute_anomaly_score(),
+            "isf":     get_isf_now(hora=hora),
+            "icr":     get_icr_now(hora=hora),
+        }
+    except Exception:
+        pass
+
     # Feed de actividad reciente — lista ordenada de últimos eventos
     feed = []
     ul   = stats.get("ultima_lectura")
@@ -136,4 +153,4 @@ def dashboard():
 
     return render_template("dashboard.html", stats=stats, chart=chart, alertas=alertas,
                            libre_configured=libre_configured, ultima_sync=ultima_sync,
-                           insights=insights, feed=feed)
+                           insights=insights, feed=feed, pmm=pmm_data)

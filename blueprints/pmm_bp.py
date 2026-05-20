@@ -10,7 +10,7 @@ GET  /api/pmm/observations     → episodios identificados (últimos 50)
 POST /api/pmm/recalibrate      → trigger manual de recalibración
 GET  /api/pmm/learning-curve   → evolución histórica de parámetros
 """
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, jsonify, request, session, render_template
 
 bp = Blueprint("pmm", __name__)
 
@@ -19,6 +19,15 @@ def _require_login():
     if not session.get("logged_in"):
         return jsonify({"ok": False, "error": "No autorizado"}), 401
     return None
+
+
+@bp.route("/pmm", endpoint="pmm_page")
+def pmm_page():
+    """Página del Personal Metabolic Model — visualización del aprendizaje."""
+    if not session.get("logged_in"):
+        from flask import redirect, url_for
+        return redirect(url_for("login"))
+    return render_template("pmm.html")
 
 
 @bp.route("/api/pmm/state", endpoint="api_pmm_state")

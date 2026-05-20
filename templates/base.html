@@ -698,6 +698,14 @@
   <a href="{{ url_for('calculadora') }}" class="nav-link {% if ep == 'calculadora' %}active{% endif %}">
     <i class="bi bi-calculator-fill"></i> Calculadora ISF
   </a>
+  <a href="{{ url_for('pmm.pmm_page') }}" class="nav-link {% if ep == 'pmm_page' %}active{% endif %}">
+    <i class="bi bi-cpu-fill" style="color:#8b5cf6 !important"></i>
+    Modelo PMM
+    <span style="font-size:.55rem;font-weight:800;background:linear-gradient(135deg,#6366f1,#8b5cf6);
+                 color:#fff;padding:.1em .35em;border-radius:4px;margin-left:.3rem;vertical-align:middle">
+      IA
+    </span>
+  </a>
 
   <div class="nav-section">Clínico</div>
   <a href="{{ url_for('reporte_semanal') }}" class="nav-link {% if ep == 'reporte_semanal' %}active{% endif %}">

@@ -381,6 +381,34 @@
 </div>
 {% endif %}
 
+{# ── PMM Drift Banner ─────────────────────────────────────────────────────── #}
+{% if pmm and pmm.drift and pmm.drift.drift_active %}
+{% set drift_dir = pmm.drift.drift_dir %}
+<div class="pmm-drift-banner mb-3 pdb-{{ drift_dir }}" id="pmm-drift-banner">
+  <div class="pdb-icon">
+    {% if drift_dir == 'resistance' %}
+      <i class="bi bi-graph-up-arrow"></i>
+    {% else %}
+      <i class="bi bi-graph-down-arrow"></i>
+    {% endif %}
+  </div>
+  <div class="pdb-body">
+    <div class="pdb-title">
+      Modelo metabólico:
+      {% if drift_dir == 'resistance' %}Resistencia detectada{% else %}Hipersensibilidad detectada{% endif %}
+      {% if pmm.drift.drift_hours %}
+        <span class="pdb-since">· hace {{ pmm.drift.drift_hours|int }}h</span>
+      {% endif %}
+    </div>
+    <div class="pdb-text">{{ pmm.drift.narrativa }}</div>
+  </div>
+  <a href="{{ url_for('pmm.pmm_page') }}" class="pdb-cta">Ver modelo</a>
+  <button class="pdb-close" onclick="document.getElementById('pmm-drift-banner').remove()" aria-label="Cerrar">
+    <i class="bi bi-x"></i>
+  </button>
+</div>
+{% endif %}
+
 {# ── Insights 7d ──────────────────────────────────────────────────────────── #}
 {% if insights and insights.tir7 is not none %}
 <div class="insights-scroll-row mb-3">
@@ -450,55 +478,90 @@
   </div>
   {% endif %}
 
-  {# ISF / ICR personal #}
+  {# ISF / ICR — con badge PMM si está activo #}
   <div class="isr-cell">
-    <a href="{{ url_for('calculadora') }}" class="insight-chip insight-info text-decoration-none">
+    <a href="{{ url_for('pmm.pmm_page') }}" class="insight-chip insight-info text-decoration-none">
       <div class="ic-icon-wrap">
-        <i class="bi bi-calculator-fill"></i>
+        {% if pmm and pmm.isf and pmm.isf.source != 'prior' %}
+          <i class="bi bi-cpu-fill"></i>
+        {% else %}
+          <i class="bi bi-calculator-fill"></i>
+        {% endif %}
       </div>
       <div class="ic-body">
         <div class="ic-label">
-          ISF · ICR personal
-          {% if insights.fuente_isf_ahora == 'circadiano' %}
+          ISF · ICR
+          {% if pmm and pmm.isf and pmm.isf.source != 'prior' %}
+            <span class="ic-badge-pmm">PMM</span>
+          {% elif insights.fuente_isf_ahora == 'circadiano' %}
             <span style="font-size:.62rem; background:rgba(99,102,241,.15); color:#6366f1;
-                         padding:.05em .35em; border-radius:5px; font-weight:700;">
-              circadiano
-            </span>
+                         padding:.05em .35em; border-radius:5px; font-weight:700;">circadiano</span>
           {% endif %}
         </div>
         <div class="ic-value ic-value-text">
-          {% if insights.isf_ahora %}
+          {% if pmm and pmm.isf and pmm.isf.source != 'prior' %}
+            ISF <strong>{{ pmm.isf.mu | round(0) | int }}</strong>
+            <span class="ic-unit">mg/dL·U</span>
+            <span style="font-size:.68rem; color:var(--text-muted);">±{{ pmm.isf.sigma | round(1) }}</span>
+          {% elif insights.isf_ahora %}
             ISF <strong>{{ insights.isf_ahora }}</strong>
             <span class="ic-unit">mg/dL·U</span>
-            {% if insights.fuente_isf_ahora == 'circadiano' and insights.isf and insights.isf != insights.isf_ahora %}
-              <span style="font-size:.7rem; color:var(--text-muted);">(global {{ insights.isf }})</span>
-            {% endif %}
           {% elif insights.isf %}
             ISF <strong>{{ insights.isf }}</strong> <span class="ic-unit">mg/dL·U</span>
           {% else %}
             ISF <span class="text-muted">—</span>
           {% endif %}
           &nbsp;·&nbsp;
-          {% if insights.icr %}
-            1U : <strong>{{ insights.icr }}</strong>g CH
+          {% if pmm and pmm.icr and pmm.icr.source != 'prior' %}
+            1U:<strong>{{ pmm.icr.mu | round(1) }}</strong>g
+          {% elif insights.icr %}
+            1U:<strong>{{ insights.icr }}</strong>g CH
           {% else %}
             ICR <span class="text-muted">—</span>
           {% endif %}
         </div>
         <div class="ic-sub">
-          {% if insights.fuente_isf_ahora == 'circadiano' %}
-            {{ insights.bloque_label }} ·
+          {% if pmm and pmm.isf and pmm.isf.source != 'prior' %}
+            {{ pmm.isf.n_obs }} obs ISF · {{ (pmm.icr.n_obs if pmm.icr else 0) }} obs ICR · aprendizaje activo
+          {% else %}
+            {% if insights.isf %}{{ insights.isf_n }} correcciones · {% endif %}
+            {% if insights.icr %}{{ insights.icr_n }} comidas{% endif %}
+            {% if not insights.isf and not insights.icr %}Sin suficientes datos aún{% endif %}
           {% endif %}
-          {% if insights.isf %}{{ insights.isf_n }} correcciones · {% endif %}
-          {% if insights.icr %}{{ insights.icr_n }} comidas analizadas{% endif %}
-          {% if not insights.isf and not insights.icr %}Sin suficientes datos aún{% endif %}
         </div>
       </div>
-      <div class="ic-link">
-        <i class="bi bi-chevron-right"></i>
-      </div>
+      <div class="ic-link"><i class="bi bi-chevron-right"></i></div>
     </a>
   </div>
+
+  {# PMM Anomaly Score — solo si hay datos #}
+  {% if pmm and pmm.anomaly and pmm.anomaly.ok and pmm.anomaly.score > 0 %}
+  {% set anl = pmm.anomaly.level %}
+  <div class="isr-cell">
+    <a href="{{ url_for('pmm.pmm_page') }}" class="insight-chip insight-{{ 'danger' if anl in ('alert','critical') else 'warning' if anl == 'watch' else 'success' }} text-decoration-none">
+      <div class="ic-icon-wrap">
+        <i class="bi bi-{{ 'exclamation-triangle-fill' if anl in ('alert','critical') else 'shield-check' if anl == 'normal' else 'eye-fill' }}"></i>
+      </div>
+      <div class="ic-body">
+        <div class="ic-label">
+          Estado metabólico
+          <span class="ic-badge-level ic-badge-{{ anl }}">{{ anl | upper }}</span>
+        </div>
+        <div class="ic-value">
+          {{ pmm.anomaly.score }}<span class="ic-unit">/100</span>
+        </div>
+        <div class="ic-sub">
+          {% if pmm.anomaly.reasons %}
+            {{ pmm.anomaly.reasons[0][:55] }}{% if pmm.anomaly.reasons[0]|length > 55 %}…{% endif %}
+          {% else %}
+            Sin anomalías detectadas
+          {% endif %}
+        </div>
+      </div>
+      <div class="ic-link"><i class="bi bi-chevron-right"></i></div>
+    </a>
+  </div>
+  {% endif %}
 
 </div>{# /insights-scroll-row #}
 {% endif %}
@@ -1391,6 +1454,65 @@ a.insight-chip:hover {
 .en-ctx-exdown   { background: rgba(239,68,68,.10);  border-color: rgba(239,68,68,.25); }
 .en-ctx-exdown .en-ctx-val   { color: #dc2626; }
 .en-ctx-neutral  { opacity: .55; }
+
+/* ── PMM Drift Banner ────────────────────────────────────────────────────────── */
+.pmm-drift-banner {
+  display: flex; align-items: flex-start; gap: .75rem;
+  padding: .75rem 1rem;
+  border-radius: 12px;
+  border-left: 4px solid;
+  font-size: .84rem;
+  position: relative;
+}
+.pdb-resistance {
+  background: rgba(249,115,22,.09);
+  border-color: #f97316;
+}
+.pdb-sensitivity {
+  background: rgba(99,102,241,.09);
+  border-color: #6366f1;
+}
+.pdb-icon {
+  font-size: 1.25rem; flex-shrink: 0; margin-top: .1rem;
+}
+.pdb-resistance .pdb-icon { color: #f97316; }
+.pdb-sensitivity .pdb-icon { color: #6366f1; }
+.pdb-body { flex: 1; min-width: 0; }
+.pdb-title {
+  font-weight: 700; color: var(--text);
+  display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
+}
+.pdb-since { font-size: .75rem; font-weight: 500; color: var(--text-muted); }
+.pdb-text { color: var(--text-secondary); margin-top: .15rem; line-height: 1.4; }
+.pdb-cta {
+  flex-shrink: 0; white-space: nowrap;
+  font-size: .75rem; font-weight: 700;
+  padding: .25rem .7rem; border-radius: 8px;
+  text-decoration: none; align-self: center;
+}
+.pdb-resistance .pdb-cta { background: rgba(249,115,22,.15); color: #c2410c; }
+.pdb-sensitivity .pdb-cta { background: rgba(99,102,241,.15); color: #4338ca; }
+.pdb-close {
+  background: none; border: none; cursor: pointer;
+  font-size: .9rem; color: var(--text-muted); padding: 0 .25rem;
+  line-height: 1; flex-shrink: 0; margin-top: .05rem;
+}
+
+/* ── PMM badges en chips ─────────────────────────────────────────────────────── */
+.ic-badge-pmm {
+  font-size: .55rem; font-weight: 800; letter-spacing: .03em;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff; padding: .1em .4em; border-radius: 5px;
+  vertical-align: middle;
+}
+.ic-badge-level {
+  font-size: .55rem; font-weight: 700; letter-spacing: .04em;
+  padding: .1em .35em; border-radius: 5px; vertical-align: middle;
+}
+.ic-badge-normal   { background: rgba(34,197,94,.15); color: #16a34a; }
+.ic-badge-watch    { background: rgba(245,158,11,.18); color: #b45309; }
+.ic-badge-alert    { background: rgba(249,115,22,.18); color: #c2410c; }
+.ic-badge-critical { background: rgba(239,68,68,.2);   color: #dc2626; }
 
 /* ── Insights horizontal scroll on mobile ───────────────────────────────────── */
 .insights-scroll-row {
