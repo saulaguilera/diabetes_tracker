@@ -136,6 +136,95 @@ def api_pmm_recalibrate():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@bp.route("/api/pmm/drift", endpoint="api_pmm_drift")
+def api_pmm_drift():
+    """
+    Estado actual del detector CUSUM de drift metabólico.
+
+    Retorna:
+        drift_active  : bool — hay drift detectado
+        drift_dir     : 'resistance' | 'sensitivity' | null
+        drift_factor  : float — factor corrector para ISF (1.0 = sin drift)
+        drift_since   : ISO timestamp del inicio del drift actual
+        drift_hours   : horas de duración del drift
+        intensity     : 0-1 — qué tan lejos está el CUSUM del umbral
+        cusum_pos     : valor acumulador positivo
+        cusum_neg     : valor acumulador negativo
+        sigma_ref     : σ adaptivo del residual (mg/dL)
+        threshold_h   : umbral de alarma (= 5 × σ_ref)
+        narrativa     : explicación legible en español
+    """
+    err = _require_login()
+    if err:
+        return err
+    try:
+        from pmm.engines.drift import get_drift_status
+        data = get_drift_status()
+        return jsonify(data)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.route("/api/pmm/drift/reset", methods=["POST"], endpoint="api_pmm_drift_reset")
+def api_pmm_drift_reset():
+    """
+    Reset manual del CUSUM de drift.
+    Usar después de un cambio de pauta de insulina, medicación nueva, etc.
+    """
+    err = _require_login()
+    if err:
+        return err
+    try:
+        from pmm.engines.drift import reset_cusum
+        reset_cusum()
+        return jsonify({"ok": True, "message": "CUSUM reseteado correctamente"})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.route("/api/pmm/explain", endpoint="api_pmm_explain")
+def api_pmm_explain():
+    """
+    Descomposición causal del cambio de glucosa en las últimas N horas.
+
+    Query params:
+        hours : float — ventana de análisis (default 3.0, max 12)
+        t_start : ISO timestamp — inicio de ventana (alternativa a hours)
+        t_end   : ISO timestamp — fin de ventana (alternativa a hours)
+
+    Retorna:
+        delta_total    : ΔG observado (mg/dL)
+        g_start / g_end: glucosas al inicio y al final
+        attributions   : { iob, cob, fpe, ejercicio, basal, residual } en mg/dL
+        attribution_pct: mismos valores como % de |delta_total|
+        dominant_factor: factor con mayor impacto absoluto
+        anomaly_flag   : True si |residual| > 2σ histórico
+        residual_sigma : σ histórico del residual
+        narrativa      : descripción en español
+    """
+    err = _require_login()
+    if err:
+        return err
+    try:
+        from datetime import datetime as dt
+        from pmm.engines.explainability import decompose_glucose_delta, explain_last_hours
+
+        t_start_str = request.args.get("t_start")
+        t_end_str   = request.args.get("t_end")
+
+        if t_start_str and t_end_str:
+            t_start = dt.fromisoformat(t_start_str)
+            t_end   = dt.fromisoformat(t_end_str)
+            data    = decompose_glucose_delta(t_start, t_end)
+        else:
+            hours = min(float(request.args.get("hours", 3.0)), 12.0)
+            data  = explain_last_hours(hours=hours)
+
+        return jsonify(data)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @bp.route("/api/pmm/learning-curve", endpoint="api_pmm_learning_curve")
 def api_pmm_learning_curve():
     """

@@ -297,3 +297,39 @@ class PMMObservation(db.Model):
     def __repr__(self):
         return (f"<PMMObs {self.param_name} val={self.observed_value:.1f} "
                 f"q={self.quality_score:.2f} @ {self.observed_at}>")
+
+
+class PMMDriftState(db.Model):
+    """
+    Estado persistente del detector CUSUM de drift metabólico.
+
+    Una sola fila por usuario (singleton).
+    Almacena los acumuladores del CUSUM two-sided y el σ_ref adaptivo.
+
+    drift_dir:
+        'resistance'  → CUSUM_pos > h  (glucosa más alta de lo esperado)
+        'sensitivity' → CUSUM_neg < -h (glucosa más baja de lo esperado)
+        None          → sin drift activo
+
+    drift_factor:
+        >1.0 → resistencia  (multiplicar ISF efectivo para compensar)
+        <1.0 → sensibilidad (reducir ISF efectivo)
+        1.0  → basal
+    """
+    __tablename__ = "pmm_drift_state"
+
+    id           = db.Column(db.Integer, primary_key=True)
+    cusum_pos    = db.Column(db.Float, default=0.0)       # acumulador positivo
+    cusum_neg    = db.Column(db.Float, default=0.0)       # acumulador negativo
+    sigma_ref    = db.Column(db.Float, default=20.0)      # σ adaptivo del residual
+    drift_active = db.Column(db.Boolean, default=False)   # alarma activa
+    drift_dir    = db.Column(db.String(20))               # 'resistance' | 'sensitivity' | None
+    drift_factor = db.Column(db.Float, default=1.0)       # factor corrector para ISF
+    drift_since  = db.Column(db.DateTime)                 # cuándo empezó el drift actual
+    updated_at   = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        state = f"drift={self.drift_dir}" if self.drift_active else "normal"
+        return (f"<PMMDriftState {state} "
+                f"C+={self.cusum_pos:.1f} C-={self.cusum_neg:.1f} "
+                f"σ={self.sigma_ref:.1f}>")

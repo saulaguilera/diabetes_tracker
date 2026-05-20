@@ -151,6 +151,8 @@ with app.app_context():
             db.create_all()
         if "pmm_observations" not in existing_tables:
             db.create_all()
+        if "pmm_drift_state" not in existing_tables:
+            db.create_all()
 
 
 # ── Configuración LibreLinkUp ─────────────────────────────────────────────────
@@ -249,6 +251,14 @@ def _iniciar_scheduler():
                     except Exception:
                         pass
 
+            def _pmm_drift_job():
+                with app.app_context():
+                    try:
+                        from pmm.engines.drift import update_cusum
+                        update_cusum()
+                    except Exception:
+                        pass
+
             scheduler = BackgroundScheduler(timezone=_tz)  # usa TZ del entorno (America/Santiago)
             scheduler.add_job(_sync_job, "interval", minutes=5, id="libre_sync")
             # PMM recalibración: cada hora
@@ -257,6 +267,13 @@ def _iniciar_scheduler():
                 "interval",
                 hours=1,
                 id="pmm_calibration",
+            )
+            # PMM drift CUSUM: cada 15 minutos (sensible a cambios metabólicos agudos)
+            scheduler.add_job(
+                _pmm_drift_job,
+                "interval",
+                minutes=15,
+                id="pmm_drift",
             )
             # Reporte semanal: cada lunes a las 9:00am (hora local del servidor)
             scheduler.add_job(

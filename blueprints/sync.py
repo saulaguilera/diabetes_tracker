@@ -878,6 +878,27 @@ def api_predict_glucose():
         isf_guardado = float(_get_setting("isf_manual")) if _get_setting("isf_manual") else None
         icr_guardado = float(_get_setting("icr"))        if _get_setting("icr")        else None
 
+        # ── PMM: parámetros aprendidos del usuario ────────────────────────
+        # Si el PMM tiene suficientes observaciones, su μ y σ reemplazan
+        # al cálculo clásico. El σ del PMM va directo al Monte Carlo.
+        pmm_isf_sigma = None
+        pmm_icr_sigma = None
+        try:
+            from pmm.core.parameter_store import get_isf_now, get_icr_now
+            pmm_isf = get_isf_now(hora=hora)
+            pmm_icr = get_icr_now(hora=hora)
+            # Solo usar PMM si tiene datos reales (no prior)
+            if pmm_isf.get("source") != "prior" and pmm_isf.get("n_obs", 0) >= 3:
+                isf_personal  = pmm_isf["mu"]
+                pmm_isf_sigma = pmm_isf["sigma"]
+                n_isf         = pmm_isf["n_obs"]
+            if pmm_icr.get("source") != "prior" and pmm_icr.get("n_obs", 0) >= 3:
+                icr_personal  = pmm_icr["mu"]
+                pmm_icr_sigma = pmm_icr["sigma"]
+                n_icr         = pmm_icr["n_obs"]
+        except Exception:
+            pass   # PMM no disponible → continuar con método clásico
+
         # ISF circadiano por hora actual
         isf_circ = _calcular_isf_circadiano(days=90)
         isf_bloque, bloque_label, _ = _isf_para_hora(hora, isf_circ, isf_personal)
@@ -1007,7 +1028,10 @@ def api_predict_glucose():
                 isf_base        = isf_ef,
                 icr             = icr,
                 n               = 3_000,
-                sigma_g0        = sigma_g0,   # incertidumbre Kalman del punto de partida
+                sigma_g0        = sigma_g0,
+                # PMM: incertidumbre personalizada (reemplaza valores poblacionales)
+                pmm_isf_sigma   = pmm_isf_sigma,
+                pmm_icr_sigma   = pmm_icr_sigma,
             )
 
             # ── Blending AR + MC — ponderación por varianza inversa ─────────

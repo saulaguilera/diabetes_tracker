@@ -65,6 +65,10 @@ def run_monte_carlo(
     hiper_thresh:    float = _HIPER_THRESH,
     seed:            Optional[int] = None,
     sigma_g0:        float = 0.0,   # incertidumbre del punto de partida (Kalman σ_G)
+    # PMM: sigmas personalizados del modelo aprendido del usuario.
+    # Si se pasan, reemplazan los valores poblacionales fijos (_SIGMA_ISF_PCT, etc.)
+    pmm_isf_sigma:   Optional[float] = None,  # σ aprendido del ISF (mg/dL/U)
+    pmm_icr_sigma:   Optional[float] = None,  # σ aprendido del ICR (g/U)
 ) -> dict:
     """
     Ejecuta N simulaciones del modelo de predicción muestreando de las
@@ -116,11 +120,14 @@ def run_monte_carlo(
         # sigma_g0 = σ_G del filtro de Kalman (≈ 4–10 mg/dL cuando convergido)
         g0_i = random.gauss(g_actual, sigma_g0) if sigma_g0 > 0.5 else g_actual
 
-        # ISF: Normal(ISF_base, ISF_base×18%), mínimo 10 mg/dL/U
-        isf_i = max(10.0, random.gauss(isf_base, isf_base * _SIGMA_ISF_PCT))
+        # ISF: si el PMM tiene σ aprendido, usarlo; si no, caer al 18% poblacional.
+        # PMM σ es más preciso: refleja la variabilidad REAL del usuario, no la población.
+        _isf_sigma = pmm_isf_sigma if pmm_isf_sigma is not None else isf_base * _SIGMA_ISF_PCT
+        isf_i = max(10.0, random.gauss(isf_base, _isf_sigma))
 
-        # ICR: Normal(ICR_base, ICR_base×12%), mínimo 1 g/U
-        icr_i = max(1.0, random.gauss(icr, icr * _SIGMA_ICR_PCT)) if icr else None
+        # ICR: mismo esquema — PMM σ si disponible, 12% poblacional si no.
+        _icr_sigma = pmm_icr_sigma if (pmm_icr_sigma is not None and icr) else (icr * _SIGMA_ICR_PCT if icr else None)
+        icr_i = max(1.0, random.gauss(icr, _icr_sigma)) if icr and _icr_sigma else (icr if icr else None)
 
         # ROC: Normal(ROC_medido, σ_sensor)
         roc_i = random.gauss(roc_mu, roc_sigma)
