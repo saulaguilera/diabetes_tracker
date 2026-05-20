@@ -1564,6 +1564,28 @@ def api_dia_estimate():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+# ── Capa 3: Análisis narrativo con Claude API ─────────────────────────────────
+@bp.route("/api/ai-analisis", endpoint="api_ai_analisis")
+def api_ai_analisis():
+    """
+    Genera un análisis narrativo personalizado usando Claude (Capa 3).
+    Toma los últimos 30 días de datos, detecta patrones (Capa 2) y pide
+    a Claude que los interprete en lenguaje natural con sugerencias accionables.
+
+    Query param: days (int, default 2 — días de serie glucémica enviada)
+    Retorna: { ok, analisis, modelo, tokens, generado_en, error }
+    """
+    days = request.args.get("days", 2, type=int)
+    days = max(1, min(days, 7))
+    try:
+        from utils.claude_analisis import generar_analisis
+        resultado = generar_analisis(days=days)
+        ok = resultado.get("error") is None
+        return jsonify({"ok": ok, **resultado}), (200 if ok else 500)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 # ── Capa 2: Detección de patrones fisiológicos ────────────────────────────────
 @bp.route("/api/patrones/analisis", endpoint="api_patrones_analisis")
 def api_patrones_analisis():

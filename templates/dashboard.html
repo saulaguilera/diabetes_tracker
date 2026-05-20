@@ -159,6 +159,75 @@
   <a href="{{ url_for('calculadora') }}" class="kin-more ms-auto">
     <i class="bi bi-calculator me-1"></i>Calcular
   </a>
+  <button onclick="abrirAnalisisIA()" class="kin-more kin-ai-btn" title="Análisis con IA">
+    <i class="bi bi-stars me-1"></i>Análisis IA
+  </button>
+</div>
+
+{# ── Modal Análisis IA ─────────────────────────────────────────────────────── #}
+<div class="modal fade" id="modalAnalisisIA" tabindex="-1" aria-labelledby="modalAnalisisIALabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:560px;">
+    <div class="modal-content" style="border-radius:18px; border:1px solid var(--border); background:var(--surface);">
+      <div class="modal-header border-0 pb-0 pt-4 px-4">
+        <div class="d-flex align-items-center gap-2">
+          <span style="font-size:1.4rem;">🤖</span>
+          <div>
+            <h6 class="modal-title mb-0 fw-800" id="modalAnalisisIALabel" style="font-size:1rem;">
+              Análisis con IA
+            </h6>
+            <div class="text-muted" style="font-size:.72rem;">Powered by Claude · últimas 48h</div>
+          </div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body px-4 py-3">
+
+        {# Estado: cargando #}
+        <div id="ia-loading" class="text-center py-5" style="display:none;">
+          <div class="spinner-border text-primary mb-3" role="status" style="width:2.5rem;height:2.5rem;">
+            <span class="visually-hidden">Cargando...</span>
+          </div>
+          <div class="fw-600" style="font-size:.9rem;">Analizando tus datos…</div>
+          <div class="text-muted mt-1" style="font-size:.78rem;">Claude está revisando tus últimas 48h de glucosa, comidas e insulina.</div>
+        </div>
+
+        {# Estado: resultado #}
+        <div id="ia-resultado" style="display:none;">
+          <div id="ia-texto" class="ia-markdown"></div>
+          <div id="ia-footer" class="mt-3 pt-3 border-top d-flex justify-content-between align-items-center" style="font-size:.7rem; color:var(--text-muted);">
+            <span id="ia-modelo"></span>
+            <span id="ia-tokens"></span>
+          </div>
+        </div>
+
+        {# Estado: error #}
+        <div id="ia-error" class="alert alert-danger py-2" style="display:none; font-size:.82rem;">
+          <i class="bi bi-exclamation-triangle-fill me-2"></i>
+          <span id="ia-error-msg"></span>
+        </div>
+
+        {# Estado: inicial (antes de pedir) #}
+        <div id="ia-inicial" class="text-center py-4">
+          <div style="font-size:2.5rem; margin-bottom:.6rem;">🧠</div>
+          <div class="fw-600 mb-1" style="font-size:.95rem;">¿Qué analiza?</div>
+          <ul class="text-start text-muted mt-2" style="font-size:.82rem; line-height:1.6;">
+            <li>Tu curva glucémica de las últimas 48h</li>
+            <li>Patrones fisiológicos recurrentes (Somogyi, alba, ejercicio…)</li>
+            <li>Relación con comidas e insulina</li>
+            <li>Sugerencias concretas para tu próxima consulta</li>
+          </ul>
+          <div class="alert py-2 mt-2" style="background:rgba(99,102,241,.08); border:1px solid rgba(99,102,241,.2); border-radius:10px; font-size:.75rem; color:#6366f1;">
+            <i class="bi bi-info-circle me-1"></i>
+            No reemplaza el criterio médico. Usá este análisis como insumo para tu consulta.
+          </div>
+          <button onclick="pedirAnalisis()" class="btn btn-primary mt-2 px-4 fw-600" style="border-radius:10px;">
+            <i class="bi bi-stars me-2"></i>Generar análisis
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
 </div>
 
 {# ── Stats row ─────────────────────────────────────────────────────────────── #}
@@ -917,6 +986,48 @@ a.insight-chip:hover {
 .pred-seg-hiper { background:#f97316; }
 .pred-dom    { font-size:.60rem; color:var(--text-muted); white-space:nowrap; letter-spacing:-.01em; }
 
+/* ── Botón IA ───────────────────────────────────────────────────────────── */
+.kin-ai-btn {
+  background: linear-gradient(135deg, rgba(99,102,241,.15), rgba(139,92,246,.15));
+  border: 1px solid rgba(99,102,241,.35) !important;
+  color: #6366f1 !important;
+  font-weight: 700 !important;
+  transition: background .2s, box-shadow .2s;
+}
+.kin-ai-btn:hover {
+  background: linear-gradient(135deg, rgba(99,102,241,.25), rgba(139,92,246,.25));
+  box-shadow: 0 0 10px rgba(99,102,241,.25);
+  color: #4f46e5 !important;
+}
+
+/* ── Modal IA — markdown renderizado ───────────────────────────────────── */
+.ia-markdown {
+  font-size: .88rem;
+  line-height: 1.65;
+  color: var(--text);
+}
+.ia-markdown h2 {
+  font-size: 1rem;
+  font-weight: 800;
+  margin: 1.1rem 0 .35rem;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: .25rem;
+}
+.ia-markdown h3 {
+  font-size: .9rem;
+  font-weight: 700;
+  margin: .8rem 0 .25rem;
+}
+.ia-markdown ul, .ia-markdown ol {
+  padding-left: 1.3rem;
+  margin: .3rem 0 .6rem;
+}
+.ia-markdown li { margin-bottom: .25rem; }
+.ia-markdown strong { color: var(--text); font-weight: 700; }
+.ia-markdown p { margin-bottom: .6rem; }
+.ia-markdown em { opacity: .85; }
+
 /* ── Predicción — capa explicativa ─────────────────────────────────────── */
 .pred-pill {
   flex-direction: column;    /* apilamos los bloques verticalmente */
@@ -1182,6 +1293,73 @@ a.insight-chip:hover {
       document.getElementById('resumen-dia-wrap').style.display = '';
     } catch(e) {}
   })();
+
+  // ── Análisis IA (Capa 3) ─────────────────────────────────────────────────
+  let _iaModal = null;
+  let _iaYaCargado = false;
+
+  function abrirAnalisisIA() {
+    if (!_iaModal) {
+      _iaModal = new bootstrap.Modal(document.getElementById('modalAnalisisIA'));
+    }
+    _iaModal.show();
+  }
+
+  async function pedirAnalisis() {
+    // Mostrar spinner, ocultar el resto
+    document.getElementById('ia-inicial').style.display  = 'none';
+    document.getElementById('ia-resultado').style.display = 'none';
+    document.getElementById('ia-error').style.display     = 'none';
+    document.getElementById('ia-loading').style.display   = '';
+
+    try {
+      const r = await fetch('/api/ai-analisis?days=2');
+      const d = await r.json();
+
+      document.getElementById('ia-loading').style.display = 'none';
+
+      if (!d.ok || d.error) {
+        document.getElementById('ia-error-msg').textContent = d.error || 'Error desconocido.';
+        document.getElementById('ia-error').style.display = '';
+        return;
+      }
+
+      // Renderizar Markdown básico → HTML
+      const html = markdownBasico(d.analisis || '');
+      document.getElementById('ia-texto').innerHTML = html;
+      document.getElementById('ia-modelo').textContent  = `Modelo: ${d.modelo || 'claude'}`;
+      document.getElementById('ia-tokens').textContent  =
+        d.tokens ? `${d.tokens.input} → ${d.tokens.output} tokens` : '';
+
+      document.getElementById('ia-resultado').style.display = '';
+      _iaYaCargado = true;
+
+    } catch(e) {
+      document.getElementById('ia-loading').style.display = 'none';
+      document.getElementById('ia-error-msg').textContent = 'No se pudo conectar con la IA.';
+      document.getElementById('ia-error').style.display   = '';
+    }
+  }
+
+  /** Convierte Markdown básico a HTML seguro (sin dependencias externas). */
+  function markdownBasico(md) {
+    return md
+      // Encabezados ## y ###
+      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+      // Negritas **texto**
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      // Cursiva *texto*
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      // Listas - item
+      .replace(/^- (.+)$/gm, '<li>$1</li>')
+      // Envolver <li> consecutivos en <ul>
+      .replace(/(<li>.*<\/li>\n?)+/gs, m => `<ul>${m}</ul>`)
+      // Párrafos (líneas sueltas)
+      .replace(/^(?!<[hul])(.+)$/gm, '<p>$1</p>')
+      // Limpiar párrafos vacíos
+      .replace(/<p>\s*<\/p>/g, '');
+  }
 
   // Badge de alertas: ocultar si ya fue visto
   const NOTIF_KEY  = 'dt_notif_read_count';
