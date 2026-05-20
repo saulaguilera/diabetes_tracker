@@ -291,6 +291,29 @@ def api_pmm_explain():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@bp.route("/api/pmm/gp-status", endpoint="api_pmm_gp_status")
+def api_pmm_gp_status():
+    """
+    Estado del Gaussian Process corrector de predicción.
+
+    Retorna:
+        active          : bool — GP activo con suficientes datos
+        n_train         : int  — puntos de entrenamiento
+        hyperparams     : { length_scale_min, signal_std_mgdl, noise_std_mgdl }
+        corrections     : { plus_30: { correction, std, reliable }, plus_60: ... }
+        interpretation  : descripción en español
+        trained_ago_s   : segundos desde el último entrenamiento
+    """
+    err = _require_login()
+    if err:
+        return err
+    try:
+        from utils.gp_corrector import get_gp_status
+        return jsonify(get_gp_status())
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @bp.route("/api/pmm/learning-curve", endpoint="api_pmm_learning_curve")
 def api_pmm_learning_curve():
     """

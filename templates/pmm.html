@@ -331,6 +331,22 @@
     </div>
   </div>
 
+  {# GP Corrector #}
+  <div class="pmm-section mb-3">
+    <div class="pmm-section-header">
+      <div class="pmm-section-title">
+        <i class="bi bi-bezier2" style="color:#6366f1"></i>
+        GP Corrector
+      </div>
+      <span class="pmm-section-sub">Fase 5</span>
+    </div>
+    <div class="pmm-section-body">
+      <div id="gp-wrap">
+        <div class="pmm-loader"><i class="bi bi-arrow-clockwise"></i></div>
+      </div>
+    </div>
+  </div>
+
   {# Absorción por categoría #}
   <div class="pmm-section mb-3">
     <div class="pmm-section-header">
@@ -736,7 +752,68 @@ const style = document.createElement('style');
 style.textContent = '@keyframes spin{to{transform:rotate(360deg)}}.spin{animation:spin .8s linear infinite;display:inline-block}';
 document.head.appendChild(style);
 
+// ── GP Corrector ──────────────────────────────────────────────────────────────
+async function loadGP() {
+  try {
+    const d = await fetch('/api/pmm/gp-status').then(r=>r.json());
+    if (!d.ok) { $('gp-wrap').innerHTML = `<div class="pmm-loader text-muted">GP no disponible</div>`; return; }
+
+    if (!d.active) {
+      $('gp-wrap').innerHTML = `
+        <div style="font-size:.8rem;color:var(--text-muted);text-align:center;padding:.5rem 0">
+          <i class="bi bi-hourglass-split d-block fs-4 mb-1"></i>
+          Acumulando datos — ${d.n_train||0} / 10 predicciones resueltas necesarias
+        </div>`;
+      return;
+    }
+
+    const h = d.hyperparams || {};
+    const c30 = d.corrections?.plus_30 || {};
+    const c60 = d.corrections?.plus_60 || {};
+
+    const corrBadge = v => {
+      if (Math.abs(v) < 1) return `<span style="color:var(--text-muted)">±0</span>`;
+      const col = v > 0 ? '#f97316' : '#6366f1';
+      return `<span style="color:${col};font-weight:800">${v>0?'+':''}${v}</span>`;
+    };
+
+    $('gp-wrap').innerHTML = `
+      <div style="display:flex;gap:.6rem;margin-bottom:.75rem">
+        <div style="flex:1;border:1.5px solid var(--border);border-radius:10px;padding:.6rem .8rem;text-align:center">
+          <div style="font-size:.6rem;color:var(--text-muted);text-transform:uppercase;font-weight:700">+30 min</div>
+          <div style="font-size:1.2rem;font-weight:800">${corrBadge(c30.correction||0)} <span style="font-size:.7rem;font-weight:400">mg/dL</span></div>
+          <div style="font-size:.65rem;color:var(--text-muted)">±${c30.std||0} incertidumbre</div>
+          <div style="font-size:.6rem;color:${c30.reliable?'#22c55e':'#f59e0b'}">${c30.reliable?'✓ confiable':'⚠ baja conf.'}</div>
+        </div>
+        <div style="flex:1;border:1.5px solid var(--border);border-radius:10px;padding:.6rem .8rem;text-align:center">
+          <div style="font-size:.6rem;color:var(--text-muted);text-transform:uppercase;font-weight:700">+60 min</div>
+          <div style="font-size:1.2rem;font-weight:800">${corrBadge(c60.correction||0)} <span style="font-size:.7rem;font-weight:400">mg/dL</span></div>
+          <div style="font-size:.65rem;color:var(--text-muted)">±${c60.std||0} incertidumbre</div>
+          <div style="font-size:.6rem;color:${c60.reliable?'#22c55e':'#f59e0b'}">${c60.reliable?'✓ confiable':'⚠ baja conf.'}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem;margin-bottom:.6rem">
+        <div style="background:var(--surface2);border-radius:8px;padding:.4rem .5rem;font-size:.7rem">
+          <div style="color:var(--text-muted);font-size:.62rem">Escala temporal</div>
+          <div style="font-weight:700">${h.length_scale_min||'—'} min</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:8px;padding:.4rem .5rem;font-size:.7rem">
+          <div style="color:var(--text-muted);font-size:.62rem">Señal sistemática</div>
+          <div style="font-weight:700">±${h.signal_std_mgdl||'—'} mg/dL</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:8px;padding:.4rem .5rem;font-size:.7rem">
+          <div style="color:var(--text-muted);font-size:.62rem">Ruido estimado</div>
+          <div style="font-weight:700">±${h.noise_std_mgdl||'—'} mg/dL</div>
+        </div>
+      </div>
+      <div style="font-size:.72rem;color:var(--text-secondary);line-height:1.45">${d.interpretation||''}</div>
+      <div style="font-size:.62rem;color:var(--text-muted);margin-top:.4rem">
+        ${d.n_train} puntos · actualizado hace ${d.trained_ago_s||0}s
+      </div>`;
+  } catch(e) { console.error('GP:', e); }
+}
+
 // Arrancar
-document.addEventListener('DOMContentLoaded', loadAll);
+document.addEventListener('DOMContentLoaded', () => { loadAll(); loadGP(); });
 </script>
 {% endblock %}

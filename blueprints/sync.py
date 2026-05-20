@@ -1071,6 +1071,24 @@ def api_predict_glucose():
                 g_final    = round(g_blended)
                 ar_active  = True
 
+            # ── GP corrector — corrige sesgo sistemático del modelo ────────
+            # El GP aprende los residuales (error_30/60) de las últimas horas
+            # y aplica una corrección al valor central. La varianza GP se suma
+            # en cuadratura al σ del MC para propagar incertidumbre correctamente.
+            gp_correction = 0.0
+            gp_variance   = 0.0
+            gp_active     = False
+            try:
+                from utils.gp_corrector import get_gp_correction
+                gp_corr, gp_var = get_gp_correction(horizon_min=delta_min)
+                if abs(gp_corr) > 0.5 or gp_var > 0:
+                    g_final       = round(g_final + gp_corr)
+                    gp_correction = gp_corr
+                    gp_variance   = gp_var
+                    gp_active     = True
+            except Exception:
+                pass   # GP no disponible → continuar sin corrección
+
             # ── Explicación legible de la predicción ──────────────────────
             from utils.explicabilidad import explicar_prediccion
             explicacion = explicar_prediccion(
@@ -1099,8 +1117,9 @@ def api_predict_glucose():
                 "estado":         mc["estado"],
                 "delta_min":      delta_min,
                 "bias_aplicado":  bias_val,
-                # Incertidumbre empírica (no asume Normal)
-                "sigma":          mc["sigma"],
+                # Incertidumbre total: MC + GP en cuadratura
+                # σ²_total = σ²_MC + σ²_GP  (independientes → suma en cuadratura)
+                "sigma":          round(float(_math.sqrt(mc["sigma"]**2 + gp_variance)), 1),
                 "skewness":       mc["skewness"],
                 "p_hipo":         mc["p_hipo"],
                 "p_rango":        mc["p_rango"],
@@ -1130,6 +1149,12 @@ def api_predict_glucose():
                     "weight":    ar_weight      if ar_active else 0,
                     "mc_weight": round(1 - ar_weight, 3) if ar_active else 1.0,
                     "age_min":   ar.get("last_age_min") if ar_active else None,
+                },
+                # Contribución del GP corrector
+                "gp": {
+                    "active":     gp_active,
+                    "correction": round(gp_correction, 1) if gp_active else 0,
+                    "std":        round(float(_math.sqrt(max(0, gp_variance))), 1) if gp_active else 0,
                 },
                 "iob_fut":     round(iob_fut, 2),
                 "cob_fut":     round(cob_fut, 1),
