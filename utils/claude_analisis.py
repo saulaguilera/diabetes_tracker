@@ -24,7 +24,7 @@ from utils.patrones_detector import analizar_patrones
 
 
 # ── Configuración ────────────────────────────────────────────────────────────
-_MODELO        = "claude-opus-4-5"   # mejor razonamiento para análisis médico
+_MODELO        = "claude-haiku-4-5"  # óptimo para análisis de datos estructurados
 _MAX_TOKENS    = 1024
 _SERIE_PUNTOS  = 120   # máximo de puntos de glucosa enviados (~30h a 15-min bins)
 
