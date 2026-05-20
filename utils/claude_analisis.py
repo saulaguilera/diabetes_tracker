@@ -153,6 +153,78 @@ def _seccion_ejercicio(days: int = 7) -> str:
         return "Sin datos de actividad física."
 
 
+def _seccion_predicciones() -> str:
+    """
+    Predicciones actuales + últimas resueltas con error real.
+    Permite a Claude interpretar el estado proyectado y la precisión del modelo.
+    """
+    try:
+        from models import PredictionFeedback
+        from datetime import datetime, timedelta
+
+        # Última predicción registrada (la más reciente, aún no resuelta)
+        ultima = (PredictionFeedback.query
+                  .order_by(PredictionFeedback.predicted_at.desc())
+                  .first())
+
+        lineas = []
+
+        if ultima:
+            ts  = ultima.predicted_at.strftime("%d/%m %H:%M")
+            g_a = round(ultima.g_actual) if ultima.g_actual else "?"
+            p30 = round(ultima.g_pred_30) if ultima.g_pred_30 else "?"
+            p60 = round(ultima.g_pred_60) if ultima.g_pred_60 else "?"
+            iob = round(ultima.iob, 1) if ultima.iob else 0
+            cob = round(ultima.cob, 1) if ultima.cob else 0
+            roc = round(ultima.roc, 2) if ultima.roc else 0
+            isf = round(ultima.isf_used, 0) if ultima.isf_used else "?"
+
+            lineas.append(f"Predicción más reciente ({ts}):")
+            lineas.append(f"  Glucosa base: {g_a} mg/dL  |  ROC: {roc:+.2f} mg/dL/min")
+            lineas.append(f"  → +30 min: {p30} mg/dL")
+            lineas.append(f"  → +60 min: {p60} mg/dL")
+            lineas.append(f"  Contexto: IOB {iob}U  COB {cob}g  ISF {isf} mg/dL/U")
+
+        # Últimas 10 predicciones resueltas (tienen g_real_30 o g_real_60)
+        resueltas = (PredictionFeedback.query
+                     .filter(PredictionFeedback.error_30 != None)  # noqa: E711
+                     .order_by(PredictionFeedback.predicted_at.desc())
+                     .limit(10)
+                     .all())
+
+        if resueltas:
+            errores_30 = [abs(p.error_30) for p in resueltas if p.error_30 is not None]
+            errores_60 = [abs(p.error_60) for p in resueltas if p.error_60 is not None]
+            mae_30 = round(sum(errores_30) / len(errores_30), 1) if errores_30 else None
+            mae_60 = round(sum(errores_60) / len(errores_60), 1) if errores_60 else None
+
+            lineas.append("")
+            lineas.append(f"Precisión reciente del modelo (últimas {len(resueltas)} predicciones resueltas):")
+            if mae_30:
+                cal_30 = "✓ buena" if mae_30 < 15 else "⚠️ moderada" if mae_30 < 25 else "⚠️ alta"
+                lineas.append(f"  MAE +30min: ±{mae_30} mg/dL ({cal_30})")
+            if mae_60:
+                cal_60 = "✓ buena" if mae_60 < 20 else "⚠️ moderada" if mae_60 < 35 else "⚠️ alta"
+                lineas.append(f"  MAE +60min: ±{mae_60} mg/dL ({cal_60})")
+
+            lineas.append("")
+            lineas.append("Últimas predicciones vs realidad:")
+            for p in resueltas[:5]:
+                ts = p.predicted_at.strftime("%d/%m %H:%M")
+                e30 = f"{p.error_30:+.0f}" if p.error_30 is not None else "?"
+                e60 = f"{p.error_60:+.0f}" if p.error_60 is not None else "?"
+                lineas.append(
+                    f"  {ts}  base:{round(p.g_actual) if p.g_actual else '?'}"
+                    f"  pred30:{round(p.g_pred_30) if p.g_pred_30 else '?'}(err:{e30})"
+                    f"  pred60:{round(p.g_pred_60) if p.g_pred_60 else '?'}(err:{e60})"
+                )
+
+        return "\n".join(lineas) if lineas else "Sin predicciones registradas aún."
+
+    except Exception as e:
+        return f"(predicciones no disponibles: {e})"
+
+
 def _seccion_parametros() -> str:
     """ISF, ICR, basal e IOB/COB actuales."""
     lineas = []
@@ -278,6 +350,11 @@ def _construir_prompt(datos: dict, days: int) -> tuple[str, str]:
 ## Mis parámetros personales
 {_seccion_parametros()}
 
+## Predicciones del modelo y su precisión
+```
+{_seccion_predicciones()}
+```
+
 ## Patrones detectados (últimos 30 días)
 {_formatear_patrones(patrones)}
 
@@ -301,11 +378,12 @@ def _construir_prompt(datos: dict, days: int) -> tuple[str, str]:
 {_resumir_serie(serie)}
 ```
 
-Por favor:
-1. **Qué está pasando** — describí el panorama general de mi glucosa.
-2. **Conexiones clave** — cruzá la serie con comidas, insulina y ejercicio: ¿qué causa los picos o las caídas que ves?
-3. **Patrones importantes** — de los detectados, ¿cuáles son los que más me afectan?
-4. **3 sugerencias concretas** para llevar a mi próxima consulta médica.
+Por favor, estructurá tu respuesta así:
+1. **Panorama general** — qué está pasando con mi glucosa ahora mismo.
+2. **Conexiones clave** — cruzá la serie con comidas, insulina y ejercicio: ¿qué causa los picos o caídas que ves?
+3. **Interpretación de predicciones** — ¿el modelo está prediciendo bien? ¿qué dice sobre lo que viene? ¿hay algo para estar atento?
+4. **Patrones importantes** — de los detectados, ¿cuáles son los que más me afectan?
+5. **3 sugerencias concretas** para llevar a mi próxima consulta médica.
 """
 
     return system, user
