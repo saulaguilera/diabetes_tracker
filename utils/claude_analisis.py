@@ -159,12 +159,11 @@ def _seccion_predicciones() -> str:
     Permite a Claude interpretar el estado proyectado y la precisión del modelo.
     """
     try:
-        from models import PredictionFeedback
-        from datetime import datetime, timedelta
+        from models import GlucosePrediction
 
-        # Última predicción registrada (la más reciente, aún no resuelta)
-        ultima = (PredictionFeedback.query
-                  .order_by(PredictionFeedback.predicted_at.desc())
+        # Última predicción registrada (la más reciente)
+        ultima = (GlucosePrediction.query
+                  .order_by(GlucosePrediction.predicted_at.desc())
                   .first())
 
         lineas = []
@@ -185,10 +184,10 @@ def _seccion_predicciones() -> str:
             lineas.append(f"  → +60 min: {p60} mg/dL")
             lineas.append(f"  Contexto: IOB {iob}U  COB {cob}g  ISF {isf} mg/dL/U")
 
-        # Últimas 10 predicciones resueltas (tienen g_real_30 o g_real_60)
-        resueltas = (PredictionFeedback.query
-                     .filter(PredictionFeedback.error_30 != None)  # noqa: E711
-                     .order_by(PredictionFeedback.predicted_at.desc())
+        # Últimas 10 predicciones resueltas (con error calculado)
+        resueltas = (GlucosePrediction.query
+                     .filter(GlucosePrediction.error_30 != None)  # noqa: E711
+                     .order_by(GlucosePrediction.predicted_at.desc())
                      .limit(10)
                      .all())
 
