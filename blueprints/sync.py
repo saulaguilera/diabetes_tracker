@@ -1593,6 +1593,42 @@ def api_ai_analisis():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+# ── Capa visión: análisis de foto de comida ───────────────────────────────────
+@bp.route("/api/analizar-foto", methods=["POST"], endpoint="api_analizar_foto")
+def api_analizar_foto():
+    """
+    Recibe una foto de comida (multipart field 'foto') y devuelve
+    macronutrientes estimados por ingrediente usando Claude Vision.
+
+    Retorna:
+        ok, nombre_plato, ingredientes[], advertencia,
+        confianza_general, modelo, tokens, error
+    """
+    if not session.get("logged_in"):
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    if "foto" not in request.files:
+        return jsonify({"ok": False, "error": "No se recibió imagen (field 'foto')"}), 400
+
+    foto = request.files["foto"]
+    if not foto or foto.filename == "":
+        return jsonify({"ok": False, "error": "Archivo vacío"}), 400
+
+    media_type = foto.content_type or "image/jpeg"
+    if not media_type.startswith("image/"):
+        return jsonify({"ok": False, "error": "El archivo debe ser una imagen"}), 400
+
+    image_bytes = foto.read()
+
+    try:
+        from utils.foto_analisis import analizar_foto
+        resultado = analizar_foto(image_bytes, media_type=media_type)
+        status = 200 if resultado.get("ok") else 422
+        return jsonify(resultado), status
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 # ── Capa 2: Detección de patrones fisiológicos ────────────────────────────────
 @bp.route("/api/patrones/analisis", endpoint="api_patrones_analisis")
 def api_patrones_analisis():

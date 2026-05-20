@@ -22,6 +22,79 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
 
+    <!-- ── Análisis IA por foto ─────────────────────────────────────────── -->
+    {% if not editar %}
+    <div class="foto-ia-zone mb-3" id="foto-ia-zone">
+      <input type="file" id="foto-input" accept="image/*" capture="environment"
+             style="display:none;" onchange="fotoSeleccionada(this)">
+
+      <!-- Estado 0: botón invitación -->
+      <div id="foto-estado-0">
+        <button type="button" class="foto-ia-btn" onclick="document.getElementById('foto-input').click()">
+          <i class="bi bi-camera-fill foto-ia-icon"></i>
+          <div>
+            <div class="foto-ia-title">Fotografiar la comida</div>
+            <div class="foto-ia-sub">Claude estima los macros automáticamente</div>
+          </div>
+          <i class="bi bi-chevron-right foto-ia-arrow"></i>
+        </button>
+      </div>
+
+      <!-- Estado 1: procesando -->
+      <div id="foto-estado-1" style="display:none;">
+        <div class="foto-procesando">
+          <div class="foto-preview-wrap">
+            <img id="foto-preview" src="" alt="preview" class="foto-preview-img">
+            <div class="foto-overlay">
+              <div class="spinner-border text-white" style="width:2rem;height:2rem;" role="status"></div>
+              <div class="foto-overlay-txt">Analizando…</div>
+            </div>
+          </div>
+          <div class="foto-procesando-msg">Claude está identificando los ingredientes</div>
+        </div>
+      </div>
+
+      <!-- Estado 2: resultado -->
+      <div id="foto-estado-2" style="display:none;">
+        <div class="foto-resultado-header">
+          <div class="foto-resultado-titulo">
+            <i class="bi bi-check-circle-fill text-success me-1"></i>
+            <span id="foto-nombre-plato" class="fw-bold"></span>
+          </div>
+          <button type="button" class="foto-retry-btn"
+                  onclick="document.getElementById('foto-input').click()"
+                  title="Usar otra foto">
+            <i class="bi bi-arrow-repeat"></i> Otra foto
+          </button>
+        </div>
+        <div id="foto-confianza-warn" class="foto-conf-warn" style="display:none;">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+          <span id="foto-conf-warn-txt"></span>
+        </div>
+        <div id="foto-advertencia" class="foto-advertencia" style="display:none;">
+          <i class="bi bi-info-circle-fill"></i>
+          <span id="foto-advertencia-txt"></span>
+        </div>
+        <div id="foto-chips" class="foto-chips"></div>
+        <button type="button" class="foto-usar-btn" onclick="usarResultadoFoto()">
+          <i class="bi bi-plus-circle me-1"></i>Agregar como ingredientes
+        </button>
+      </div>
+
+      <!-- Estado error -->
+      <div id="foto-estado-error" style="display:none;">
+        <div class="foto-error-wrap">
+          <i class="bi bi-exclamation-circle text-danger"></i>
+          <span id="foto-error-msg" class="ms-1"></span>
+          <button type="button" class="foto-retry-btn ms-2"
+                  onclick="document.getElementById('foto-input').click()">
+            Reintentar
+          </button>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
     {% if editar and not item.components %}
     <!-- Banner: invitar a agregar ingredientes en registros viejos -->
     <div class="comp-upgrade-banner mb-3">
@@ -453,6 +526,154 @@ function escJson(obj) {
   return JSON.stringify(obj).replace(/"/g, '&quot;');
 }
 
+/* ── Análisis por foto ───────────────────────────────────────────────── */
+let _fotoResultado = null;   // guarda el último resultado de la API
+
+function fotoSetEstado(n) {
+  [0, 1, 2, 'error'].forEach(s =>
+    document.getElementById(`foto-estado-${s}`).style.display = 'none');
+  document.getElementById(`foto-estado-${n}`).style.display = '';
+}
+
+async function fotoSeleccionada(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  // Mostrar preview + spinner
+  const preview = document.getElementById('foto-preview');
+  preview.src = URL.createObjectURL(file);
+  fotoSetEstado(1);
+
+  // Redimensionar client-side si > 1.5 MB (reduce costo tokens)
+  let blob = file;
+  if (file.size > 1.5 * 1024 * 1024) {
+    blob = await redimensionarImagen(file, 1280);
+  }
+
+  // Subir al servidor
+  const fd = new FormData();
+  fd.append('foto', blob, file.name);
+
+  try {
+    const resp = await fetch('/api/analizar-foto', { method: 'POST', body: fd });
+    const data = await resp.json();
+
+    if (!data.ok || data.error) {
+      document.getElementById('foto-error-msg').textContent =
+        data.error || 'Error desconocido al analizar la foto.';
+      fotoSetEstado('error');
+      return;
+    }
+
+    _fotoResultado = data;
+    mostrarResultadoFoto(data);
+  } catch (e) {
+    document.getElementById('foto-error-msg').textContent = 'Sin conexión o error de red.';
+    fotoSetEstado('error');
+  }
+
+  // Reset input para poder elegir la misma foto otra vez
+  input.value = '';
+}
+
+function mostrarResultadoFoto(data) {
+  // Nombre del plato
+  document.getElementById('foto-nombre-plato').textContent =
+    data.nombre_plato || 'Comida detectada';
+
+  // Advertencia clínica
+  const advEl = document.getElementById('foto-advertencia');
+  const advTxt = document.getElementById('foto-advertencia-txt');
+  if (data.advertencia) {
+    advTxt.textContent = data.advertencia;
+    advEl.style.display = '';
+  } else {
+    advEl.style.display = 'none';
+  }
+
+  // Confianza baja general
+  const confWarn  = document.getElementById('foto-confianza-warn');
+  const confTxt   = document.getElementById('foto-conf-warn-txt');
+  if (data.confianza_general === 'baja') {
+    confTxt.textContent = 'Confianza baja — revisá los valores antes de guardar.';
+    confWarn.style.display = '';
+  } else if (data.confianza_general === 'media') {
+    confTxt.textContent = 'Confianza media — revisá los CH especialmente.';
+    confWarn.style.display = '';
+  } else {
+    confWarn.style.display = 'none';
+  }
+
+  // Chips por ingrediente
+  const chips = document.getElementById('foto-chips');
+  chips.innerHTML = (data.ingredientes || []).map((ing, i) => {
+    const confColor = ing.confianza === 'alta' ? '#16a34a'
+                    : ing.confianza === 'media' ? '#d97706' : '#dc2626';
+    const confIcon  = ing.confianza === 'alta'  ? 'bi-check-circle-fill'
+                    : ing.confianza === 'media' ? 'bi-exclamation-circle-fill'
+                    :                             'bi-question-circle-fill';
+    return `<div class="foto-ing-chip" data-idx="${i}">
+      <div class="foto-ing-nombre">
+        <i class="bi ${confIcon}" style="color:${confColor};font-size:.7rem;"></i>
+        ${escHtml(ing.nombre)}
+        ${ing.gramos_estimados ? `<span class="foto-ing-g">${ing.gramos_estimados}g</span>` : ''}
+      </div>
+      <div class="foto-ing-macros">
+        <span class="foto-macro foto-macro-ch">${ing.carbs_g}g CH</span>
+        <span class="foto-macro foto-macro-p">${ing.protein_g}g P</span>
+        <span class="foto-macro foto-macro-f">${ing.fat_g}g G</span>
+        ${ing.calorias ? `<span class="foto-macro foto-macro-kcal">${ing.calorias} kcal</span>` : ''}
+      </div>
+      ${ing.nota ? `<div class="foto-ing-nota"><i class="bi bi-info-circle"></i> ${escHtml(ing.nota)}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  fotoSetEstado(2);
+}
+
+function usarResultadoFoto() {
+  if (!_fotoResultado) return;
+
+  // Pre-llenar nombre del plato si está vacío
+  const nombreInput = document.getElementById('meal-name');
+  if (nombreInput && !nombreInput.value.trim() && _fotoResultado.nombre_plato) {
+    nombreInput.value = _fotoResultado.nombre_plato;
+  }
+
+  // Agregar cada ingrediente como fila
+  (_fotoResultado.ingredientes || []).forEach(ing => {
+    addComponent({
+      name:     ing.nombre,
+      carbs:    ing.carbs_g,
+      protein:  ing.protein_g,
+      fat:      ing.fat_g,
+      calories: ing.calorias,
+    });
+  });
+
+  // Ocultar la zona foto y hacer scroll al resumen
+  document.getElementById('foto-ia-zone').style.display = 'none';
+  document.getElementById('macro-summary')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+/* Redimensiona una imagen en canvas para reducir tamaño de subida */
+async function redimensionarImagen(file, maxPx) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const w = Math.round(img.width  * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      canvas.toBlob(blob => resolve(blob || file), 'image/jpeg', 0.88);
+    };
+    img.onerror = () => resolve(file);
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 /* ── Init ────────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
   if (EDIT_COMPONENTS.length > 0) {
@@ -594,5 +815,150 @@ document.addEventListener('DOMContentLoaded', () => {
 @media (max-width: 500px) {
   .comp-macros { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ── Zona análisis por foto ──────────────────────────────────────────── */
+.foto-ia-zone {
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1.5px solid var(--border);
+  background: var(--surface2);
+}
+
+/* Botón invitación (estado 0) */
+.foto-ia-btn {
+  display: flex; align-items: center; gap: .85rem;
+  width: 100%; padding: .85rem 1rem;
+  background: none; border: none; cursor: pointer;
+  text-align: left; transition: background .15s;
+}
+.foto-ia-btn:hover { background: rgba(99,102,241,.06); }
+.foto-ia-icon {
+  font-size: 1.5rem;
+  color: #6366f1;
+  flex-shrink: 0;
+  width: 2.4rem; height: 2.4rem;
+  background: rgba(99,102,241,.12);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+}
+.foto-ia-title {
+  font-size: .9rem; font-weight: 700; color: var(--text);
+}
+.foto-ia-sub {
+  font-size: .75rem; color: var(--text-muted); margin-top: 1px;
+}
+.foto-ia-arrow {
+  margin-left: auto; color: var(--text-muted); font-size: .8rem; flex-shrink: 0;
+}
+
+/* Estado 1: procesando */
+.foto-procesando {
+  padding: .75rem 1rem;
+  display: flex; align-items: center; gap: .9rem;
+}
+.foto-preview-wrap {
+  position: relative; flex-shrink: 0;
+  width: 70px; height: 70px; border-radius: 10px; overflow: hidden;
+}
+.foto-preview-img {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.foto-overlay {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,.55);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+}
+.foto-overlay-txt {
+  font-size: .6rem; color: #fff; font-weight: 600;
+}
+.foto-procesando-msg {
+  font-size: .82rem; color: var(--text-muted);
+}
+
+/* Estado 2: resultado */
+.foto-resultado-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .65rem 1rem .4rem;
+  border-bottom: 1px solid var(--border);
+}
+.foto-resultado-titulo {
+  font-size: .88rem; color: var(--text);
+}
+.foto-retry-btn {
+  font-size: .72rem; font-weight: 600; color: var(--text-muted);
+  background: none; border: 1px solid var(--border);
+  border-radius: 8px; padding: .2rem .55rem; cursor: pointer;
+  transition: all .15s;
+}
+.foto-retry-btn:hover { background: var(--surface); color: var(--text); }
+
+.foto-conf-warn {
+  display: flex; align-items: center; gap: .4rem;
+  margin: .4rem .9rem 0;
+  font-size: .76rem; font-weight: 600; color: #d97706;
+  background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.25);
+  border-radius: 8px; padding: .3rem .6rem;
+}
+.foto-advertencia {
+  display: flex; align-items: flex-start; gap: .4rem;
+  margin: .4rem .9rem 0;
+  font-size: .76rem; color: #2563eb;
+  background: rgba(59,130,246,.08); border: 1px solid rgba(59,130,246,.22);
+  border-radius: 8px; padding: .3rem .6rem;
+}
+
+/* Chips de ingredientes detectados */
+.foto-chips {
+  display: flex; flex-direction: column; gap: .35rem;
+  padding: .5rem .9rem;
+}
+.foto-ing-chip {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: .45rem .65rem;
+}
+.foto-ing-nombre {
+  font-size: .84rem; font-weight: 600; color: var(--text);
+  display: flex; align-items: center; gap: .3rem; flex-wrap: wrap;
+}
+.foto-ing-g {
+  font-size: .68rem; color: var(--text-muted);
+  background: var(--surface2); border-radius: 6px;
+  padding: .05rem .35rem; margin-left: .2rem;
+}
+.foto-ing-macros {
+  display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .3rem;
+}
+.foto-macro {
+  font-size: .72rem; font-weight: 700;
+  padding: .1em .42em; border-radius: 6px;
+}
+.foto-macro-ch   { background: rgba(245,158,11,.12); color: #d97706; }
+.foto-macro-p    { background: rgba(99,102,241,.10); color: #6366f1; }
+.foto-macro-f    { background: rgba(249,115,22,.10); color: #c2410c; }
+.foto-macro-kcal { background: var(--surface2); color: var(--text-muted); }
+.foto-ing-nota {
+  font-size: .68rem; color: var(--text-muted); margin-top: .25rem;
+  display: flex; align-items: flex-start; gap: .25rem;
+}
+
+.foto-usar-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: calc(100% - 1.8rem); margin: 0 .9rem .75rem;
+  padding: .55rem; border-radius: 10px;
+  background: rgba(34,197,94,.12); border: 1.5px solid rgba(34,197,94,.3);
+  color: #15803d; font-size: .86rem; font-weight: 700; cursor: pointer;
+  transition: all .15s;
+}
+.foto-usar-btn:hover { background: rgba(34,197,94,.2); }
+
+/* Error */
+.foto-error-wrap {
+  display: flex; align-items: center; flex-wrap: wrap; gap: .4rem;
+  padding: .7rem 1rem;
+  font-size: .82rem; color: #dc2626;
+}
+
+[data-theme="dark"] .foto-ia-zone { background: var(--surface); }
+[data-theme="dark"] .foto-ing-chip { background: var(--surface2); }
 </style>
 {% endblock %}
