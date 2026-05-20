@@ -60,13 +60,14 @@ def run_calibration(force_bootstrap: bool = False) -> dict:
     """
     t_start = datetime.utcnow()
     stats = {
-        "isf_updates": 0,
-        "icr_updates": 0,
-        "isf_skipped": 0,
-        "icr_skipped": 0,
-        "bootstrap":   False,
-        "duration_ms": 0,
-        "errors":      [],
+        "isf_updates":        0,
+        "icr_updates":        0,
+        "absorption_updates": 0,
+        "isf_skipped":        0,
+        "icr_skipped":        0,
+        "bootstrap":          False,
+        "duration_ms":        0,
+        "errors":             [],
     }
 
     try:
@@ -134,6 +135,13 @@ def run_calibration(force_bootstrap: bool = False) -> dict:
             if dose_id in processed_meal_ids:
                 continue
             _process_icr_episode(ep, stats)
+
+        # ── Absorción: speed_factor por categoría ──────────────────────────────
+        from pmm.engines.absorption import run_absorption_calibration
+        abs_stats = run_absorption_calibration(force_bootstrap=is_bootstrap)
+        stats["absorption_updates"] = abs_stats.get("updates", 0)
+        if abs_stats.get("errors"):
+            stats["errors"].extend(abs_stats["errors"])
 
     except Exception as exc:
         logger.exception("Error en PMM calibration")

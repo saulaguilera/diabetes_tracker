@@ -136,6 +136,33 @@ def api_pmm_recalibrate():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@bp.route("/api/pmm/absorption", endpoint="api_pmm_absorption")
+def api_pmm_absorption():
+    """
+    Estado del aprendizaje de velocidad de absorción por categoría de comida.
+
+    Retorna para cada bucket (FAST / MED / SLOW):
+        mu            : speed_factor estimado (1.0 = igual al modelo poblacional)
+        sigma         : incertidumbre
+        ci_95_lo/hi   : intervalo de confianza
+        n_obs         : observaciones usadas
+        confidence    : 0-1
+        source        : 'learned' | 'prior'
+        k_a_default   : constante de vaciado gástrico poblacional (min⁻¹)
+        k_a_personal  : k_a_default × speed_factor (el que usa el modelo)
+        interpretation: texto explicativo
+    """
+    err = _require_login()
+    if err:
+        return err
+    try:
+        from pmm.engines.absorption import get_all_speed_factors
+        data = get_all_speed_factors()
+        return jsonify({"ok": True, "absorption": data})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @bp.route("/api/pmm/anomaly", endpoint="api_pmm_anomaly")
 def api_pmm_anomaly():
     """

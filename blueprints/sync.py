@@ -899,6 +899,20 @@ def api_predict_glucose():
         except Exception:
             pass   # PMM no disponible → continuar con método clásico
 
+        # PMM Phase 4: speed factors de absorción por categoría de comida
+        pmm_speed_factors: dict | None = None
+        try:
+            from pmm.engines.absorption import get_speed_factor, _CATEGORY_TO_BUCKET
+            sf_fast = get_speed_factor("Dulces/Postres")  # bucket FAST
+            sf_med  = get_speed_factor("Cereales")         # bucket MED
+            sf_slow = get_speed_factor("Legumbres")        # bucket SLOW
+            # Solo activar si al menos un bucket tiene observaciones
+            # (get_speed_factor devuelve 1.0 cuando n_obs < MIN_OBS)
+            if sf_fast != 1.0 or sf_med != 1.0 or sf_slow != 1.0:
+                pmm_speed_factors = {"FAST": sf_fast, "MED": sf_med, "SLOW": sf_slow}
+        except Exception:
+            pass
+
         # ISF circadiano por hora actual
         isf_circ = _calcular_isf_circadiano(days=90)
         isf_bloque, bloque_label, _ = _isf_para_hora(hora, isf_circ, isf_personal)
@@ -988,7 +1002,8 @@ def api_predict_glucose():
         for delta_min in (30, 60):
             t_fut    = now + timedelta(minutes=delta_min)
             iob_fut  = current_iob(boluses,   at_time=t_fut, peak_min=peak_min, dia_min=dia_min)
-            cob_fut  = current_cob(meals_ext, at_time=t_fut)
+            cob_fut  = current_cob(meals_ext, at_time=t_fut,
+                                   pmm_speed_factors=pmm_speed_factors)
             # ΔIOB para predicción: bolus siempre + basal solo si es reciente.
             #
             # La basal en estado estable (> 4h) ya está capturada en el ROC del

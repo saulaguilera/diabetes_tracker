@@ -700,6 +700,7 @@ def current_cob(
     meal_list,
     at_time: Optional[datetime] = None,
     roc: Optional[float] = None,
+    pmm_speed_factors: Optional[dict] = None,
 ) -> float:
     """
     Compute total active carbohydrates (grams) at `at_time`.
@@ -707,14 +708,20 @@ def current_cob(
     For full fat+protein picture use current_cob_detailed().
     roc: Rate of Change mg/dL/min from CGM (negative = falling).
          If provided, applies dynamic correction when glucose is dropping.
+    pmm_speed_factors: dict {'FAST': float, 'MED': float, 'SLOW': float}
+         Speed-factor multipliers on k_a learned by PMM Phase 4.
     """
-    return current_cob_detailed(meal_list, at_time, roc=roc)["carbs_cob"]
+    return current_cob_detailed(
+        meal_list, at_time, roc=roc,
+        pmm_speed_factors=pmm_speed_factors,
+    )["carbs_cob"]
 
 
 def current_cob_detailed(
     meal_list,
     at_time: Optional[datetime] = None,
     roc: Optional[float] = None,
+    pmm_speed_factors: Optional[dict] = None,
 ) -> dict:
     """
     Full COB breakdown including fat+protein glucose equivalent.
@@ -751,7 +758,15 @@ def current_cob_detailed(
         # Fast carbs — modelo 2 compartimentos (gástrico → intestinal → sangre)
         carbs_cob = 0.0
         if carbs > 0:
-            k_a       = _ka_for_meal(meal)
+            k_a = _ka_for_meal(meal)
+            # PMM Phase 4: aplicar speed_factor personal por categoría si está disponible
+            if pmm_speed_factors:
+                from pmm.engines.absorption import _CATEGORY_TO_BUCKET, _BUCKET_DEFAULT
+                bucket = _CATEGORY_TO_BUCKET.get(
+                    getattr(meal, "categoria", None) or "", _BUCKET_DEFAULT
+                )
+                speed = pmm_speed_factors.get(bucket, 1.0)
+                k_a = k_a * max(0.2, min(3.0, speed))
             carbs_cob = carbs * _cob_fraction_2comp(elapsed_min, k_a)
 
         # Fat glucose equivalent

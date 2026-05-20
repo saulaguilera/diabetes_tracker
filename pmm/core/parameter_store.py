@@ -24,14 +24,20 @@ from typing import Optional
 # ── Priors por defecto (amplios, no informados) ────────────────────────────────
 # Se usan cuando no hay ningún dato del usuario.
 _PRIORS = {
-    "ISF": {"mu": 45.0, "sigma": 20.0},   # mg/dL·U — rango clínico típico 20-100
-    "ICR": {"mu": 12.0, "sigma": 6.0},    # g CH / U  — rango clínico típico 5-25
+    "ISF":          {"mu": 45.0, "sigma": 20.0},   # mg/dL·U — rango clínico típico 20-100
+    "ICR":          {"mu": 12.0, "sigma": 6.0},    # g CH / U  — rango clínico típico 5-25
+    "KASPEED_FAST": {"mu": 1.0,  "sigma": 0.25},   # speed factor — 1.0 = igual al modelo poblacional
+    "KASPEED_MED":  {"mu": 1.0,  "sigma": 0.25},
+    "KASPEED_SLOW": {"mu": 1.0,  "sigma": 0.25},
 }
 
 # Mínimo de sigma admisible (nunca podemos saber el ISF exacto)
 _SIGMA_FLOOR = {
-    "ISF": 3.0,
-    "ICR": 1.0,
+    "ISF":          3.0,
+    "ICR":          1.0,
+    "KASPEED_FAST": 0.08,
+    "KASPEED_MED":  0.08,
+    "KASPEED_SLOW": 0.08,
 }
 
 # Forgetting factor por observación: λ = 0.995
@@ -42,8 +48,11 @@ _LAMBDA = 0.995
 # Ruido de observación base (incertidumbre de medición física)
 # Incluso una observación perfecta tiene ruido por sensor, timing, etc.
 _OBS_SIGMA_BASE = {
-    "ISF": 8.0,   # mg/dL·U
-    "ICR": 2.5,   # g CH / U
+    "ISF":          8.0,   # mg/dL·U
+    "ICR":          2.5,   # g CH / U
+    "KASPEED_FAST": 0.20,  # speed factor — ruido base de la observación
+    "KASPEED_MED":  0.20,
+    "KASPEED_SLOW": 0.20,
 }
 
 
