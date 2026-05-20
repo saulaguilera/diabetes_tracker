@@ -129,7 +129,7 @@
       <div class="epred-alerta"></div>
     </div>
 
-    <div class="en-pred en-pred-sep" id="pred-60">
+    <div class="en-pred" id="pred-60">
       <div class="en-pred-time">+60 min</div>
       <div class="epred-val">…</div>
       <div class="pred-prob-bar">
@@ -1309,14 +1309,15 @@ a.insight-chip:hover {
   gap: .5rem;
 }
 .en-pred {
-  display: flex; flex-direction: column; gap: .25rem;
-  padding: .6rem .75rem;
+  display: flex; flex-direction: column; gap: .22rem;
+  padding: .6rem .7rem;
   border-radius: 12px;
   border: 1.5px solid var(--border);
   background: var(--surface2);
   transition: background .2s, border-color .2s;
+  min-width: 0;          /* permite que la celda achique en grid */
+  overflow: hidden;
 }
-.en-pred-sep { border-left: none; border-radius: 12px; }
 .en-pred-time {
   font-size: .62rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: .06em; color: var(--text-muted);
@@ -1329,7 +1330,8 @@ a.insight-chip:hover {
 
 /* Valor de predicción grande */
 .en-pred .epred-val {
-  font-size: 1.5rem; font-weight: 800; line-height: 1; color: var(--text);
+  font-size: 1.35rem; font-weight: 800; line-height: 1; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .en-pred.epred-rango .epred-val { color: #16a34a; }
 .en-pred.epred-hiper .epred-val { color: #ea580c; }
