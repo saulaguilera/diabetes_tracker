@@ -96,72 +96,135 @@
   </div>
 </div>
 
-{# ── Barra de predicción ───────────────────────────────────────────────────── #}
-<div class="pred-bar mb-3" id="pred-bar">
-  <div class="pred-bar-label">
-    <i class="bi bi-graph-up me-1"></i>Predicción
+{# ── Card "Estado ahora" — predicción + contexto + acciones ──────────────── #}
+<div class="estado-card mb-3" id="estado-card">
+
+  {# Header #}
+  <div class="estado-header">
+    <span class="estado-label">
+      <i class="bi bi-graph-up-arrow me-1"></i>Estado ahora
+    </span>
+    <div class="estado-acciones">
+      <a href="{{ url_for('calculadora') }}" class="btn-ea btn-ea-calc">
+        <i class="bi bi-calculator me-1"></i>Calcular
+      </a>
+      <button onclick="abrirAnalisisIA()" class="btn-ea btn-ea-ia">
+        <i class="bi bi-stars me-1"></i>Análisis IA
+      </button>
+    </div>
   </div>
 
-  {# Contenedores de predicción — se llenan por JS #}
-  <div class="pred-pill" id="pred-30" title="Glucemia estimada en 30 min">
-    <span class="pred-time">+30 min</span>
-    <span class="pred-val" id="pred-30-val">…</span>
-    <span class="pred-unit">mg/dL</span>
-  </div>
-  <div class="pred-pill" id="pred-60" title="Glucemia estimada en 60 min">
-    <span class="pred-time">+60 min</span>
-    <span class="pred-val" id="pred-60-val">…</span>
-    <span class="pred-unit">mg/dL</span>
-  </div>
+  {# Body: predicciones + contexto #}
+  <div class="estado-body">
 
-  {# Pills de contexto (compactos) #}
-  {% if insights and insights.kinetics %}
-  {% set kin = insights.kinetics %}
-  {% if kin.iob > 0.05 %}
-  <div class="kin-pill kin-insulin" title="IOB — insulina activa">
-    <i class="bi bi-capsule-pill"></i>
-    <span class="kin-val">{{ "%.1f"|format(kin.iob) }} U</span>
-    <span class="kin-sublabel">IOB</span>
-  </div>
-  {% endif %}
+    {# Predicciones (se llenan por JS) #}
+    <div class="estado-preds">
+      <div class="epred" id="pred-30">
+        <span class="epred-time">+30 min</span>
+        <span class="epred-val">…</span>
+        <div class="epred-detail">
+          <div class="pred-prob-bar">
+            <div class="pred-seg pred-seg-hipo"  style="width:0%"></div>
+            <div class="pred-seg pred-seg-rango" style="width:100%"></div>
+            <div class="pred-seg pred-seg-hiper" style="width:0%"></div>
+          </div>
+          <span class="epred-dom">—</span>
+        </div>
+        <div class="epred-expl"></div>
+        <div class="epred-alerta"></div>
+      </div>
+      <div class="epred" id="pred-60">
+        <span class="epred-time">+60 min</span>
+        <span class="epred-val">…</span>
+        <div class="epred-detail">
+          <div class="pred-prob-bar">
+            <div class="pred-seg pred-seg-hipo"  style="width:0%"></div>
+            <div class="pred-seg pred-seg-rango" style="width:100%"></div>
+            <div class="pred-seg pred-seg-hiper" style="width:0%"></div>
+          </div>
+          <span class="epred-dom">—</span>
+        </div>
+        <div class="epred-expl"></div>
+        <div class="epred-alerta"></div>
+      </div>
+      <span id="pred-mc-note" class="pred-mc-note"></span>
+    </div>
 
-  {% if kin.cob > 1 %}
-  <div class="kin-pill kin-carbs" title="COB — carbohidratos absorbiendo">
-    <i class="bi bi-egg-fried"></i>
-    <span class="kin-val">{{ kin.cob | int }} g</span>
-    <span class="kin-sublabel">COB</span>
-  </div>
-  {% endif %}
+    {# Contexto cinético #}
+    <div class="estado-context">
+      {% if insights and insights.kinetics %}
+      {% set kin = insights.kinetics %}
 
-  {% if kin.cob_detail and kin.cob_detail.fp_cob >= 2 %}
-  <div class="kin-pill kin-fat-prot" title="Efecto retardado de grasa/proteína">
-    <i class="bi bi-clock-history"></i>
-    <span class="kin-val">+{{ kin.cob_detail.fp_cob | int }} g</span>
-    <span class="kin-sublabel">G/P</span>
-  </div>
-  {% endif %}
+      {% if kin.iob > 0.05 %}
+      <div class="ectx-item ectx-insulin">
+        <i class="bi bi-capsule-pill"></i>
+        <div>
+          <div class="ectx-val">{{ "%.1f"|format(kin.iob) }} U</div>
+          <div class="ectx-lbl">IOB activo</div>
+        </div>
+      </div>
+      {% else %}
+      <div class="ectx-item ectx-neutral">
+        <i class="bi bi-capsule-pill"></i>
+        <div>
+          <div class="ectx-val">0 U</div>
+          <div class="ectx-lbl">IOB</div>
+        </div>
+      </div>
+      {% endif %}
 
-  {% if kin.exercise_factor and kin.exercise_factor >= 1.10 %}
-  <div class="kin-pill kin-exercise-up" title="Ejercicio: mayor sensibilidad">
-    <i class="bi bi-heart-pulse-fill"></i>
-    <span class="kin-val">+{{ ((kin.exercise_factor - 1) * 100) | int }}%</span>
-    <span class="kin-sublabel">sens.</span>
-  </div>
-  {% elif kin.exercise_factor and kin.exercise_factor <= 0.92 %}
-  <div class="kin-pill kin-exercise-down" title="Ejercicio agudo: menor sensibilidad">
-    <i class="bi bi-lightning-charge-fill"></i>
-    <span class="kin-val">−{{ ((1 - kin.exercise_factor) * 100) | int }}%</span>
-    <span class="kin-sublabel">sens.</span>
-  </div>
-  {% endif %}
-  {% endif %}
+      {% if kin.cob > 1 %}
+      <div class="ectx-item ectx-carbs">
+        <i class="bi bi-egg-fried"></i>
+        <div>
+          <div class="ectx-val">{{ kin.cob | int }} g</div>
+          <div class="ectx-lbl">COB absorbiendo</div>
+        </div>
+      </div>
+      {% else %}
+      <div class="ectx-item ectx-neutral">
+        <i class="bi bi-egg-fried"></i>
+        <div>
+          <div class="ectx-val">0 g</div>
+          <div class="ectx-lbl">COB</div>
+        </div>
+      </div>
+      {% endif %}
 
-  <a href="{{ url_for('calculadora') }}" class="kin-more ms-auto">
-    <i class="bi bi-calculator me-1"></i>Calcular
-  </a>
-  <button onclick="abrirAnalisisIA()" class="kin-more kin-ai-btn" title="Análisis con IA">
-    <i class="bi bi-stars me-1"></i>Análisis IA
-  </button>
+      {% if kin.cob_detail and kin.cob_detail.fp_cob >= 2 %}
+      <div class="ectx-item ectx-fatprot">
+        <i class="bi bi-clock-history"></i>
+        <div>
+          <div class="ectx-val">+{{ kin.cob_detail.fp_cob | int }} g</div>
+          <div class="ectx-lbl">Grasa/prot tardío</div>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if kin.exercise_factor and kin.exercise_factor >= 1.10 %}
+      <div class="ectx-item ectx-exup">
+        <i class="bi bi-heart-pulse-fill"></i>
+        <div>
+          <div class="ectx-val">+{{ ((kin.exercise_factor - 1)*100)|int }}%</div>
+          <div class="ectx-lbl">Sensibilidad</div>
+        </div>
+      </div>
+      {% elif kin.exercise_factor and kin.exercise_factor <= 0.92 %}
+      <div class="ectx-item ectx-exdown">
+        <i class="bi bi-lightning-charge-fill"></i>
+        <div>
+          <div class="ectx-val">−{{ ((1 - kin.exercise_factor)*100)|int }}%</div>
+          <div class="ectx-lbl">Sensibilidad</div>
+        </div>
+      </div>
+      {% endif %}
+
+      {% else %}
+      <div class="ectx-empty text-muted" style="font-size:.8rem;">Sin datos cinéticos</div>
+      {% endif %}
+    </div>
+
+  </div>{# /estado-body #}
 </div>
 
 {# ── Modal Análisis IA ─────────────────────────────────────────────────────── #}
@@ -311,13 +374,13 @@
     </div>
   </div>
 
-  {# Actividad #}
+  {# Variabilidad CV% #}
   <div class="col-6 col-md-3">
     <div class="stat-card-v2">
-      <div class="stat-v2-label">Lecturas 24h</div>
-      <div class="stat-v2-value">{{ stats.lecturas_24h }}</div>
-      <div class="stat-v2-unit">registros</div>
-      <div class="stat-v2-sub mt-1">{{ stats.comidas_7d }} comidas esta semana</div>
+      <div class="stat-v2-label">Variabilidad</div>
+      <div id="cv-value" class="stat-v2-value text-muted">—</div>
+      <div class="stat-v2-unit">CV% · 24h</div>
+      <div id="cv-sub" class="stat-v2-sub mt-1">{{ stats.lecturas_24h }} lecturas hoy</div>
     </div>
   </div>
 </div>
@@ -329,6 +392,32 @@
     <div id="resumen-chips" class="rd-chips"></div>
   </div>
 </div>
+
+{# ── Alertas de patrones inline ───────────────────────────────────────────── #}
+{% if alertas %}
+<div class="patrones-inline mb-3" id="patrones-inline-wrap">
+  {% for a in alertas[:3] %}
+  <button class="patron-chip patron-chip-{{ a.nivel }}"
+          type="button"
+          data-bs-toggle="offcanvas"
+          data-bs-target="#offcanvasAlertas"
+          onclick="const b=document.getElementById('notif-badge'); if(b) b.style.display='none'; localStorage.setItem('dt_notif_read_count', {{ alertas|length }});">
+    <i class="bi {{ a.icono }} patron-chip-icon"></i>
+    <span class="patron-chip-txt">{{ a.titulo }}</span>
+    <i class="bi bi-chevron-right patron-chip-arrow"></i>
+  </button>
+  {% endfor %}
+  {% if alertas|length > 3 %}
+  <button class="patron-chip patron-chip-more"
+          type="button"
+          data-bs-toggle="offcanvas"
+          data-bs-target="#offcanvasAlertas">
+    <i class="bi bi-three-dots"></i>
+    <span class="patron-chip-txt">+{{ alertas|length - 3 }} más</span>
+  </button>
+  {% endif %}
+</div>
+{% endif %}
 
 {# ── Insights 7d ──────────────────────────────────────────────────────────── #}
 {% if insights and insights.tir7 is not none %}
@@ -1067,6 +1156,135 @@ a.insight-chip:hover {
   .kin-more   { width: 100%; text-align: center; }
   .pred-explicacion, .pred-alerta { max-width: 100%; }
 }
+
+/* ── Estado card (predicción + contexto unificado) ──────────────────────── */
+.estado-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.estado-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .55rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+.estado-label {
+  font-size: .7rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--text-muted);
+}
+.estado-acciones { display: flex; gap: .4rem; }
+.btn-ea {
+  display: inline-flex; align-items: center;
+  padding: .28rem .7rem; border-radius: 20px;
+  font-size: .78rem; font-weight: 600;
+  border: 1.5px solid var(--border);
+  background: var(--surface); color: var(--text);
+  text-decoration: none; cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.btn-ea:hover { background: var(--surface2); }
+.btn-ea-ia {
+  background: linear-gradient(135deg, rgba(99,102,241,.15), rgba(139,92,246,.15));
+  border-color: rgba(99,102,241,.4) !important;
+  color: #6366f1 !important; font-weight: 700;
+}
+.btn-ea-ia:hover {
+  background: linear-gradient(135deg, rgba(99,102,241,.25), rgba(139,92,246,.25));
+  box-shadow: 0 0 8px rgba(99,102,241,.2);
+}
+.estado-body {
+  display: grid; grid-template-columns: auto 1fr;
+  align-items: stretch;
+}
+.estado-preds {
+  display: flex; gap: .5rem; align-items: flex-start; flex-wrap: wrap;
+  padding: .65rem .9rem;
+  border-right: 1px solid var(--border);
+}
+.estado-context {
+  display: flex; flex-wrap: wrap; gap: .45rem; align-content: center;
+  padding: .65rem .9rem;
+}
+
+/* Epred — tarjeta de predicción */
+.epred {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  background: var(--surface2); border-radius: 12px;
+  padding: .45rem .7rem; border: 1.5px solid var(--border);
+  min-width: 88px; cursor: default;
+  transition: border-color .2s, background .2s;
+}
+.epred.epred-rango { background: rgba(34,197,94,.10);  border-color: rgba(34,197,94,.3); }
+.epred.epred-hiper { background: rgba(249,115,22,.10); border-color: rgba(249,115,22,.3); }
+.epred.epred-hipo  { background: rgba(239,68,68,.10);  border-color: rgba(239,68,68,.3); }
+.epred-time { font-size: .63rem; color: var(--text-muted); font-weight: 600; }
+.epred-val  { font-size: 1.15rem; font-weight: 800; color: var(--text); line-height: 1.1; }
+.epred.epred-rango .epred-val { color: #16a34a; }
+.epred.epred-hiper .epred-val { color: #ea580c; }
+.epred.epred-hipo  .epred-val { color: #dc2626; }
+.epred-detail { display: flex; flex-direction: column; width: 100%; gap: 1px; }
+.epred-dom  { font-size: .59rem; color: var(--text-muted); white-space: nowrap; }
+.epred-expl {
+  font-size: .62rem; color: var(--text-muted); font-weight: 600;
+  line-height: 1.25; white-space: normal; margin-top: 2px;
+}
+.epred-alerta {
+  font-size: .62rem; font-weight: 700; color: #dc2626;
+  background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.2);
+  border-radius: 5px; padding: 1px 4px; line-height: 1.3;
+  white-space: normal; margin-top: 2px;
+}
+[data-theme="dark"] .epred-alerta {
+  color: #fca5a5; background: rgba(239,68,68,.15);
+  border-color: rgba(239,68,68,.3);
+}
+.pred-mc-note {
+  font-size: .60rem; color: var(--text-muted); opacity: .7;
+  align-self: flex-end; white-space: nowrap;
+}
+
+/* Ectx — items de contexto cinético */
+.ectx-item {
+  display: inline-flex; align-items: center; gap: .4rem;
+  padding: .28rem .55rem; border-radius: 10px;
+  border: 1px solid transparent; font-size: .8rem;
+}
+.ectx-item i { font-size: .85rem; flex-shrink: 0; }
+.ectx-val { font-size: .8rem; font-weight: 700; line-height: 1.1; }
+.ectx-lbl { font-size: .58rem; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: .03em; }
+.ectx-insulin { background: rgba(99,102,241,.10); color: #6366f1; border-color: rgba(99,102,241,.2); }
+.ectx-carbs   { background: rgba(34,197,94,.10);  color: #16a34a; border-color: rgba(34,197,94,.2); }
+.ectx-fatprot { background: rgba(249,115,22,.10); color: #c2410c; border-color: rgba(249,115,22,.2); }
+.ectx-exup    { background: rgba(34,197,94,.10);  color: #15803d; border-color: rgba(34,197,94,.2); }
+.ectx-exdown  { background: rgba(239,68,68,.10);  color: #dc2626; border-color: rgba(239,68,68,.2); }
+.ectx-neutral { background: var(--surface2); color: var(--text-muted); border-color: var(--border); }
+
+/* Patron chips — alertas inline */
+.patrones-inline { display: flex; flex-wrap: wrap; gap: .4rem; }
+.patron-chip {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .28rem .65rem; border-radius: 20px;
+  font-size: .76rem; font-weight: 600;
+  border: 1.5px solid transparent; background: var(--surface2);
+  cursor: pointer; transition: opacity .15s, box-shadow .15s;
+  text-align: left; line-height: 1.3;
+}
+.patron-chip:hover { opacity: .82; box-shadow: 0 2px 8px rgba(0,0,0,.1); }
+.patron-chip-urgente    { background: rgba(239,68,68,.12);  border-color: rgba(239,68,68,.3);  color: #dc2626; }
+.patron-chip-importante { background: rgba(245,158,11,.12); border-color: rgba(245,158,11,.3); color: #d97706; }
+.patron-chip-informativo{ background: rgba(59,130,246,.12); border-color: rgba(59,130,246,.3); color: #2563eb; }
+.patron-chip-more { background: var(--surface2); border-color: var(--border); color: var(--text-muted); }
+.patron-chip-icon  { font-size: .78rem; }
+.patron-chip-arrow { font-size: .62rem; opacity: .55; margin-left: .15rem; }
+
+@media (max-width: 576px) {
+  .estado-body { grid-template-columns: 1fr; }
+  .estado-preds { border-right: none; border-bottom: 1px solid var(--border); }
+  .epred { min-width: 78px; }
+  .estado-context { gap: .35rem; }
+}
 </style>
 
 <script>
@@ -1084,9 +1302,8 @@ a.insight-chip:hover {
         const el   = document.getElementById(`pred-${mins}`);
         if (!el) continue;
 
-        const estadoClass = { rango: 'pred-rango', hiper: 'pred-hiper', hipo: 'pred-hipo' };
-        el.classList.remove('pred-rango', 'pred-hiper', 'pred-hipo');
-        el.classList.add(estadoClass[p.estado] || '');
+        el.classList.remove('epred-rango', 'epred-hiper', 'epred-hipo');
+        el.classList.add({ rango: 'epred-rango', hiper: 'epred-hiper', hipo: 'epred-hipo' }[p.estado] || '');
 
         // ── Probabilidades y distribución MC ─────────────────────────────
         const pHipo  = p.p_hipo  || 0;
@@ -1116,19 +1333,26 @@ a.insight-chip:hover {
           .map(f => `${f.icono} ${f.texto}: ${f.impacto}`)
           .join('\n');
 
-        el.innerHTML = `
-          <span class="pred-time">+${mins}min</span>
-          <span class="pred-val">${p.glucemia_pred}${skewIcon}</span>
-          <div class="pred-detail">
-            <div class="pred-prob-bar" title="Hipo ${pHipo}% · Rango ${pRango}% · Hiper ${pHiper}%">
-              <div class="pred-seg pred-seg-hipo"  style="width:${pHipo}%"></div>
-              <div class="pred-seg pred-seg-rango" style="width:${pRango}%"></div>
-              <div class="pred-seg pred-seg-hiper" style="width:${pHiper}%"></div>
-            </div>
-            <span class="pred-dom">${domLabel}${ci50txt ? ' · ' + ci50txt : ''}</span>
-          </div>
-          ${ex.titulo ? `<div class="pred-explicacion">${ex.emoji || ''} ${ex.titulo}</div>` : ''}
-          ${ex.alerta ? `<div class="pred-alerta">${ex.alerta}</div>` : ''}`;
+        // Actualizar sub-elementos del epred
+        const valEl = el.querySelector('.epred-val');
+        if (valEl) valEl.textContent = `${p.glucemia_pred}${skewIcon}`;
+
+        const probBar = el.querySelector('.pred-prob-bar');
+        if (probBar) {
+          probBar.title = `Hipo ${pHipo}% · Rango ${pRango}% · Hiper ${pHiper}%`;
+          probBar.querySelector('.pred-seg-hipo').style.width  = `${pHipo}%`;
+          probBar.querySelector('.pred-seg-rango').style.width = `${pRango}%`;
+          probBar.querySelector('.pred-seg-hiper').style.width = `${pHiper}%`;
+        }
+
+        const domEl = el.querySelector('.epred-dom');
+        if (domEl) domEl.textContent = `${domLabel}${ci50txt ? ' · ' + ci50txt : ''}`;
+
+        const explEl = el.querySelector('.epred-expl');
+        if (explEl) explEl.textContent = ex.titulo ? `${ex.emoji || ''} ${ex.titulo}` : '';
+
+        const alertEl = el.querySelector('.epred-alerta');
+        if (alertEl) alertEl.textContent = ex.alerta || '';
 
         // Tooltip con explicación + datos técnicos
         const comp = p.componentes || {};
@@ -1149,28 +1373,23 @@ a.insight-chip:hover {
           arLine;
       }
 
-      // Nota MC en la barra (reemplaza la de "literatura")
+      // Nota de modelo (MC / MC+AR) en el span dedicado
       const anyPred = Object.values(d.predictions)[0];
       if (anyPred) {
-        const bar = document.getElementById('pred-bar');
-        if (bar && !bar.querySelector('.pred-mc-note')) {
-          const note = document.createElement('span');
-          note.className = 'pred-mc-note text-muted';
-          note.style.cssText = 'font-size:.62rem; white-space:nowrap; opacity:.7;';
+        const mcNote = document.getElementById('pred-mc-note');
+        if (mcNote) {
           const arAny = anyPred.ar || {};
-          const modelNote = arAny.active
+          mcNote.textContent = arAny.active
             ? `MC+AR(${Math.round((arAny.weight||0)*100)}%)`
             : `MC ${(anyPred.n_sim || 3000).toLocaleString()} sim`;
-          note.textContent = modelNote;
-          note.title = arAny.active
+          mcNote.title = arAny.active
             ? `Modelo combinado: Monte Carlo + Auto-Regresión AR(6)\n` +
               `AR peso: ${Math.round((arAny.weight||0)*100)}% (σ_AR=${arAny.sigma} mg/dL)\n` +
-              `MC peso: ${Math.round((1-(arAny.weight||0))*100)}% (${anyPred.n_sim||3000} simulaciones)\n` +
+              `MC peso: ${Math.round((1-(arAny.weight||0))*100)}% (${anyPred.n_sim||3000} sim)\n` +
               `Blend por ponderación inversa-varianza.`
-            : `Predicción por simulación de Monte Carlo: ${anyPred.n_sim || 3000} escenarios\n` +
-              'propagando incertidumbre de ISF (±18%), ICR (±12%), absorción (±25%) y sensor.\n' +
-              'AR: se activará automáticamente al acumular más datos CGM.';
-          bar.querySelector('.kin-more')?.before(note);
+            : `Monte Carlo: ${anyPred.n_sim || 3000} escenarios\n` +
+              `ISF ±18% · ICR ±12% · Absorción ±25% · Sensor incertidumbre.\n` +
+              `AR se activa automáticamente al acumular más datos CGM.`;
         }
       }
     } catch(e) {
@@ -1243,22 +1462,24 @@ a.insight-chip:hover {
       const d = await fetch('/api/resumen-dia').then(r => r.json());
       if (!d.ok || !d.lecturas_n) return;
 
-      // ── TIR hoy (badge) ───────────────────────────────────────────────────
-      const tirColor = d.tir >= 70 ? '#16a34a' : d.tir >= 50 ? '#d97706' : '#dc2626';
-      const tirDelta = d.tir_ayer !== null
-        ? (d.tir - d.tir_ayer >= 0
-            ? ` <span class="rd-delta rd-delta-up">▲${Math.abs((d.tir - d.tir_ayer).toFixed(1))}%</span>`
-            : ` <span class="rd-delta rd-delta-dn">▼${Math.abs((d.tir - d.tir_ayer).toFixed(1))}%</span>`)
-        : '';
+      // ── CV% — card de Variabilidad ────────────────────────────────────────
+      if (d.cv_pct !== null && d.cv_pct !== undefined) {
+        const cvEl  = document.getElementById('cv-value');
+        const cvSub = document.getElementById('cv-sub');
+        if (cvEl) {
+          cvEl.textContent = `${d.cv_pct}%`;
+          // Umbral ATTD 2019: <36% objetivo
+          cvEl.style.color = d.cv_pct < 36 ? '#16a34a' : d.cv_pct < 45 ? '#d97706' : '#dc2626';
+        }
+        if (cvSub) cvSub.textContent = d.cv_pct < 36 ? 'En objetivo' : 'Revisar';
+      }
 
+      // ── Chips de resumen del día ──────────────────────────────────────────
       const chips = [
-        // TIR hoy
-        { icon: 'bi-bullseye', val: `${d.tir}%${tirDelta}`, sub: 'TIR hoy',
-          color: tirColor, bg: tirColor + '18' },
         // Hipos (solo si hay)
         ...(d.n_hipos > 0 ? [{
           icon: 'bi-arrow-down-circle-fill', val: `${d.n_hipos}`,
-          sub: d.n_hipos === 1 ? 'hipo' : 'hipos',
+          sub: d.n_hipos === 1 ? 'hipo hoy' : 'hipos hoy',
           color: '#dc2626', bg: 'rgba(239,68,68,.12)'
         }] : []),
         // Bolus

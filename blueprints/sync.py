@@ -148,8 +148,10 @@ def api_resumen_dia():
     vals = [r.value_mgdl for r in lecturas]
 
     tir = hipo_pct = hiper_pct = promedio = g_min = g_max = None
+    std_glucose = cv_pct = None
     n_hipos = n_hipers = 0
     if vals:
+        import statistics as _stats
         n      = len(vals)
         tir    = round(len([v for v in vals if 70 <= v <= 180]) / n * 100, 1)
         hipo_pct  = round(len([v for v in vals if v < 70])  / n * 100, 1)
@@ -157,6 +159,9 @@ def api_resumen_dia():
         promedio  = round(sum(vals) / n, 0)
         g_min     = round(min(vals), 0)
         g_max     = round(max(vals), 0)
+        if n >= 2:
+            std_glucose = round(_stats.stdev(vals), 1)
+            cv_pct      = round(std_glucose / promedio * 100, 1) if promedio else None
         # Eventos: contar rachas, no lecturas individuales
         en_hipo = en_hiper = False
         for v in vals:
@@ -207,6 +212,8 @@ def api_resumen_dia():
         "g_max":     g_max,
         "n_hipos":   n_hipos,
         "n_hipers":  n_hipers,
+        "std_glucose": std_glucose,
+        "cv_pct":    cv_pct,
         # Insulina
         "bolus_u":   bolus_u,
         "basal_u":   basal_u,
