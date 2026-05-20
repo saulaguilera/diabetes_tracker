@@ -55,6 +55,22 @@ def logout():
     return redirect(url_for("login"))
 
 
+def _hace(ts):
+    """Devuelve 'hace Xmin', 'hace Xh', 'ayer HH:MM', etc. para un timestamp."""
+    if not ts:
+        return None
+    from datetime import datetime
+    delta = datetime.now() - ts
+    mins  = int(delta.total_seconds() / 60)
+    if mins < 1:
+        return "ahora"
+    if mins < 60:
+        return f"hace {mins}min"
+    if mins < 1440:
+        return f"hace {mins // 60}h"
+    return f"hace {mins // 1440}d"
+
+
 @bp.route("/", endpoint="dashboard")
 def dashboard():
     from datetime import datetime
@@ -83,6 +99,41 @@ def dashboard():
 
     insights = _dashboard_insights()
 
+    # Feed de actividad reciente — lista ordenada de últimos eventos
+    feed = []
+    ul   = stats.get("ultima_lectura")
+    uc   = stats.get("ultima_comida")
+    ui   = stats.get("ultima_insulina")
+
+    if ul:
+        v = int(ul.value_mgdl)
+        estado = "hipo" if v < 70 else "hiper" if v > 180 else "rango"
+        feed.append({
+            "tipo": "glucosa", "icono": "bi-droplet-fill", "color": "primary",
+            "valor": f"{v} mg/dL", "estado": estado,
+            "meta": ul.source,
+            "hace": _hace(ul.timestamp), "ts": ul.timestamp,
+        })
+    if uc:
+        feed.append({
+            "tipo": "comida", "icono": "bi-egg-fried", "color": "success",
+            "valor": uc.name, "estado": "rango",
+            "meta": f"{int(uc.carbs_g)}g CH" if uc.carbs_g else "",
+            "hace": _hace(uc.timestamp), "ts": uc.timestamp,
+        })
+    if ui:
+        tipo_label = {"bolus": "Bolus", "basal": "Basal"}.get(ui.type, ui.type.capitalize())
+        feed.append({
+            "tipo": "insulina", "icono": "bi-capsule-pill", "color": "warning",
+            "valor": f"{ui.units}U {tipo_label}",
+            "estado": "rango",
+            "meta": ui.brand or ui.purpose or "",
+            "hace": _hace(ui.timestamp), "ts": ui.timestamp,
+        })
+
+    # Ordenar por timestamp desc
+    feed.sort(key=lambda x: x["ts"], reverse=True)
+
     return render_template("dashboard.html", stats=stats, chart=chart, alertas=alertas,
                            libre_configured=libre_configured, ultima_sync=ultima_sync,
-                           insights=insights)
+                           insights=insights, feed=feed)

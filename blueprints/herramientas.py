@@ -400,7 +400,18 @@ def quicklog():
         return redirect(url_for("dashboard"))
 
     ahora = datetime.now()
-    ultima_glucemia = GlucoseReading.query.order_by(GlucoseReading.timestamp.desc()).first()
+    ultima_glucemia  = GlucoseReading.query.order_by(GlucoseReading.timestamp.desc()).first()
+    ultima_comida_ql = Meal.query.order_by(Meal.timestamp.desc()).first()
+    ultima_ins_ql    = InsulinDose.query.filter_by(type="bolus").order_by(InsulinDose.timestamp.desc()).first()
+
+    def _hace_ql(ts):
+        if not ts: return None
+        delta = ahora - ts
+        mins  = int(delta.total_seconds() / 60)
+        if mins < 1:   return "ahora"
+        if mins < 60:  return f"hace {mins}min"
+        if mins < 1440: return f"hace {mins // 60}h"
+        return f"hace {mins // 1440}d"
 
     # IOB / COB snapshot para contexto al registrar
     kinetics = {}
@@ -410,12 +421,25 @@ def quicklog():
     except Exception:
         pass
 
+    ctx = {
+        "glucemia_val":  int(ultima_glucemia.value_mgdl) if ultima_glucemia else None,
+        "glucemia_hace": _hace_ql(ultima_glucemia.timestamp) if ultima_glucemia else None,
+        "glucemia_note": (ultima_glucemia.notes or "") if ultima_glucemia else "",
+        "comida_nombre": ultima_comida_ql.name if ultima_comida_ql else None,
+        "comida_hace":   _hace_ql(ultima_comida_ql.timestamp) if ultima_comida_ql else None,
+        "bolus_u":       ultima_ins_ql.units if ultima_ins_ql else None,
+        "bolus_hace":    _hace_ql(ultima_ins_ql.timestamp) if ultima_ins_ql else None,
+        "iob":           round(kinetics.get("iob", 0), 1),
+        "cob":           int(kinetics.get("cob", 0)),
+    }
+
     return render_template(
         "quicklog.html",
         fecha=ahora.strftime("%Y-%m-%d"),
         hora=ahora.strftime("%H:%M"),
         ultima_glucemia=ultima_glucemia,
         kinetics=kinetics,
+        ctx=ctx,
     )
 
 

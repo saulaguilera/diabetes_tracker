@@ -541,82 +541,42 @@
 </div>
 {% endif %}
 
-{# ── Últimos registros ─────────────────────────────────────────────────────── #}
-<div class="row g-3 mb-3">
-
-  <div class="col-md-4">
-    <div class="event-card">
-      <div class="event-icon bg-primary-soft">
-        <i class="bi bi-droplet-fill text-primary"></i>
-      </div>
-      <div class="event-body">
-        <div class="event-title">Última glucemia</div>
-        {% if stats.ultima_lectura %}
-          {% set v = stats.ultima_lectura.value_mgdl | int %}
-          <div class="event-value
-            {% if v < 70 %}text-hipo{% elif v > 180 %}text-hiper{% else %}text-rango{% endif %}">
-            {{ v }} mg/dL
-          </div>
-          <div class="event-meta">
-            {{ stats.ultima_lectura.timestamp | local_ts('full') }}
-            · {{ stats.ultima_lectura.source }}
-          </div>
-        {% else %}
-          <div class="event-empty">Sin registros</div>
-        {% endif %}
-      </div>
-      <a href="{{ url_for('glucemia') }}" class="event-link">
-        <i class="bi bi-chevron-right"></i>
-      </a>
-    </div>
+{# ── Feed de actividad reciente ────────────────────────────────────────────── #}
+<div class="af-wrap mb-3">
+  <div class="af-header">
+    <span class="af-title"><i class="bi bi-clock-history me-1"></i>Últimos eventos</span>
+    <a href="{{ url_for('quicklog') }}" class="af-add-btn">
+      <i class="bi bi-plus-circle-fill"></i> Registrar
+    </a>
   </div>
-
-  <div class="col-md-4">
-    <div class="event-card">
-      <div class="event-icon bg-success-soft">
-        <i class="bi bi-egg-fried text-success"></i>
-      </div>
-      <div class="event-body">
-        <div class="event-title">Última comida</div>
-        {% if stats.ultima_comida %}
-          <div class="event-value">{{ stats.ultima_comida.name }}</div>
-          <div class="event-meta">
-            {{ stats.ultima_comida.carbs_g }}g CH
-            · {{ stats.ultima_comida.timestamp | local_ts('full') }}
-          </div>
-        {% else %}
-          <div class="event-empty">Sin registros</div>
-        {% endif %}
-      </div>
-      <a href="{{ url_for('comidas') }}" class="event-link">
-        <i class="bi bi-chevron-right"></i>
+  <div class="af-list">
+    {% if feed %}
+      {% for ev in feed %}
+      {% set href = url_for('glucemia') if ev.tipo == 'glucosa' else url_for('comidas') if ev.tipo == 'comida' else url_for('insulina') %}
+      <a href="{{ href }}" class="af-item text-decoration-none">
+        <span class="af-hace">{{ ev.hace }}</span>
+        <span class="af-dot af-dot-{{ ev.tipo }}"></span>
+        <span class="af-icon af-icon-{{ ev.tipo }}">
+          <i class="bi {{ ev.icono }}"></i>
+        </span>
+        <span class="af-body">
+          <span class="af-val {% if ev.tipo == 'glucosa' %}af-val-{{ ev.estado }}{% endif %}">
+            {{ ev.valor }}
+          </span>
+          {% if ev.meta %}
+          <span class="af-meta">{{ ev.meta }}</span>
+          {% endif %}
+        </span>
+        <i class="bi bi-chevron-right af-arrow"></i>
       </a>
-    </div>
-  </div>
-
-  <div class="col-md-4">
-    <div class="event-card">
-      <div class="event-icon bg-warning-soft">
-        <i class="bi bi-capsule-pill text-warning"></i>
+      {% endfor %}
+    {% else %}
+      <div class="af-empty">
+        <i class="bi bi-journal-plus"></i>
+        <span>Sin registros recientes</span>
+        <a href="{{ url_for('quicklog') }}" class="af-empty-link">Empezar →</a>
       </div>
-      <div class="event-body">
-        <div class="event-title">Última insulina</div>
-        {% if stats.ultima_insulina %}
-          <div class="event-value">
-            {{ stats.ultima_insulina.units }}U — {{ stats.ultima_insulina.type }}
-          </div>
-          <div class="event-meta">
-            {% if stats.ultima_insulina.brand %}{{ stats.ultima_insulina.brand }} · {% endif %}
-            {{ stats.ultima_insulina.timestamp | local_ts('full') }}
-          </div>
-        {% else %}
-          <div class="event-empty">Sin registros</div>
-        {% endif %}
-      </div>
-      <a href="{{ url_for('insulina') }}" class="event-link">
-        <i class="bi bi-chevron-right"></i>
-      </a>
-    </div>
+    {% endif %}
   </div>
 </div>
 
@@ -1155,6 +1115,78 @@ a.insight-chip:hover {
   .pred-bar-label { width: 100%; }
   .kin-more   { width: 100%; text-align: center; }
   .pred-explicacion, .pred-alerta { max-width: 100%; }
+}
+
+/* ── Feed de actividad reciente ─────────────────────────────────────────── */
+.af-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.af-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .5rem .9rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+.af-title {
+  font-size: .68rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--text-muted);
+}
+.af-add-btn {
+  display: inline-flex; align-items: center; gap: .3rem;
+  font-size: .74rem; font-weight: 700;
+  color: #6366f1; text-decoration: none;
+  padding: .18rem .5rem; border-radius: 8px;
+  background: rgba(99,102,241,.1);
+  transition: background .15s;
+}
+.af-add-btn:hover { background: rgba(99,102,241,.18); color: #4f46e5; }
+.af-list { display: flex; flex-direction: column; }
+.af-item {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .55rem .9rem;
+  border-bottom: 1px solid var(--border);
+  transition: background .12s;
+  color: var(--text);
+}
+.af-item:last-child { border-bottom: none; }
+.af-item:hover { background: var(--surface2); }
+.af-hace {
+  font-size: .65rem; color: var(--text-muted); white-space: nowrap;
+  min-width: 52px; text-align: right; flex-shrink: 0;
+}
+.af-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+}
+.af-dot-glucosa  { background: #3b82f6; }
+.af-dot-comida   { background: #22c55e; }
+.af-dot-insulina { background: #f59e0b; }
+.af-icon {
+  width: 28px; height: 28px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .82rem; flex-shrink: 0;
+}
+.af-icon-glucosa  { background: rgba(59,130,246,.12);  color: #3b82f6; }
+.af-icon-comida   { background: rgba(34,197,94,.12);   color: #16a34a; }
+.af-icon-insulina { background: rgba(245,158,11,.12);  color: #d97706; }
+.af-body { flex: 1; display: flex; align-items: baseline; gap: .5rem; min-width: 0; }
+.af-val  { font-size: .88rem; font-weight: 700; color: var(--text); white-space: nowrap; }
+.af-val-hipo  { color: #dc2626; }
+.af-val-hiper { color: #ea580c; }
+.af-val-rango { color: #16a34a; }
+.af-meta {
+  font-size: .72rem; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.af-arrow { font-size: .65rem; color: var(--text-muted); opacity: .5; flex-shrink: 0; }
+.af-empty {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .8rem .9rem; color: var(--text-muted); font-size: .82rem;
+}
+.af-empty-link {
+  color: #6366f1; text-decoration: none; font-weight: 700; margin-left: .3rem;
 }
 
 /* ── Estado card (predicción + contexto unificado) ──────────────────────── */
