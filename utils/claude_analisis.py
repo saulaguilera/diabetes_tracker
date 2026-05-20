@@ -1,169 +1,345 @@
 """
 utils/claude_analisis.py — Capa 3: Análisis narrativo con Claude API.
 
-Toma los datos del usuario (serie glucémica, patrones detectados, métricas)
-y genera un análisis personalizado en lenguaje natural usando Claude.
+Envía a Claude un contexto completo del usuario:
+  · Serie glucémica de 48h (bins 15 min, anotada con eventos)
+  · Detalle de comidas 48h: hora, macros (CH/grasa/proteína/fibra/GL)
+  · Dosis de insulina 48h: tipo, unidades, marca, timing
+  · Ejercicio de los últimos 7 días
+  · Parámetros personales: ISF, ICR, basal, DIA
+  · Snapshot cinético actual: IOB, COB
+  · Patrones fisiológicos detectados (Capa 2, 30 días)
+  · Métricas globales: TIR, CV%, promedio, hipo/hiper %
 
 Función pública:
     generar_analisis(days=2) → dict con:
-        analisis   : str   — texto en Markdown
-        modelo     : str   — modelo usado
-        tokens     : dict  — input/output tokens
-        generado_en: str   — timestamp ISO
-        error      : str|None
+        analisis, modelo, tokens, generado_en, error
 """
 
 from __future__ import annotations
 
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
+from statistics import mean
 
 import anthropic
 
 from utils.patrones_detector import analizar_patrones
 
+# ── Configuración ─────────────────────────────────────────────────────────────
+_MODELO       = "claude-haiku-4-5"   # óptimo para análisis de datos estructurados
+_MAX_TOKENS   = 1500                  # respuesta más completa
+_SERIE_PUNTOS = 192                   # 48h a bins de 15 min
 
-# ── Configuración ────────────────────────────────────────────────────────────
-_MODELO        = "claude-haiku-4-5"  # óptimo para análisis de datos estructurados
-_MAX_TOKENS    = 1024
-_SERIE_PUNTOS  = 120   # máximo de puntos de glucosa enviados (~30h a 15-min bins)
 
+# ── Helpers de formato ─────────────────────────────────────────────────────────
 
 def _resumir_serie(serie: list[dict]) -> str:
-    """
-    Convierte la serie glucémica en texto compacto para el prompt.
-    Formato: HH:MM G mg/dL [comida: X] [insulina: Y]
-    Solo incluye los últimos _SERIE_PUNTOS puntos.
-    """
+    """Serie glucémica compacta: solo HH:MM, valor y eventos."""
     ultimos = serie[-_SERIE_PUNTOS:]
     lineas = []
     for p in ultimos:
-        ts = p["ts"][11:16]   # solo HH:MM
-        linea = f"{ts} {p['g']} mg/dL"
+        ts = p["ts"][5:16]          # MM-DD HH:MM (incluye fecha para orientar)
+        linea = f"{ts}  {p['g']:>3} mg/dL"
         if p.get("comida"):
-            linea += f" | 🍽 {p['comida']}"
+            linea += f"  🍽 {p['comida']}"
         if p.get("insulina"):
-            linea += f" | 💉 {p['insulina']}"
+            linea += f"  💉 {p['insulina']}"
         lineas.append(linea)
     return "\n".join(lineas)
 
 
+def _seccion_comidas(days: int) -> str:
+    """Lista detallada de comidas con macros."""
+    try:
+        from models import Meal
+        desde = datetime.now() - timedelta(days=days)
+        comidas = (Meal.query
+                   .filter(Meal.timestamp >= desde)
+                   .order_by(Meal.timestamp)
+                   .all())
+        if not comidas:
+            return "Sin comidas registradas en el período."
+
+        lineas = []
+        for c in comidas:
+            ts    = c.timestamp.strftime("%d/%m %H:%M")
+            ch    = round(c.carbs_g   or 0, 1)
+            grasa = round(c.fat_g     or 0, 1)
+            prot  = round(c.protein_g or 0, 1)
+            fibra = round(c.fiber_g   or 0, 1) if hasattr(c, "fiber_g") else 0
+            cal   = round(c.calories  or 0)    if hasattr(c, "calories") else None
+
+            detalle = f"CH:{ch}g  G:{grasa}g  P:{prot}g"
+            if fibra > 0:
+                detalle += f"  Fib:{fibra}g"
+            if cal:
+                detalle += f"  ~{cal}kcal"
+
+            # GL de componentes si están disponibles
+            gl_total = None
+            if c.components:
+                try:
+                    from utils.nutrition_db import get_gi, gl_from_gi
+                    partes_gl = []
+                    for comp in c.components:
+                        gi = comp.glycemic_index or get_gi(comp.name)
+                        gl = gl_from_gi(gi, comp.carbs_g or 0)
+                        if gl is not None:
+                            partes_gl.append(gl)
+                    if partes_gl:
+                        gl_total = round(sum(partes_gl), 1)
+                except Exception:
+                    pass
+
+            if gl_total is not None:
+                detalle += f"  GL:{gl_total}"
+
+            lineas.append(f"{ts} | {c.name[:35]} | {detalle}")
+
+        return "\n".join(lineas)
+    except Exception as e:
+        return f"(error cargando comidas: {e})"
+
+
+def _seccion_insulina(days: int) -> str:
+    """Lista de dosis de insulina."""
+    try:
+        from models import InsulinDose
+        desde = datetime.now() - timedelta(days=days)
+        dosis = (InsulinDose.query
+                 .filter(InsulinDose.timestamp >= desde)
+                 .order_by(InsulinDose.timestamp)
+                 .all())
+        if not dosis:
+            return "Sin dosis registradas en el período."
+
+        lineas = []
+        for d in dosis:
+            ts    = d.timestamp.strftime("%d/%m %H:%M")
+            marca = f" ({d.brand})" if getattr(d, "brand", None) else ""
+            lineas.append(f"{ts} | {d.type.upper():<6} {d.units}U{marca}")
+        return "\n".join(lineas)
+    except Exception as e:
+        return f"(error cargando insulina: {e})"
+
+
+def _seccion_ejercicio(days: int = 7) -> str:
+    """Sesiones de ejercicio de los últimos N días."""
+    try:
+        from models import Activity
+        desde = datetime.now() - timedelta(days=days)
+        acts  = (Activity.query
+                 .filter(Activity.timestamp >= desde)
+                 .order_by(Activity.timestamp)
+                 .all())
+        if not acts:
+            return "Sin actividad física registrada en los últimos 7 días."
+
+        lineas = []
+        for a in acts:
+            ts   = a.timestamp.strftime("%d/%m %H:%M")
+            name = getattr(a, "name",        "Ejercicio")
+            dur  = getattr(a, "duration_min", None)
+            inten= getattr(a, "intensity",   None)
+            det  = ""
+            if dur:
+                det += f"  {dur}min"
+            if inten:
+                det += f"  intensidad:{inten}"
+            lineas.append(f"{ts} | {name}{det}")
+        return "\n".join(lineas)
+    except Exception:
+        return "Sin datos de actividad física."
+
+
+def _seccion_parametros() -> str:
+    """ISF, ICR, basal e IOB/COB actuales."""
+    lineas = []
+    try:
+        from helpers import _calcular_isf_personal, _calcular_icr_personal, _get_setting
+        isf, isf_n = _calcular_isf_personal(days=90)
+        if isf:
+            lineas.append(f"- ISF personal (90d, {isf_n} correcciones): {isf} mg/dL/U")
+
+        icr, icr_n = _calcular_icr_personal(days=90)
+        if icr:
+            lineas.append(f"- ICR personal (90d, {icr_n} comidas): 1U : {icr}g CH")
+
+        basal = _get_setting("basal_dosis")
+        basal_hora = _get_setting("basal_hora")
+        basal_tipo = _get_setting("basal_tipo")
+        if basal:
+            info = f"{basal}U"
+            if basal_tipo:
+                info += f" {basal_tipo}"
+            if basal_hora:
+                info += f" a las {basal_hora}"
+            lineas.append(f"- Basal configurada: {info}")
+
+        # ISF circadiano activo en este momento
+        try:
+            from helpers import _calcular_isf_circadiano, _isf_para_hora, _calcular_isf_personal
+            isf_circ = _calcular_isf_circadiano(days=90)
+            isf_g, _ = _calcular_isf_personal(days=90)
+            isf_ahora, bloque, fuente = _isf_para_hora(datetime.now().hour, isf_circ, isf_g)
+            if isf_ahora and fuente == "circadiano":
+                lineas.append(f"- ISF circadiano ahora ({bloque}): {isf_ahora} mg/dL/U")
+        except Exception:
+            pass
+
+    except Exception as e:
+        lineas.append(f"(parámetros no disponibles: {e})")
+
+    # IOB / COB actual
+    try:
+        from utils.kinetics import get_kinetics_snapshot
+        snap = get_kinetics_snapshot()
+        if snap:
+            iob = snap.get("iob", 0)
+            cob = snap.get("cob", 0)
+            ef  = snap.get("exercise_factor", 1.0)
+            if iob > 0.05:
+                lineas.append(f"- IOB actual: {iob:.1f} U insulina activa")
+            if cob > 1:
+                lineas.append(f"- COB actual: {cob:.0f}g carbohidratos absorbiendo")
+            if ef and abs(ef - 1.0) >= 0.05:
+                pct = round((ef - 1.0) * 100)
+                signo = "+" if pct > 0 else ""
+                lineas.append(f"- Factor ejercicio: {signo}{pct}% sensibilidad a insulina")
+    except Exception:
+        pass
+
+    return "\n".join(lineas) if lineas else "Sin parámetros personales configurados."
+
+
 def _formatear_patrones(patrones: list[dict]) -> str:
     if not patrones:
-        return "No se detectaron patrones de riesgo recurrentes en el período."
+        return "No se detectaron patrones de riesgo recurrentes en los últimos 30 días."
     lineas = []
     for p in patrones:
-        lineas.append(f"• **{p['titulo']}** ({p['nivel']})")
-        lineas.append(f"  {p['detalle']}")
+        nivel_emoji = "🔴" if p["nivel"] == "danger" else "🟡"
+        lineas.append(f"{nivel_emoji} **{p['titulo']}** — {p['detalle']}")
     return "\n".join(lineas)
 
 
-def _construir_prompt(datos: dict) -> tuple[str, str]:
-    """
-    Devuelve (system_prompt, user_message).
-    """
-    resumen = datos["resumen"]
-    patrones = datos["patrones"]
-    serie = datos["serie_glucose"]
-    days  = datos["days"]
+def _seccion_metricas(resumen: dict, days: int) -> str:
+    if not resumen.get("n_lecturas"):
+        return "Sin datos de glucosa."
+    partes = [
+        f"- Lecturas: {resumen['n_lecturas']} (últimos {days} días)",
+    ]
+    if resumen.get("avg"):
+        partes.append(f"- Promedio: {resumen['avg']} mg/dL")
+    if resumen.get("sd"):
+        partes.append(f"- DE: {resumen['sd']} mg/dL")
+    if resumen.get("cv"):
+        flag = "⚠️ elevado (meta <36%)" if resumen["cv"] > 36 else "✓ OK"
+        partes.append(f"- CV%: {resumen['cv']}% {flag}")
+    if resumen.get("tir") is not None:
+        flag = "✓ meta" if resumen["tir"] >= 70 else "⚠️ bajo objetivo (≥70%)"
+        partes.append(f"- TIR 70–180: {resumen['tir']}% {flag}")
+    if resumen.get("hipo_pct") is not None:
+        flag = "⚠️ alto" if resumen["hipo_pct"] > 4 else ""
+        partes.append(f"- Tiempo <70: {resumen['hipo_pct']}% {flag}")
+    if resumen.get("hiper_pct") is not None:
+        partes.append(f"- Tiempo >180: {resumen['hiper_pct']}%")
+    return "\n".join(partes)
 
-    # ── System prompt ────────────────────────────────────────────────────────
+
+# ── Prompt ─────────────────────────────────────────────────────────────────────
+
+def _construir_prompt(datos: dict, days: int) -> tuple[str, str]:
+    resumen  = datos["resumen"]
+    patrones = datos["patrones"]
+    serie    = datos["serie_glucose"]
+
     system = (
-        "Sos un asistente especializado en análisis de datos de glucosa para personas "
-        "con diabetes tipo 1. Tu objetivo es ayudar al usuario a entender sus patrones "
-        "glucémicos con explicaciones claras, empáticas y basadas en los datos reales.\n\n"
-        "Reglas importantes:\n"
-        "- Respondé siempre en español, en segunda persona (vos/te).\n"
-        "- Usá lenguaje claro, sin jerga médica innecesaria.\n"
-        "- Basate SOLO en los datos proporcionados; no inventes información.\n"
-        "- Nunca des instrucciones directas de cambio de dosis; sugerí consultar "
-        "al médico o endocrinólogo.\n"
-        "- Si los datos son insuficientes, indicalo honestamente.\n"
-        "- Usá markdown (negritas, listas, encabezados ##) para estructurar la respuesta.\n"
-        "- Sé conciso: máximo 400 palabras."
+        "Sos un asistente especializado en análisis de datos de diabetes tipo 1. "
+        "Tenés acceso a la serie glucémica completa, comidas con macros, dosis de insulina, "
+        "ejercicio y parámetros personales del usuario. "
+        "Tu objetivo es encontrar conexiones entre todas estas variables y explicarlas "
+        "en lenguaje claro y empático.\n\n"
+        "Reglas:\n"
+        "- Respondé siempre en español, segunda persona (vos/te).\n"
+        "- Cruzá activamente los datos: relacioná picos de glucosa con comidas, "
+        "hipos con ejercicio o insulina, subidas nocturnas con la basal, etc.\n"
+        "- Basate SOLO en los datos provistos. No inventes información.\n"
+        "- Nunca indiques dosis concretas a cambiar; sugerí consultar al médico.\n"
+        "- Usá markdown: ## encabezados, **negritas**, listas con -.\n"
+        "- Máximo 500 palabras. Sé preciso y accionable."
     )
 
-    # ── Métricas principales ──────────────────────────────────────────────────
-    metricas = "Sin datos suficientes."
-    if resumen["n_lecturas"] > 0:
-        partes = [f"- **Lecturas analizadas:** {resumen['n_lecturas']} (últimos {days} días)"]
-        if resumen["avg"]:
-            partes.append(f"- **Promedio glucosa:** {resumen['avg']} mg/dL")
-        if resumen["sd"]:
-            partes.append(f"- **Desviación estándar:** {resumen['sd']} mg/dL")
-        if resumen["cv"]:
-            partes.append(f"- **Coeficiente de variación (CV%):** {resumen['cv']}%  "
-                          f"{'⚠️ elevado' if resumen['cv'] > 36 else '✓ dentro del objetivo'}")
-        if resumen["tir"] is not None:
-            partes.append(f"- **Tiempo en rango (70–180):** {resumen['tir']}%  "
-                          f"{'✓ meta alcanzada' if resumen['tir'] >= 70 else '⚠️ por debajo del objetivo (≥70%)'}")
-        if resumen["hipo_pct"] is not None:
-            partes.append(f"- **Tiempo en hipoglucemia (<70):** {resumen['hipo_pct']}%")
-        if resumen["hiper_pct"] is not None:
-            partes.append(f"- **Tiempo en hiperglucemia (>180):** {resumen['hiper_pct']}%")
-        metricas = "\n".join(partes)
+    user = f"""Analizá mis datos de las últimas {days*24}h y decime qué encontrás.
 
-    # ── Serie glucémica ───────────────────────────────────────────────────────
-    serie_txt = _resumir_serie(serie) if serie else "Sin datos de CGM disponibles."
+## Métricas globales (últimos 30 días)
+{_seccion_metricas(resumen, 30)}
 
-    # ── Mensaje de usuario ────────────────────────────────────────────────────
-    user = f"""Analizá mis datos de glucosa de los últimos {days} días y decime qué ves.
+## Mis parámetros personales
+{_seccion_parametros()}
 
-## Métricas generales
-{metricas}
-
-## Patrones detectados automáticamente
+## Patrones detectados (últimos 30 días)
 {_formatear_patrones(patrones)}
 
-## Serie glucémica reciente (HH:MM · glucosa · eventos)
+## Comidas (últimas {days*24}h)
 ```
-{serie_txt}
+{_seccion_comidas(days)}
+```
+
+## Insulina (últimas {days*24}h)
+```
+{_seccion_insulina(days)}
+```
+
+## Ejercicio (últimos 7 días)
+```
+{_seccion_ejercicio(7)}
+```
+
+## Serie glucémica (últimas {days*24}h — MM-DD HH:MM · glucosa · eventos)
+```
+{_resumir_serie(serie)}
 ```
 
 Por favor:
-1. Explicame en pocas palabras qué está pasando con mi glucosa.
-2. Señalá los patrones más importantes que ves en la serie y en las métricas.
-3. Dame 2–3 sugerencias concretas que pueda llevar a mi próxima consulta médica.
+1. **Qué está pasando** — describí el panorama general de mi glucosa.
+2. **Conexiones clave** — cruzá la serie con comidas, insulina y ejercicio: ¿qué causa los picos o las caídas que ves?
+3. **Patrones importantes** — de los detectados, ¿cuáles son los que más me afectan?
+4. **3 sugerencias concretas** para llevar a mi próxima consulta médica.
 """
 
     return system, user
 
 
+# ── Función pública ───────────────────────────────────────────────────────────
+
 def generar_analisis(days: int = 2) -> dict:
     """
-    Genera un análisis narrativo con Claude API.
+    Genera un análisis narrativo completo con Claude API.
 
     Args:
-        days: Días de histórico a analizar (default 2 = últimas 48h para serie,
-              pero usa 30 días para detección de patrones).
+        days: Días de serie glucémica, comidas e insulina a enviar (default 2 = 48h).
+              Siempre usa 30 días para métricas globales y detección de patrones.
 
     Returns:
-        dict con keys: analisis, modelo, tokens, generado_en, error
+        dict: analisis (str Markdown), modelo, tokens, generado_en, error
     """
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
-        return {
-            "analisis":    None,
-            "modelo":      None,
-            "tokens":      None,
-            "generado_en": datetime.now().isoformat(),
-            "error":       "ANTHROPIC_API_KEY no configurada.",
-        }
+        return _error("ANTHROPIC_API_KEY no configurada.")
 
     try:
-        # Obtener datos: patrones y serie de los últimos 30 días,
-        # pero la serie compacta se limita a los últimos _SERIE_PUNTOS puntos (~30h)
+        # Patrones y serie (30 días para patrones, `days` para serie)
         datos = analizar_patrones(days=30)
-        # Para la serie, re-generamos solo con los últimos `days` días si se pide menos
-        if days < 30:
+
+        # Reemplazar serie con la del período solicitado si es distinto
+        if days != 30:
             from utils.patrones_detector import analizar_patrones as _ap
-            datos_cortos = _ap(days=days)
-            datos["serie_glucose"] = datos_cortos["serie_glucose"]
-            datos["days"] = days
+            datos["serie_glucose"] = _ap(days=days)["serie_glucose"]
 
-        system_prompt, user_message = _construir_prompt(datos)
+        system_prompt, user_message = _construir_prompt(datos, days)
 
-        cliente = anthropic.Anthropic(api_key=api_key)
+        cliente   = anthropic.Anthropic(api_key=api_key)
         respuesta = cliente.messages.create(
             model=_MODELO,
             max_tokens=_MAX_TOKENS,
@@ -171,12 +347,11 @@ def generar_analisis(days: int = 2) -> dict:
             messages=[{"role": "user", "content": user_message}],
         )
 
-        texto = respuesta.content[0].text if respuesta.content else ""
+        texto  = respuesta.content[0].text if respuesta.content else ""
         tokens = {
             "input":  respuesta.usage.input_tokens,
             "output": respuesta.usage.output_tokens,
         }
-
         return {
             "analisis":    texto,
             "modelo":      respuesta.model,
@@ -186,26 +361,18 @@ def generar_analisis(days: int = 2) -> dict:
         }
 
     except anthropic.AuthenticationError:
-        return {
-            "analisis":    None,
-            "modelo":      None,
-            "tokens":      None,
-            "generado_en": datetime.now().isoformat(),
-            "error":       "API key inválida. Verificá ANTHROPIC_API_KEY.",
-        }
+        return _error("API key inválida. Verificá ANTHROPIC_API_KEY.")
     except anthropic.RateLimitError:
-        return {
-            "analisis":    None,
-            "modelo":      None,
-            "tokens":      None,
-            "generado_en": datetime.now().isoformat(),
-            "error":       "Límite de rate alcanzado. Intentá en unos minutos.",
-        }
+        return _error("Límite de rate alcanzado. Intentá en unos minutos.")
     except Exception as e:
-        return {
-            "analisis":    None,
-            "modelo":      None,
-            "tokens":      None,
-            "generado_en": datetime.now().isoformat(),
-            "error":       str(e),
-        }
+        return _error(str(e))
+
+
+def _error(msg: str) -> dict:
+    return {
+        "analisis":    None,
+        "modelo":      None,
+        "tokens":      None,
+        "generado_en": datetime.now().isoformat(),
+        "error":       msg,
+    }
