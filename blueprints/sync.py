@@ -1025,6 +1025,26 @@ def api_predict_glucose():
                 g_final    = round(g_blended)
                 ar_active  = True
 
+            # ── Explicación legible de la predicción ──────────────────────
+            from utils.explicabilidad import explicar_prediccion
+            explicacion = explicar_prediccion(
+                g_actual    = g_actual,
+                g_pred      = g_final,
+                componentes = {
+                    "roc_effect":    round(roc_effect, 1),
+                    "insulin_effect": round(insulin_effect, 1),
+                    "carb_effect":   round(carb_effect, 1),
+                    "dawn_effect":   round(dawn_effect_total, 1),
+                },
+                iob       = iob_now,
+                cob       = cob_now,
+                roc       = roc,
+                ex_factor = ex_factor,
+                isf       = isf_ef,
+                icr       = icr,
+                delta_min = delta_min,
+            )
+
             predictions[f"+{delta_min}min"] = {
                 # Valor central: mediana MC (o blend MC+AR si AR disponible)
                 "glucemia_pred":  g_final,
@@ -1065,8 +1085,9 @@ def api_predict_glucose():
                     "mc_weight": round(1 - ar_weight, 3) if ar_active else 1.0,
                     "age_min":   ar.get("last_age_min") if ar_active else None,
                 },
-                "iob_fut": round(iob_fut, 2),
-                "cob_fut": round(cob_fut, 1),
+                "iob_fut":     round(iob_fut, 2),
+                "cob_fut":     round(cob_fut, 1),
+                "explicacion": explicacion,
             }
 
         # ── Guardar predicción en BD para feedback posterior ──────────────

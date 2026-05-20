@@ -917,10 +917,44 @@ a.insight-chip:hover {
 .pred-seg-hiper { background:#f97316; }
 .pred-dom    { font-size:.60rem; color:var(--text-muted); white-space:nowrap; letter-spacing:-.01em; }
 
+/* ── Predicción — capa explicativa ─────────────────────────────────────── */
+.pred-pill {
+  flex-direction: column;    /* apilamos los bloques verticalmente */
+  align-items: flex-start;
+  gap: 2px;
+  cursor: default;
+}
+.pred-explicacion {
+  font-size: .67rem; font-weight: 600;
+  color: var(--text-muted);
+  line-height: 1.25;
+  max-width: 160px;
+  white-space: normal;
+  margin-top: 2px;
+}
+.pred-alerta {
+  font-size: .67rem; font-weight: 700;
+  color: #dc2626;
+  background: rgba(239,68,68,.08);
+  border: 1px solid rgba(239,68,68,.2);
+  border-radius: 6px;
+  padding: 2px 5px;
+  line-height: 1.3;
+  max-width: 200px;
+  white-space: normal;
+  margin-top: 2px;
+}
+[data-theme="dark"] .pred-alerta {
+  color: #fca5a5;
+  background: rgba(239,68,68,.15);
+  border-color: rgba(239,68,68,.3);
+}
+
 @media (max-width: 576px) {
   .pred-bar   { padding: .5rem .75rem; gap: .4rem; }
   .pred-bar-label { width: 100%; }
   .kin-more   { width: 100%; text-align: center; }
+  .pred-explicacion, .pred-alerta { max-width: 100%; }
 }
 </style>
 
@@ -964,6 +998,13 @@ a.insight-chip:hover {
         // Indicador de asimetría (skewness > 0.3 → más cola hacia hiper;  < -0.3 → hipo)
         const skewIcon = skew >  0.4 ? ' ↑' : skew < -0.4 ? ' ↓' : '';
 
+        // Explicación legible
+        const ex   = p.explicacion || {};
+        const exFactores = (ex.factores || [])
+          .filter(f => f.signo !== 'neutro')
+          .map(f => `${f.icono} ${f.texto}: ${f.impacto}`)
+          .join('\n');
+
         el.innerHTML = `
           <span class="pred-time">+${mins}min</span>
           <span class="pred-val">${p.glucemia_pred}${skewIcon}</span>
@@ -974,31 +1015,27 @@ a.insight-chip:hover {
               <div class="pred-seg pred-seg-hiper" style="width:${pHiper}%"></div>
             </div>
             <span class="pred-dom">${domLabel}${ci50txt ? ' · ' + ci50txt : ''}</span>
-          </div>`;
+          </div>
+          ${ex.titulo ? `<div class="pred-explicacion">${ex.emoji || ''} ${ex.titulo}</div>` : ''}
+          ${ex.alerta ? `<div class="pred-alerta">${ex.alerta}</div>` : ''}`;
 
-        // Tooltip completo con datos MC + AR
+        // Tooltip con explicación + datos técnicos
         const comp = p.componentes || {};
         const ar   = p.ar || {};
         const arLine = ar.active
           ? `AR(6): ${ar.g_pred} mg/dL (${Math.round(ar.weight*100)}%) · MC: ${Math.round((1-ar.weight)*100)}%\n`
-          : `AR: no disponible aún (sin entrenar)\n`;
-        const modelLabel = ar.active
-          ? `blend AR+MC`
-          : `mediana MC`;
+          : `AR: no disponible aún\n`;
+        const modelLabel = ar.active ? `blend AR+MC` : `mediana MC`;
         el.title =
+          `${ex.titulo || ''}\n` +
+          (exFactores ? `───────────────────────────\n${exFactores}\n` : '') +
+          `───────────────────────────\n` +
           `+${mins}min — ${p.glucemia_pred} mg/dL (${modelLabel})\n` +
-          `Rango 50 %: ${ci50txt || '?'} mg/dL\n` +
-          `IC 90 %:    ${ci90 ? ci90[0]+' – '+ci90[1] : '?'} mg/dL\n` +
+          `Rango 50%: ${ci50txt || '?'} · IC 90%: ${ci90 ? ci90[0]+'-'+ci90[1] : '?'}\n` +
+          `Hipo ${pHipo}% · Rango ${pRango}% · Hiper ${pHiper}%\n` +
+          `σ=${sigma} mg/dL · ${nSim.toLocaleString()} simulaciones\n` +
           `───────────────────────────\n` +
-          `Hipo ${pHipo} % · Rango ${pRango} % · Hiper ${pHiper} %\n` +
-          `σ = ${sigma} mg/dL · sesgo ${skew > 0 ? '+' : ''}${skew}\n` +
-          `${nSim.toLocaleString()} simulaciones Monte Carlo\n` +
-          `───────────────────────────\n` +
-          arLine +
-          `───────────────────────────\n` +
-          `Tendencia: ${comp.roc_effect >= 0 ? '+' : ''}${comp.roc_effect} mg/dL\n` +
-          `Insulina:  ${comp.insulin_effect} mg/dL\n` +
-          `Comida:   +${comp.carb_effect} mg/dL`;
+          arLine;
       }
 
       // Nota MC en la barra (reemplaza la de "literatura")
