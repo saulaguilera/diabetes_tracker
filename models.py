@@ -232,3 +232,68 @@ class CGMImport(db.Model):
 
     def __repr__(self):
         return f"<Import {self.filename} {self.records_count} registros>"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Personal Metabolic Model (PMM) — tablas de aprendizaje adaptativo
+# ══════════════════════════════════════════════════════════════════════════════
+
+class PMMParameter(db.Model):
+    """
+    Parámetro metabólico aprendido con incertidumbre Bayesiana.
+
+    Cada fila = un parámetro (ISF, ICR) en un contexto (bloque horario).
+    mu/sigma forman la distribución posterior: param ~ N(mu, sigma²).
+
+    context_block:
+        -1 = global (sin distinción horaria)
+         0, 4, 8, 12, 16, 20 = bloque de 4 horas (hora de inicio)
+    """
+    __tablename__ = "pmm_parameters"
+
+    id            = db.Column(db.Integer, primary_key=True)
+    param_name    = db.Column(db.String(30), nullable=False)   # 'ISF' | 'ICR'
+    context_block = db.Column(db.Integer, nullable=False, default=-1)
+    mu            = db.Column(db.Float, nullable=False)        # estimación actual
+    sigma         = db.Column(db.Float, nullable=False)        # incertidumbre (std)
+    n_obs         = db.Column(db.Integer, default=0)           # obs incorporadas
+    last_updated  = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        block_label = f"bloque {self.context_block}h" if self.context_block >= 0 else "global"
+        return (f"<PMM {self.param_name} {block_label} "
+                f"μ={self.mu:.1f} σ={self.sigma:.1f} n={self.n_obs}>")
+
+
+class PMMObservation(db.Model):
+    """
+    Episodio de aprendizaje identificado y evaluado.
+
+    Cada fila = un evento (corrección o comida+bolo) del que se pudo
+    extraer una observación del parámetro correspondiente.
+    Incluye la calidad de la observación y el resultado del update Bayesiano.
+    """
+    __tablename__ = "pmm_observations"
+
+    id             = db.Column(db.Integer, primary_key=True)
+    param_name     = db.Column(db.String(30), nullable=False)   # 'ISF' | 'ICR'
+    source_type    = db.Column(db.String(30))  # 'correction_bolus' | 'meal_bolus'
+    source_id      = db.Column(db.Integer)     # id en insulin_doses
+    observed_at    = db.Column(db.DateTime, nullable=False)
+    time_block     = db.Column(db.Integer)     # 0,4,8,12,16,20
+    quality_score  = db.Column(db.Float)       # 0-1
+    observed_value = db.Column(db.Float)       # ISF_obs o ICR_obs
+    obs_sigma      = db.Column(db.Float)       # ruido estimado de la obs
+    # Estado del parámetro antes/después del update
+    mu_before      = db.Column(db.Float)
+    sigma_before   = db.Column(db.Float)
+    mu_after       = db.Column(db.Float)
+    sigma_after    = db.Column(db.Float)
+    used_in_update = db.Column(db.Boolean, default=False)
+    skip_reason    = db.Column(db.String(100)) # si no se usó, por qué
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return (f"<PMMObs {self.param_name} val={self.observed_value:.1f} "
+                f"q={self.quality_score:.2f} @ {self.observed_at}>")

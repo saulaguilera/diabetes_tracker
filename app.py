@@ -144,6 +144,14 @@ with app.app_context():
         if "glucose_predictions" not in existing_tables:
             db.create_all()   # dialect-aware: funciona en SQLite y PostgreSQL
 
+        # ── PMM: Personal Metabolic Model ─────────────────────────────────────
+        # db.create_all() crea las tablas nuevas automáticamente.
+        # Las guardamos aquí por si el create_all inicial fue antes de agregar los modelos.
+        if "pmm_parameters" not in existing_tables:
+            db.create_all()
+        if "pmm_observations" not in existing_tables:
+            db.create_all()
+
 
 # ── Configuración LibreLinkUp ─────────────────────────────────────────────────
 _LIBRE_EMAIL    = os.environ.get("LIBRE_EMAIL", "")
@@ -233,8 +241,23 @@ def _iniciar_scheduler():
                     except Exception:
                         pass
 
+            def _pmm_calibration_job():
+                with app.app_context():
+                    try:
+                        from pmm.engines.calibration import run_calibration
+                        run_calibration()
+                    except Exception:
+                        pass
+
             scheduler = BackgroundScheduler(timezone=_tz)  # usa TZ del entorno (America/Santiago)
             scheduler.add_job(_sync_job, "interval", minutes=5, id="libre_sync")
+            # PMM recalibración: cada hora
+            scheduler.add_job(
+                _pmm_calibration_job,
+                "interval",
+                hours=1,
+                id="pmm_calibration",
+            )
             # Reporte semanal: cada lunes a las 9:00am (hora local del servidor)
             scheduler.add_job(
                 _weekly_report_job,
@@ -247,6 +270,8 @@ def _iniciar_scheduler():
             scheduler.start()
             # Sync inicial al arrancar
             _sync_job()
+            # Bootstrap PMM al arrancar (procesa historial completo si es primera vez)
+            _pmm_calibration_job()
 
         t = threading.Thread(target=_scheduler_worker, daemon=True)
         t.start()
@@ -268,10 +293,15 @@ from blueprints.comidas      import bp as comidas_bp
 from blueprints.herramientas import bp as herramientas_bp
 from blueprints.reportes     import bp as reportes_bp
 from blueprints.patrones     import bp as patrones_bp
+from blueprints.pmm_bp       import bp as pmm_bp
 
 for _bp in [auth_bp, glucemia_bp, insulina_bp, actividad_bp, alimentos_bp,
-            backup_bp, sync_bp, comidas_bp, herramientas_bp, reportes_bp, patrones_bp]:
+            backup_bp, sync_bp, comidas_bp, herramientas_bp, reportes_bp,
+            patrones_bp, pmm_bp]:
     app.register_blueprint(_bp)
+
+# PMM blueprint exento de CSRF (API JSON)
+csrf.exempt(pmm_bp)
 
 # sync blueprint: exento de CSRF (cron externo + APIs JSON)
 csrf.exempt(sync_bp)
