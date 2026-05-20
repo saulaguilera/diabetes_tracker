@@ -3,11 +3,12 @@
 
 {% block content %}
 
-{# ── Hero row ──────────────────────────────────────────────────────────────── #}
-<div class="row g-3 mb-3 align-items-stretch">
+{# ── Área superior: hero + predicciones + gráfico ─────────────────────────── #}
+{# Mobile: hero → predicciones → chart  |  Desktop: hero | predicciones + chart #}
+<div class="dash-top mb-3">
 
   {# Glucosa actual #}
-  <div class="col-12 col-md-4 col-lg-3">
+  <div class="dash-hero">
     <div class="glucose-hero-card h-100">
       <div class="d-flex justify-content-between align-items-start mb-1">
         <span class="hero-label">Glucosa ahora</span>
@@ -81,7 +82,7 @@
   </div>
 
   {# Gráfico CGM #}
-  <div class="col-12 col-md-8 col-lg-9">
+  <div class="dash-chart">
     <div class="chart-card h-100">
       <div class="chart-card-header">
         <span class="chart-title">Glucosa — últimas 24h</span>
@@ -91,13 +92,13 @@
           <span class="legend-dot ms-2" style="background:#f97316;"></span> Hiper
         </div>
       </div>
-      <div id="chart-timeline" style="height:230px;"></div>
+      <div id="chart-timeline" class="dash-chart-inner"></div>
     </div>
   </div>
-</div>
 
-{# ── Card "Estado ahora" — predicción + contexto + acciones ──────────────── #}
-<div class="estado-card mb-3" id="estado-card">
+  {# Estado ahora — predicción + contexto + acciones #}
+  <div class="dash-estado">
+  <div class="estado-card h-100" id="estado-card">
 
   {# Header #}
   <div class="estado-header">
@@ -225,7 +226,9 @@
     </div>
 
   </div>{# /estado-body #}
-</div>
+  </div>{# /estado-card #}
+  </div>{# /dash-estado #}
+</div>{# /dash-top #}
 
 {# ── Modal Análisis IA ─────────────────────────────────────────────────────── #}
 <div class="modal fade" id="modalAnalisisIA" tabindex="-1" aria-labelledby="modalAnalisisIALabel" aria-hidden="true">
@@ -421,10 +424,10 @@
 
 {# ── Insights 7d ──────────────────────────────────────────────────────────── #}
 {% if insights and insights.tir7 is not none %}
-<div class="row g-2 mb-3">
+<div class="insights-scroll-row mb-3">
 
   {# TIR 7 días + tendencia #}
-  <div class="col-12 col-sm-4">
+  <div class="isr-cell">
     <div class="insight-chip insight-{{ insights.tir7_color }}">
       <div class="ic-icon-wrap">
         <i class="bi bi-bullseye"></i>
@@ -455,7 +458,7 @@
 
   {# Recomendación más urgente #}
   {% if insights.top_rec %}
-  <div class="col-12 col-sm-4">
+  <div class="isr-cell">
     <a href="{{ url_for('recomendaciones') }}" class="insight-chip insight-{{ insights.top_rec.color }} text-decoration-none">
       <div class="ic-icon-wrap">
         <i class="bi {{ insights.top_rec.icon }}"></i>
@@ -474,7 +477,7 @@
     </a>
   </div>
   {% else %}
-  <div class="col-12 col-sm-4">
+  <div class="isr-cell">
     <div class="insight-chip insight-success">
       <div class="ic-icon-wrap">
         <i class="bi bi-check-circle-fill"></i>
@@ -489,7 +492,7 @@
   {% endif %}
 
   {# ISF / ICR personal #}
-  <div class="col-12 col-sm-4">
+  <div class="isr-cell">
     <a href="{{ url_for('calculadora') }}" class="insight-chip insight-info text-decoration-none">
       <div class="ic-icon-wrap">
         <i class="bi bi-calculator-fill"></i>
@@ -538,7 +541,7 @@
     </a>
   </div>
 
-</div>
+</div>{# /insights-scroll-row #}
 {% endif %}
 
 {# ── Feed de actividad reciente ────────────────────────────────────────────── #}
@@ -1316,6 +1319,70 @@ a.insight-chip:hover {
   .estado-preds { border-right: none; border-bottom: 1px solid var(--border); }
   .epred { min-width: 78px; }
   .estado-context { gap: .35rem; }
+}
+
+/* ── Mobile-first top grid ──────────────────────────────────────────────────── */
+.dash-top {
+  display: grid;
+  gap: .65rem;
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "hero"
+    "estado"
+    "chart";
+}
+@media (min-width: 768px) {
+  .dash-top {
+    grid-template-columns: 280px 1fr;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "hero estado"
+      "hero chart";
+    gap: .75rem;
+  }
+}
+.dash-hero   { grid-area: hero; }
+.dash-estado { grid-area: estado; }
+.dash-chart  { grid-area: chart; }
+
+/* Chart height: compact on mobile, taller on desktop */
+.dash-chart-inner { height: 160px; }
+@media (min-width: 768px) {
+  .dash-chart-inner { height: 220px; }
+}
+
+/* Hero card: tighter on mobile */
+@media (max-width: 767px) {
+  .glucose-hero-card { padding: 1rem 1.1rem; }
+  .hero-value { font-size: 2.6rem; letter-spacing: -1px; }
+  .hero-actions { display: flex; gap: .45rem; flex-wrap: wrap; }
+  .btn-quicklog { font-size: .78rem; padding: .38rem .75rem; }
+  .btn-action-sm { padding: .38rem .5rem; font-size: .78rem; }
+}
+
+/* ── Insights horizontal scroll on mobile ───────────────────────────────────── */
+.insights-scroll-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(200px, 1fr));
+  gap: .5rem;
+}
+@media (max-width: 767px) {
+  .insights-scroll-row {
+    display: flex;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    gap: .5rem;
+    padding-bottom: .35rem;
+    /* hide scrollbar */
+    scrollbar-width: none;
+  }
+  .insights-scroll-row::-webkit-scrollbar { display: none; }
+  .isr-cell {
+    flex: 0 0 min(78vw, 260px);
+    scroll-snap-align: start;
+  }
+  .isr-cell .insight-chip { height: 100%; }
 }
 </style>
 
