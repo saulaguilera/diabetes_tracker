@@ -145,8 +145,12 @@
     </div>
     <div class="ql-card-body">
 
-      {# ── Tabs: Manual / Buscar ─────────────────────────────────── #}
+      {# ── Tabs: Foto / Manual / Buscar ─────────────────────────── #}
       <div class="ql-food-tabs mb-2">
+        <button type="button" class="ql-food-tab ql-food-tab-foto" id="tab-foto"
+                onclick="switchFoodTab('foto')">
+          <i class="bi bi-camera-fill"></i> Foto IA
+        </button>
         <button type="button" class="ql-food-tab active" id="tab-manual"
                 onclick="switchFoodTab('manual')">
           <i class="bi bi-pencil"></i> Manual
@@ -155,6 +159,60 @@
                 onclick="switchFoodTab('buscar')">
           <i class="bi bi-search"></i> Buscar
         </button>
+      </div>
+
+      {# ── Panel foto ────────────────────────────────────────────── #}
+      <div id="panel-foto" style="display:none;">
+        <input type="file" id="ql-foto-input" accept="image/*" capture="environment"
+               style="display:none;" onchange="qlFotoSeleccionada(this)">
+
+        {# Estado 0: invitación #}
+        <div id="ql-foto-0">
+          <button type="button" class="ql-foto-btn" onclick="document.getElementById('ql-foto-input').click()">
+            <span class="ql-foto-icon"><i class="bi bi-camera-fill"></i></span>
+            <span class="ql-foto-txt">
+              <span class="ql-foto-title">Fotografiar el plato</span>
+              <span class="ql-foto-sub">Claude identifica cada ingrediente y estima los CH</span>
+            </span>
+            <i class="bi bi-chevron-right" style="color:var(--text-muted);font-size:.8rem;flex-shrink:0;"></i>
+          </button>
+        </div>
+
+        {# Estado 1: procesando #}
+        <div id="ql-foto-1" style="display:none;" class="ql-foto-procesando">
+          <div class="ql-foto-preview-wrap">
+            <img id="ql-foto-preview" src="" alt="" class="ql-foto-preview-img">
+            <div class="ql-foto-overlay">
+              <div class="spinner-border text-white" style="width:1.5rem;height:1.5rem;" role="status"></div>
+              <div class="ql-foto-overlay-txt">Analizando…</div>
+            </div>
+          </div>
+          <span class="ql-foto-wait">Claude está identificando ingredientes</span>
+        </div>
+
+        {# Estado 2: resultado #}
+        <div id="ql-foto-2" style="display:none;">
+          <div class="ql-foto-result-header">
+            <span id="ql-foto-nombre" class="fw-bold" style="font-size:.88rem;"></span>
+            <button type="button" class="ql-foto-retry"
+                    onclick="document.getElementById('ql-foto-input').click()">
+              <i class="bi bi-arrow-repeat"></i>
+            </button>
+          </div>
+          <div id="ql-foto-warn" class="ql-foto-conf-warn" style="display:none;"></div>
+          <div id="ql-foto-chips" class="ql-foto-chips"></div>
+          <button type="button" class="ql-foto-usar-btn" onclick="qlUsarResultadoFoto()">
+            <i class="bi bi-plus-circle-fill me-1"></i>Agregar ingredientes
+          </button>
+        </div>
+
+        {# Estado error #}
+        <div id="ql-foto-err" style="display:none;" class="ql-foto-error">
+          <i class="bi bi-exclamation-circle text-danger"></i>
+          <span id="ql-foto-err-msg" class="ms-1 text-danger" style="font-size:.82rem;"></span>
+          <button type="button" class="ql-foto-retry ms-2"
+                  onclick="document.getElementById('ql-foto-input').click()">Reintentar</button>
+        </div>
       </div>
 
       {# ── Panel manual ──────────────────────────────────────────── #}
@@ -709,6 +767,93 @@
 }
 .ql-submit:hover { background: #4f46e5; }
 
+/* Tab foto destacado */
+.ql-food-tab-foto {
+  background: rgba(99,102,241,.08) !important;
+  border-color: rgba(99,102,241,.3) !important;
+  color: #6366f1 !important;
+}
+.ql-food-tab-foto.active {
+  background: rgba(99,102,241,.18) !important;
+  border-color: #6366f1 !important;
+  color: #4f46e5 !important;
+}
+
+/* Panel foto */
+.ql-foto-btn {
+  display: flex; align-items: center; gap: .75rem; width: 100%;
+  padding: .7rem .8rem; border-radius: 12px; cursor: pointer;
+  background: rgba(99,102,241,.06); border: 1.5px dashed rgba(99,102,241,.3);
+  text-align: left; transition: background .15s;
+}
+.ql-foto-btn:hover { background: rgba(99,102,241,.12); }
+.ql-foto-icon {
+  width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+  background: rgba(99,102,241,.15); color: #6366f1; font-size: 1.1rem;
+  display: flex; align-items: center; justify-content: center;
+}
+.ql-foto-txt { flex: 1; }
+.ql-foto-title { display: block; font-size: .86rem; font-weight: 700; color: var(--text); }
+.ql-foto-sub   { display: block; font-size: .72rem; color: var(--text-muted); margin-top: 1px; }
+
+.ql-foto-procesando {
+  display: flex; align-items: center; gap: .7rem; padding: .5rem .2rem;
+}
+.ql-foto-preview-wrap {
+  position: relative; width: 56px; height: 56px; border-radius: 8px;
+  overflow: hidden; flex-shrink: 0;
+}
+.ql-foto-preview-img { width: 100%; height: 100%; object-fit: cover; }
+.ql-foto-overlay {
+  position: absolute; inset: 0; background: rgba(0,0,0,.55);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+}
+.ql-foto-overlay-txt { font-size: .55rem; color: #fff; font-weight: 600; }
+.ql-foto-wait { font-size: .78rem; color: var(--text-muted); }
+
+.ql-foto-result-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: .4rem;
+}
+.ql-foto-retry {
+  font-size: .7rem; color: var(--text-muted); background: none;
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: .18rem .45rem; cursor: pointer;
+}
+.ql-foto-conf-warn {
+  font-size: .73rem; font-weight: 600; color: #d97706;
+  background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.25);
+  border-radius: 8px; padding: .25rem .55rem; margin-bottom: .4rem;
+}
+.ql-foto-chips { display: flex; flex-direction: column; gap: .3rem; margin-bottom: .5rem; }
+.ql-foto-chip {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; padding: .35rem .55rem;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.ql-foto-chip-name {
+  font-size: .82rem; font-weight: 600; color: var(--text);
+  display: flex; align-items: center; gap: .3rem; flex-wrap: wrap;
+}
+.ql-foto-chip-g {
+  font-size: .65rem; color: var(--text-muted);
+  background: var(--surface); border-radius: 5px; padding: 0 .3rem;
+}
+.ql-foto-chip-macros { font-size: .73rem; display: flex; gap: .5rem; flex-wrap: wrap; }
+.ql-foto-chip-nota   { font-size: .65rem; color: var(--text-muted); display: flex; gap: .25rem; }
+.ql-foto-usar-btn {
+  width: 100%; padding: .45rem; border-radius: 10px;
+  background: rgba(34,197,94,.1); border: 1.5px solid #22c55e;
+  color: #15803d; font-size: .84rem; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  gap: .35rem; transition: all .12s;
+}
+.ql-foto-usar-btn:hover { background: rgba(34,197,94,.2); }
+.ql-foto-error {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: .35rem; padding: .4rem .2rem;
+}
+
 /* Activity chips */
 .ql-act-chips { display: flex; flex-wrap: wrap; gap: .35rem; }
 .ql-act-chip {
@@ -933,10 +1078,130 @@ function aplicarBolo() {
 
 /* ── Tabs de comida ─────────────────────────────────────────────────────── */
 function switchFoodTab(tab) {
-  document.getElementById('panel-manual').style.display = tab === 'manual' ? '' : 'none';
-  document.getElementById('panel-buscar').style.display = tab === 'buscar' ? '' : 'none';
-  document.getElementById('tab-manual').classList.toggle('active', tab === 'manual');
-  document.getElementById('tab-buscar').classList.toggle('active', tab === 'buscar');
+  ['foto', 'manual', 'buscar'].forEach(t => {
+    document.getElementById(`panel-${t}`).style.display = tab === t ? '' : 'none';
+    document.getElementById(`tab-${t}`).classList.toggle('active', tab === t);
+  });
+}
+
+/* ── Foto IA en Quick Log ────────────────────────────────────────────────── */
+let _qlFotoResultado = null;
+
+function qlFotoSetEstado(n) {
+  ['0','1','2','err'].forEach(s =>
+    document.getElementById(`ql-foto-${s}`).style.display = 'none');
+  document.getElementById(`ql-foto-${n}`).style.display = '';
+}
+
+async function qlFotoSeleccionada(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  // Preview
+  document.getElementById('ql-foto-preview').src = URL.createObjectURL(file);
+  qlFotoSetEstado('1');
+
+  // Redimensionar si > 1.5 MB
+  let blob = file;
+  if (file.size > 1.5 * 1024 * 1024) blob = await qlRedimensionar(file, 1280);
+
+  const fd = new FormData();
+  fd.append('foto', blob, file.name);
+
+  try {
+    const resp = await fetch('/api/analizar-foto', { method: 'POST', body: fd });
+    const data = await resp.json();
+
+    if (!data.ok || data.error) {
+      document.getElementById('ql-foto-err-msg').textContent = data.error || 'Error al analizar.';
+      qlFotoSetEstado('err');
+      return;
+    }
+
+    _qlFotoResultado = data;
+    qlMostrarResultado(data);
+  } catch(e) {
+    document.getElementById('ql-foto-err-msg').textContent = 'Sin conexión o error de red.';
+    qlFotoSetEstado('err');
+  }
+  input.value = '';
+}
+
+function qlMostrarResultado(data) {
+  document.getElementById('ql-foto-nombre').textContent = data.nombre_plato || 'Plato detectado';
+
+  // Aviso de confianza
+  const warn = document.getElementById('ql-foto-warn');
+  if (data.confianza_general !== 'alta') {
+    warn.textContent = data.confianza_general === 'baja'
+      ? '⚠️ Confianza baja — revisá los CH antes de guardar.'
+      : '⚠️ Confianza media — verificá los carbohidratos.';
+    warn.style.display = '';
+  } else {
+    warn.style.display = 'none';
+  }
+
+  // Chips de ingredientes
+  const chips = document.getElementById('ql-foto-chips');
+  chips.innerHTML = (data.ingredientes || []).map((ing, i) => {
+    const colConf = ing.confianza === 'alta' ? '#16a34a' : ing.confianza === 'media' ? '#d97706' : '#dc2626';
+    return `<div class="ql-foto-chip">
+      <span class="ql-foto-chip-name">
+        <i class="bi bi-circle-fill" style="color:${colConf};font-size:.45rem;vertical-align:middle;"></i>
+        ${escH(ing.nombre)}
+        ${ing.gramos_estimados ? `<span class="ql-foto-chip-g">${ing.gramos_estimados}g</span>` : ''}
+      </span>
+      <span class="ql-foto-chip-macros">
+        <b style="color:#d97706;">${ing.carbs_g}g CH</b>
+        <span style="color:var(--text-muted);">${ing.protein_g}g P · ${ing.fat_g}g G</span>
+      </span>
+      ${ing.nota ? `<span class="ql-foto-chip-nota"><i class="bi bi-info-circle"></i> ${escH(ing.nota)}</span>` : ''}
+    </div>`;
+  }).join('');
+
+  qlFotoSetEstado('2');
+}
+
+function qlUsarResultadoFoto() {
+  if (!_qlFotoResultado) return;
+
+  (_qlFotoResultado.ingredientes || []).forEach(ing => {
+    const grams = ing.gramos_estimados || 100;
+    ingredientes.push({
+      id:        Date.now() + Math.random(),
+      name:      ing.nombre,
+      food_id:   '',
+      grams:     grams,
+      serving_g: grams,
+      carbs_s:   ing.carbs_g,
+      protein_s: ing.protein_g,
+      fat_s:     ing.fat_g,
+      cal_s:     ing.calorias || Math.round(ing.carbs_g * 4 + ing.protein_g * 4 + ing.fat_g * 9),
+      gi:        null,
+    });
+  });
+
+  renderIngredients();
+
+  // Volver al tab manual para ver el resultado
+  switchFoodTab('manual');
+  _qlFotoResultado = null;
+}
+
+async function qlRedimensionar(file, maxPx) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width  = Math.round(img.width  * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(blob => resolve(blob || file), 'image/jpeg', 0.88);
+    };
+    img.onerror = () => resolve(file);
+    img.src = URL.createObjectURL(file);
+  });
 }
 
 /* ── Parser de cantidad desde texto ─────────────────────────────────────── */
