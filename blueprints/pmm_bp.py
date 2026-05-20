@@ -136,6 +136,36 @@ def api_pmm_recalibrate():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@bp.route("/api/pmm/anomaly", endpoint="api_pmm_anomaly")
+def api_pmm_anomaly():
+    """
+    Score compuesto de anomalía metabólica (0-100).
+
+    Combina tres señales con horizontes temporales distintos:
+      - drift_cusum  : shift sostenido (días/semanas) — peso 40%
+      - residual     : error de predicción reciente (horas) — peso 35%
+      - mahalanobis  : estado actual vs historial (puntual) — peso 25%
+
+    Retorna:
+        score         : 0-100
+        level         : 'normal' | 'watch' | 'alert' | 'critical'
+        components    : desglose de cada señal
+        mahal_detail  : z-scores e info de la distancia de Mahalanobis
+        reasons       : causas detectadas
+        suggestions   : acciones recomendadas
+        narrativa     : descripción en español
+    """
+    err = _require_login()
+    if err:
+        return err
+    try:
+        from pmm.engines.anomaly import compute_anomaly_score
+        data = compute_anomaly_score()
+        return jsonify(data)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @bp.route("/api/pmm/drift", endpoint="api_pmm_drift")
 def api_pmm_drift():
     """
