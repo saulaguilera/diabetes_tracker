@@ -66,8 +66,12 @@ class MealComponent(db.Model):
     fiber_g         = db.Column(db.Float, default=0)      # fibra dietética (g)
     glycemic_index  = db.Column(db.Integer)               # ÍG 0-100 (nullable)
     grams           = db.Column(db.Float)   # porción en gramos (opcional)
+    ml              = db.Column(db.Float)   # volumen en mL (líquidos; nullable)
+    density_g_ml    = db.Column(db.Float)   # densidad usada para ml→g (informativo)
 
     def __repr__(self):
+        if self.ml:
+            return f"<Componente {self.name} {self.ml}ml ({self.carbs_g}g CH)>"
         return f"<Componente {self.name} {self.carbs_g}g CH>"
 
 
@@ -312,9 +316,16 @@ class PMMDriftState(db.Model):
         None          → sin drift activo
 
     drift_factor:
-        >1.0 → resistencia  (multiplicar ISF efectivo para compensar)
-        <1.0 → sensibilidad (reducir ISF efectivo)
-        1.0  → basal
+        Factor corrector multiplicativo del bolo (no del ISF).
+        Equivalentemente: eff_ISF = ISF / drift_factor
+
+        >1.0 → resistencia: necesitás MÁS insulina
+               (dividir ISF por drift_factor → ISF efectivo más bajo
+                → corrección mayor por cada mg/dL sobre el objetivo)
+        <1.0 → sensibilidad: necesitás MENOS insulina
+               (dividir ISF por drift_factor → ISF efectivo más alto
+                → corrección menor)
+        1.0  → sin drift detectado, ISF sin ajuste
     """
     __tablename__ = "pmm_drift_state"
 

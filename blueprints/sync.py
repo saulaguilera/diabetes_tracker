@@ -883,8 +883,10 @@ def api_predict_glucose():
         # al cálculo clásico. El σ del PMM va directo al Monte Carlo.
         pmm_isf_sigma = None
         pmm_icr_sigma = None
+        drift_factor  = 1.0   # >1 resistencia, <1 sensibilidad
         try:
             from pmm.core.parameter_store import get_isf_now, get_icr_now
+            from pmm.engines.drift import get_drift_status
             pmm_isf = get_isf_now(hora=hora)
             pmm_icr = get_icr_now(hora=hora)
             # Solo usar PMM si tiene datos reales (no prior)
@@ -896,6 +898,8 @@ def api_predict_glucose():
                 icr_personal  = pmm_icr["mu"]
                 pmm_icr_sigma = pmm_icr["sigma"]
                 n_icr         = pmm_icr["n_obs"]
+            # Drift CUSUM: ajusta ISF efectivo (resistance ↓ ISF, sensitivity ↑ ISF)
+            drift_factor = get_drift_status().get("drift_factor", 1.0)
         except Exception:
             pass   # PMM no disponible → continuar con método clásico
 
@@ -927,7 +931,11 @@ def api_predict_glucose():
         act_cutoff = now - timedelta(hours=24)
         activities = Activity.query.filter(Activity.timestamp >= act_cutoff).all()
         ex_factor  = exercise_sensitivity_factor(activities, at_time=now)
-        isf_ef     = round((isf_base or 0) * ex_factor, 1) if isf_base else None
+        # ISF efectivo: aplica ejercicio y drift CUSUM.
+        # eff_ISF = ISF × ex_factor / drift_factor
+        # (drift_factor > 1 resistencia → eff ISF menor → más insulina necesaria)
+        isf_ef     = (round((isf_base or 0) * ex_factor / max(0.1, drift_factor), 1)
+                      if isf_base else None)
 
         # ── Datos actuales ────────────────────────────────────────────────
         snap = get_kinetics_snapshot(hours_lookback=6, dia_min=dia_min, peak_min=peak_min)

@@ -85,6 +85,28 @@ def run_calibration(force_bootstrap: bool = False) -> dict:
         is_bootstrap = force_bootstrap or (n_params == 0 and n_obs == 0)
         stats["bootstrap"] = is_bootstrap
 
+        # ── Reset si es bootstrap forzado ──────────────────────────────────────
+        # Sin esto, re-ejecutar bootstrap procesaría las MISMAS observaciones
+        # múltiples veces → n_obs inflado, σ colapsado bajo el floor,
+        # parámetros corrompidos.
+        if force_bootstrap and (n_params > 0 or n_obs > 0):
+            from models import db
+            PMMObservation.query.delete()
+            PMMParameter.query.delete()
+            # También resetear el CUSUM (los residuales previos asumían params viejos)
+            try:
+                from pmm.engines.drift import reset_cusum
+                reset_cusum()
+            except Exception:
+                pass
+            db.session.commit()
+            logger.info(
+                f"PMM bootstrap forzado: borrados {n_params} parámetros + "
+                f"{n_obs} observaciones; CUSUM reseteado"
+            )
+            stats["reset_params"] = n_params
+            stats["reset_obs"]    = n_obs
+
         days = BOOTSTRAP_DAYS if is_bootstrap else INCREMENTAL_WINDOW_HOURS / 24 * 2
 
         # ── ISF: episodios de corrección ───────────────────────────────────────

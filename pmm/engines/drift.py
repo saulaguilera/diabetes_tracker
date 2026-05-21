@@ -38,6 +38,9 @@ _CUSUM_H_FACTOR  = 5.0    # h = σ_ref × H_FACTOR
 _SIGMA_EWMA_ALPHA = 0.05  # suavizado exponencial para σ_ref (ventana ≈ 20 obs)
 _DEFAULT_SIGMA   = 20.0   # σ inicial asumido si no hay datos
 _MIN_RESIDUALS   = 20     # mínimo de residuales para activar el detector
+_WINSORIZE_Z     = 3.0    # clip de residuales a ±3σ antes de acumular CUSUM
+                          # (evita que un outlier único — sensor defectuoso,
+                          #  comida no registrada — dispare drift falsamente)
 
 # Mensaje narrativo del estado de drift
 _NARRATIVA = {
@@ -109,16 +112,29 @@ def update_cusum(residuals: Optional[list[float]] = None) -> dict:
     was_active = state.drift_active
     prev_dir   = state.drift_dir
 
-    for r in residuals:
+    for r_raw in residuals:
+        # ── Winsorize: clip a ±3σ_ref antes de acumular ───────────────────
+        # Un outlier extremo (sensor defectuoso, comida no registrada) puede
+        # empujar el CUSUM al umbral instantáneamente y disparar una falsa
+        # alarma de drift. El clip preserva la dirección de la señal pero
+        # limita la magnitud por punto, requiriendo SOSTENIBILIDAD para
+        # acumular drift real.
+        cap = _WINSORIZE_Z * state.sigma_ref
+        r   = max(-cap, min(cap, r_raw))
+
         # ── Actualizar σ_ref con EWMA (varianza rolling) ──────────────────
+        # Usa el valor original (r_raw) para la EWMA: si la varianza está
+        # subiendo legítimamente, queremos detectarlo. Pero acotamos para
+        # que un outlier no infle σ_ref descontroladamente.
+        r_for_sigma = max(-cap * 1.5, min(cap * 1.5, r_raw))
         state.sigma_ref = math.sqrt(
             (1 - _SIGMA_EWMA_ALPHA) * state.sigma_ref ** 2 +
-            _SIGMA_EWMA_ALPHA       * r ** 2
+            _SIGMA_EWMA_ALPHA       * r_for_sigma ** 2
         )
         k = state.sigma_ref * _CUSUM_K_FACTOR
         h = state.sigma_ref * _CUSUM_H_FACTOR
 
-        # ── Update CUSUM ───────────────────────────────────────────────────
+        # ── Update CUSUM (con residual winsorizado) ───────────────────────
         state.cusum_pos = max(0.0, state.cusum_pos + r - k)
         state.cusum_neg = min(0.0, state.cusum_neg + r + k)
 

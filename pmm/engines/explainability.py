@@ -90,6 +90,16 @@ def decompose_glucose_delta(
             result["error"] = "Sin ISF disponible"
             return result
 
+        # Drift CUSUM: aplica al ISF para descomposición causal consistente
+        # con la predicción y la calculadora de bolo.
+        try:
+            from pmm.engines.drift import get_drift_status
+            drift_factor = get_drift_status().get("drift_factor", 1.0)
+            if drift_factor and drift_factor != 1.0:
+                isf_mu = isf_mu / max(0.1, drift_factor)
+        except Exception:
+            pass
+
         saved_dia = _get_setting("dia_min")
         dia_min = int(float(saved_dia)) if saved_dia else _DEFAULT_DIA_MIN
 
