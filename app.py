@@ -177,6 +177,8 @@ with app.app_context():
             db.create_all()
         if "ssm_innovations" not in existing_tables:
             db.create_all()
+        if "tuning_experiments" not in existing_tables:
+            db.create_all()
 
 
 # ── Configuración LibreLinkUp ─────────────────────────────────────────────────
@@ -336,15 +338,17 @@ from blueprints.reportes     import bp as reportes_bp
 from blueprints.patrones     import bp as patrones_bp
 from blueprints.pmm_bp       import bp as pmm_bp
 from blueprints.bench_bp     import bp as bench_bp
+from blueprints.tuning_bp    import bp as tuning_bp
 
 for _bp in [auth_bp, glucemia_bp, insulina_bp, actividad_bp, alimentos_bp,
             backup_bp, sync_bp, comidas_bp, herramientas_bp, reportes_bp,
-            patrones_bp, pmm_bp, bench_bp]:
+            patrones_bp, pmm_bp, bench_bp, tuning_bp]:
     app.register_blueprint(_bp)
 
 # PMM blueprint exento de CSRF (API JSON)
 csrf.exempt(pmm_bp)
 csrf.exempt(bench_bp)
+csrf.exempt(tuning_bp)
 
 # sync blueprint: exento de CSRF (cron externo + APIs JSON)
 csrf.exempt(sync_bp)

@@ -25,7 +25,7 @@ Cuando agreguemos persistencia (SSM v1), reemplazamos esto por:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -103,13 +103,39 @@ def _load_events(now: datetime, hours: int = LOOKBACK_HOURS) -> list[Event]:
 
 # ── Process noise matrix ─────────────────────────────────────────────────
 
-def _Q_for_dt(dt_min: float) -> np.ndarray:
+def _Q_for_dt(dt_min: float, params=None) -> np.ndarray:
     """
     Process noise Q escalado con Δt (Wiener increments).
     Diagonal — sin correlaciones (priors no informados).
+
+    Cuando params se pasa, override exhaustivo de los Q_ por estado +
+    INFLATION multiplier.
     """
-    diag = [PROCESS_NOISE_DIAG[n] * max(0.1, dt_min) for n in STATE_NAMES]
+    if params is not None:
+        inflation = params.INFLATION
+        diag = [
+            params.Q_G       * max(0.1, dt_min) * inflation,
+            params.Q_IOB     * max(0.1, dt_min) * inflation,
+            params.Q_IOB_EFF * max(0.1, dt_min) * inflation,
+            params.Q_COB1    * max(0.1, dt_min) * inflation,
+            params.Q_COB2    * max(0.1, dt_min) * inflation,
+            params.Q_SI      * max(0.1, dt_min) * inflation,
+        ]
+    else:
+        diag = [PROCESS_NOISE_DIAG[n] * max(0.1, dt_min) for n in STATE_NAMES]
     return np.diag(diag)
+
+
+def _R_cgm(g_estimated: float, params=None) -> np.ndarray:
+    """R override-aware del CGM (multiplicativo MARD + floor)."""
+    if params is not None:
+        base = params.R_CGM_BASE
+        mard = params.R_CGM_MARD
+    else:
+        base = CGM_NOISE_FLOOR
+        mard = CGM_MARD_PCT
+    sigma = max(base, mard * abs(g_estimated))
+    return np.array([[sigma ** 2]])
 
 
 # ── Filter run ───────────────────────────────────────────────────────────
@@ -138,12 +164,13 @@ class FilterResult:
 
 def run_filter(
     now:           datetime,
-    hours:         int = LOOKBACK_HOURS,
+    hours:         Optional[int] = None,
     isf_prior:     Optional[float] = None,    # μ del PMM como prior
     isf_sigma:     Optional[float] = None,    # σ del PMM
     drift_factor:  float = 1.0,
     icr_for_meals: float = 12.0,
     pmm_speed_factors: Optional[dict] = None,
+    params = None,    # SSMParameters — None usa defaults (backward compat)
 ) -> FilterResult:
     """
     Reconstruye el posterior del SSM al tiempo `now` procesando todos
@@ -153,6 +180,12 @@ def run_filter(
     -------
     FilterResult con (x, P, last_ts, log_evidence, contadores).
     """
+    # Resolver params override
+    from pmm.ssm.parameters import params_or_defaults
+    p = params_or_defaults(params)
+    if hours is None:
+        hours = p.LOOKBACK_HOURS
+
     events = _load_events(now, hours=hours)
     cgm_events = [e for e in events if e.kind == "cgm"]
 
@@ -167,7 +200,10 @@ def run_filter(
     mu0, P0 = initial_state(
         g_init   = first_cgm.payload["g"],
         s_i_init = isf_prior,
-        s_i_sigma= isf_sigma if isf_sigma and isf_sigma > 0 else 12.0,
+        s_i_sigma= isf_sigma if isf_sigma and isf_sigma > 0 else p.S_I_SIGMA_INIT,
+        g_sigma  = p.G_SIGMA_INIT,
+        iob_sigma= p.IOB_SIGMA_INIT,
+        cob_sigma= p.COB_SIGMA_INIT,
     )
     mu0 = np.array(mu0)
     P0  = np.array(P0)
@@ -181,7 +217,8 @@ def run_filter(
     mu0[state_index("IOB")]     = iob_warm
     mu0[state_index("IOB_eff")] = iob_eff_warm
 
-    ukf = UKF(dim_x=DIM_X, dim_z=1)
+    ukf = UKF(dim_x=DIM_X, dim_z=1,
+              alpha=p.UKF_ALPHA, beta=p.UKF_BETA, kappa=p.UKF_KAPPA)
     ukf.x = mu0
     ukf.P = P0
 
@@ -229,7 +266,8 @@ def run_filter(
             )
 
         if dt_min > 0.01:
-            ukf.predict(fx=lambda x: step(x, u, dt_min), Q=_Q_for_dt(dt_min))
+            ukf.predict(fx=lambda x: step(x, u, dt_min, params=p),
+                        Q=_Q_for_dt(dt_min, params=p))
             n_steps += 1
 
         # Si el evento es CGM, update
@@ -239,10 +277,10 @@ def run_filter(
             g_pred  = ukf.x[state_index("G")]
             p_g_g   = float(max(0.0, ukf.P[state_index("G"), state_index("G")]))
             sig_g   = float(np.sqrt(p_g_g))
-            R_obs   = R_cgm(g_pred)
+            R_obs   = _R_cgm(g_pred, params=p)
             sig_pred= float(np.sqrt(sig_g**2 + R_obs[0, 0]))
             innov   = float(y - g_pred)
-            rejected = gating_outlier(y, g_pred, sig_pred, OUTLIER_GATE_SIGMA)
+            rejected = gating_outlier(y, g_pred, sig_pred, p.OUTLIER_GATE_SIGMA)
 
             inn_entry = {
                 "ts":             evt.ts,
@@ -282,8 +320,9 @@ def run_filter(
             icr=icr_for_meals, s_i_target=s_i_target,
             drift_factor=drift_factor,
         )
-        ukf.predict(fx=lambda x: step(x, u_final, min(dt_final, 60.0)),
-                    Q=_Q_for_dt(min(dt_final, 60.0)))
+        dt_cap = min(dt_final, 60.0)
+        ukf.predict(fx=lambda x: step(x, u_final, dt_cap, params=p),
+                    Q=_Q_for_dt(dt_cap, params=p))
         n_steps += 1
 
     return FilterResult(
@@ -373,6 +412,7 @@ def forward_predict(
     exercise_drop_rate: float = 0.0,
     dawn_rate: float = 0.0,
     ex_sensitivity_mult: float = 1.0,
+    params = None,
 ) -> dict[int, SSMPrediction]:
     """
     Forward-sample el SSM desde el posterior actual hasta cada horizonte.
@@ -392,9 +432,11 @@ def forward_predict(
         ) for h in horizons_min}
 
     import math
-    from scipy.special import erf  # type: ignore
+    from pmm.ssm.parameters import params_or_defaults
+    p = params_or_defaults(params)
 
-    ukf = UKF(dim_x=DIM_X, dim_z=1)
+    ukf = UKF(dim_x=DIM_X, dim_z=1,
+              alpha=p.UKF_ALPHA, beta=p.UKF_BETA, kappa=p.UKF_KAPPA)
     ukf.x = result.x.copy()
     ukf.P = result.P.copy()
 
@@ -421,22 +463,22 @@ def forward_predict(
             h_now = targets.pop(0)
             preds[h_now] = _snapshot_prediction(ukf, h_now)
             continue
-        ukf.predict(fx=lambda x: step(x, u, dt), Q=_Q_for_dt(dt))
+        ukf.predict(fx=lambda x: step(x, u, dt, params=p), Q=_Q_for_dt(dt, params=p))
         t_sim += dt
         if abs(t_sim - targets[0]) < 1e-6:
             h_now = targets.pop(0)
-            preds[h_now] = _snapshot_prediction(ukf, h_now)
+            preds[h_now] = _snapshot_prediction(ukf, h_now, params=p)
 
     return preds
 
 
-def _snapshot_prediction(ukf: UKF, h: int) -> SSMPrediction:
+def _snapshot_prediction(ukf: UKF, h: int, params=None) -> SSMPrediction:
     import math
     g_pred = float(ukf.x[state_index("G")])
     var_g  = float(ukf.P[state_index("G"), state_index("G")])
     sig_g  = max(1.0, math.sqrt(max(0.0, var_g)))
     # σ_total observable incluye el ruido CGM (lo que el bench va a comparar)
-    R = R_cgm(g_pred)[0, 0]
+    R = _R_cgm(g_pred, params=params)[0, 0]
     sig_total = math.sqrt(sig_g**2 + R)
 
     # P(G<70) y P(G>180) bajo N(g_pred, sig_total²)

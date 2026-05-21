@@ -247,6 +247,53 @@ class CGMImport(db.Model):
 # Personal Metabolic Model (PMM) — tablas de aprendizaje adaptativo
 # ══════════════════════════════════════════════════════════════════════════════
 
+class TuningExperiment(db.Model):
+    """
+    Persistencia de un experimento de tuning (un único config evaluado).
+
+    Cada experiment es:
+      - Una SSMParameters específica (params_json + fingerprint determinístico)
+      - Resultados (metrics_json) calculados via replay sobre histórico
+      - Sub-scores + composite promotion_score
+      - Identificación: name, git_commit, ventana de evaluación
+
+    Append-only para auditoría completa de qué tuning ya se probó.
+    """
+    __tablename__ = "tuning_experiments"
+
+    id              = db.Column(db.Integer, primary_key=True)
+    name            = db.Column(db.String(120), index=True)
+    param_hash      = db.Column(db.String(20), nullable=False, index=True)
+    params_json     = db.Column(db.Text, nullable=False)
+    days_window     = db.Column(db.Integer, nullable=False)
+    n_records       = db.Column(db.Integer)
+    git_commit      = db.Column(db.String(40))
+
+    # Sub-scores
+    score_calibration = db.Column(db.Float)
+    score_innovation  = db.Column(db.Float)
+    score_clinical    = db.Column(db.Float)
+    score_stability   = db.Column(db.Float)
+    score_accuracy    = db.Column(db.Float)
+    score_composite   = db.Column(db.Float, index=True)
+
+    # Métricas crudas (para Pareto y comparación detallada)
+    metrics_json    = db.Column(db.Text)         # JSON compactado
+
+    # Diagnóstico textual
+    verdict         = db.Column(db.String(60))   # "white"|"biased"|"etc"
+    note            = db.Column(db.Text)
+    error           = db.Column(db.Text)         # si falló
+
+    duration_ms     = db.Column(db.Integer)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        db.Index("ix_tuning_name_hash", "name", "param_hash"),
+        db.Index("ix_tuning_score", "score_composite"),
+    )
+
+
 class PredictionAudit(db.Model):
     """
     Log inmutable de auditoría científica de cada predicción.

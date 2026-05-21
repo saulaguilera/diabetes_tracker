@@ -73,59 +73,65 @@ class StepInputs:
     drift_factor:  float = 1.0     # acoplado al CUSUM (resistance/sensitivity)
 
 
-def _flow(x: np.ndarray, u: StepInputs) -> np.ndarray:
+def _flow(x: np.ndarray, u: StepInputs, params=None) -> np.ndarray:
     """
     Derivadas continuas dx/dt para el estado x dado los inputs u.
     NO incluye los impulses (bolus, meal) — esos se aplican como salto
     instantáneo antes de la integración.
 
     x: (6,) array — [G, IOB, IOB_eff, COB1, COB2, S_I]
+    params: SSMParameters opcional. None → usa constantes del módulo.
     """
+    # Resolver constantes (params override sino defaults del módulo)
+    if params is not None:
+        kpi   = params.K_PI
+        kie   = params.K_IE
+        kact  = params.K_ACT
+        kg    = params.K_G
+        egp   = params.EGP_BASAL
+        knim  = params.K_NIM_BASAL
+        renal_t = params.RENAL_THRESHOLD
+        krenal  = params.K_RENAL
+        lam_si  = params.LAMBDA_SI
+    else:
+        kpi, kie, kact = K_PI, K_IE, K_ACT_DEFAULT
+        kg, egp, knim  = K_G, EGP_BASAL, K_NIM_BASAL
+        renal_t, krenal = RENAL_THRESHOLD, K_RENAL
+        lam_si = LAMBDA_SI
+
     G, IOB, IOB_eff, COB1, COB2, S_I = x
 
     # ── Insulin pharmacokinetics ──
-    dIOB     = -K_PI * IOB
-    dIOB_eff =  K_PI * IOB - K_IE * IOB_eff
+    dIOB     = -kpi * IOB
+    dIOB_eff =  kpi * IOB - kie * IOB_eff
 
     # ── Carb pharmacokinetics ──
     dCOB1    = -u.k_a * COB1
-    dCOB2    =  u.k_a * COB1 - K_G * COB2
+    dCOB2    =  u.k_a * COB1 - kg * COB2
 
     # ── Glucose dynamics ──
-    # Insulin effect: S_I × IOB_eff × K_ACT × drift_factor × ex_mult
-    #   drift_factor > 1 (resistance) → menor efecto → menos drop
-    #   ex_mult > 1 (más sensible)    → mayor efecto → más drop
-    insulin_effect = S_I * IOB_eff * K_ACT_DEFAULT * u.ex_sensitivity_mult / max(0.1, u.drift_factor)
+    insulin_effect = S_I * IOB_eff * kact * u.ex_sensitivity_mult / max(0.1, u.drift_factor)
+    carb_effect    = (kg * COB2) * (S_I / max(1.0, u.icr))
 
-    # Carb effect: K_G × COB2 entrega "g_glucose_equiv/min" al plasma.
-    # Para convertir a mg/dL/min usamos el factor S_I/ICR — equivalente a
-    # "cuántos mg/dL sube cada g de CH no cubierto" en el modelo clásico.
-    carb_effect = (K_G * COB2) * (S_I / max(1.0, u.icr))
+    nim_uptake = knim * max(0.0, G - 80.0)
+    if G > renal_t:
+        nim_uptake += krenal * (G - renal_t)
 
-    # Non-insulin-mediated uptake — proporcional al exceso sobre 100 mg/dL
-    nim_uptake = K_NIM_BASAL * max(0.0, G - 80.0)
-    if G > RENAL_THRESHOLD:
-        nim_uptake += K_RENAL * (G - RENAL_THRESHOLD)
-
-    dG = (EGP_BASAL
-          + u.dawn_rate
-          + carb_effect
-          - insulin_effect
-          - nim_uptake
-          - u.exercise_drop_rate)
+    dG = (egp + u.dawn_rate + carb_effect
+          - insulin_effect - nim_uptake - u.exercise_drop_rate)
 
     # ── S_I OU mean-reversion ──
-    dSI = -LAMBDA_SI * (S_I - u.s_i_target)
+    dSI = -lam_si * (S_I - u.s_i_target)
 
     return np.array([dG, dIOB, dIOB_eff, dCOB1, dCOB2, dSI])
 
 
-def _rk4_step(x: np.ndarray, u: StepInputs, dt_min: float) -> np.ndarray:
+def _rk4_step(x: np.ndarray, u: StepInputs, dt_min: float, params=None) -> np.ndarray:
     """Un paso RK4 de duración dt_min minutos."""
-    k1 = _flow(x,                 u)
-    k2 = _flow(x + 0.5 * dt_min * k1, u)
-    k3 = _flow(x + 0.5 * dt_min * k2, u)
-    k4 = _flow(x +       dt_min * k3, u)
+    k1 = _flow(x,                     u, params)
+    k2 = _flow(x + 0.5 * dt_min * k1, u, params)
+    k3 = _flow(x + 0.5 * dt_min * k2, u, params)
+    k4 = _flow(x +       dt_min * k3, u, params)
     return x + (dt_min / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
 
 
@@ -134,6 +140,7 @@ def step(
     u: StepInputs,
     dt_min: float,
     substep_min: float = 1.0,
+    params=None,
 ) -> np.ndarray:
     """
     Avanza el estado x por dt_min minutos integrando con RK4 en subpasos.
@@ -166,7 +173,7 @@ def step(
     )
 
     for _ in range(n_sub):
-        x = _rk4_step(x, u_cont, h)
+        x = _rk4_step(x, u_cont, h, params=params)
 
     return x
 

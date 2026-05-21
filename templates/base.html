@@ -710,6 +710,10 @@
     <i class="bi bi-clipboard-data" style="color:#0ea5e9 !important"></i>
     Backtest
   </a>
+  <a href="{{ url_for('tuning.tuning_page') }}" class="nav-link {% if ep == 'tuning_page' %}active{% endif %}">
+    <i class="bi bi-sliders" style="color:#6366f1 !important"></i>
+    Tuning
+  </a>
 
   <div class="nav-section">Clínico</div>
   <a href="{{ url_for('reporte_semanal') }}" class="nav-link {% if ep == 'reporte_semanal' %}active{% endif %}">

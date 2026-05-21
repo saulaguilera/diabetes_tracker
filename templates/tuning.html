@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+{% block title %}SSM Tuning — DiabetesTracker{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+  <div>
+    <h1><i class="bi bi-sliders me-2 text-primary"></i>SSM Tuning</h1>
+    <small class="text-muted">Replay-based hyperparameter optimization · Pareto frontier · deep diagnostics</small>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- ── Lista de experimentos ── -->
+  <div class="col-md-4">
+    <div class="chart-box">
+      <h6 class="fw-semibold mb-2"><i class="bi bi-collection me-1"></i>Experimentos</h6>
+      <div id="experiment-list" class="d-flex flex-column gap-1"></div>
+      <hr/>
+      <small class="text-muted">
+        Para crear experimentos:<br/>
+        <code style="font-size:.72rem;">
+          python -m bench.tuning grid &lt;name&gt; --param Q_SI=1e-7,5e-7,1e-6 --days 14
+        </code>
+      </small>
+    </div>
+  </div>
+
+  <!-- ── Detalle ── -->
+  <div class="col-md-8">
+    <div id="exp-detail" class="chart-box" style="min-height:200px;">
+      <div class="text-muted text-center py-5">
+        Seleccioná un experimento ↖
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Deep Diagnostics ── -->
+<div class="chart-box mt-3">
+  <div class="d-flex justify-content-between align-items-start mb-3">
+    <h6 class="fw-semibold mb-0">
+      <i class="bi bi-graph-up me-1 text-success"></i>Deep Innovation Diagnostics
+    </h6>
+    <button class="btn btn-sm btn-outline-primary" onclick="loadDiagnostics()">
+      <i class="bi bi-arrow-clockwise"></i> Cargar
+    </button>
+  </div>
+  <div id="diag-content" class="text-muted">Pulsá "Cargar" para analizar innovations del SSM en vivo.</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+.exp-pill {
+  background: var(--surface2); padding: .5rem .75rem; border-radius: 8px;
+  cursor: pointer; transition: background .15s;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.exp-pill:hover  { background: rgba(99,102,241,.1); }
+.exp-pill.active { background: rgba(99,102,241,.2); border-left: 3px solid #6366f1; }
+.score-badge {
+  font-size: .7rem; padding: .15rem .4rem; border-radius: 4px;
+  font-weight: 700;
+}
+.score-good   { background: rgba(34,197,94,.18); color: #15803d; }
+.score-mid    { background: rgba(245,158,11,.18); color: #d97706; }
+.score-low    { background: rgba(239,68,68,.18); color: #dc2626; }
+.frontier-pt circle { stroke: #6366f1; fill: rgba(99,102,241,.7); }
+.dominated-pt circle { fill: rgba(100,116,139,.4); }
+</style>
+
+<script>
+let currentExp = null;
+const _fmt = (v, p=3) => v == null ? '—' : (typeof v === 'number' ? v.toFixed(p) : v);
+const _scoreCls = s => s == null ? '' : s >= 0.70 ? 'score-good' : s >= 0.50 ? 'score-mid' : 'score-low';
+
+async function loadExperiments() {
+  const r = await fetch('/api/tuning/experiments');
+  const d = await r.json();
+  const el = document.getElementById('experiment-list');
+  if (!d.ok || !d.experiments?.length) {
+    el.innerHTML = `<div class="text-muted" style="font-size:.85rem;">
+      Aún no hay experimentos. Corré <code>python -m bench.tuning grid ...</code></div>`;
+    return;
+  }
+  el.innerHTML = '';
+  for (const e of d.experiments) {
+    const cls = _scoreCls(e.best_score);
+    el.insertAdjacentHTML('beforeend', `
+      <div class="exp-pill" data-name="${e.name}" onclick="selectExp('${e.name}')">
+        <div>
+          <div style="font-weight:600;font-size:.85rem;">${e.name}</div>
+          <div class="text-muted" style="font-size:.7rem;">${e.n_runs} runs</div>
+        </div>
+        <span class="score-badge ${cls}">${_fmt(e.best_score)}</span>
+      </div>`);
+  }
+}
+
+async function selectExp(name) {
+  currentExp = name;
+  document.querySelectorAll('.exp-pill').forEach(el =>
+    el.classList.toggle('active', el.dataset.name === name));
+
+  const detail = document.getElementById('exp-detail');
+  detail.innerHTML = `<div class="text-center py-3">
+    <div class="spinner-border spinner-border-sm" role="status"></div>
+    <span class="ms-2">Cargando ${name}...</span></div>`;
+
+  const r = await fetch(`/api/tuning/experiment/${name}?x=ece&y=mae_30`);
+  const d = await r.json();
+  if (!d.ok) {
+    detail.innerHTML = `<div class="text-danger">Error: ${d.error}</div>`;
+    return;
+  }
+
+  let html = `<h6 class="fw-semibold mb-2">${name}</h6>`;
+
+  const s = d.summary;
+  html += `<div class="row g-2 mb-3">
+    <div class="col-md-3 col-6"><div class="metric-card">
+      <div class="metric-label">Runs</div>
+      <div class="metric-value">${s.n_runs}<span class="metric-unit">(${s.n_valid} válidos)</span></div>
+    </div></div>
+    <div class="col-md-3 col-6"><div class="metric-card">
+      <div class="metric-label">Best score</div>
+      <div class="metric-value">${_fmt(s.best_composite)}<span class="metric-unit">composite</span></div>
+    </div></div>
+    <div class="col-md-6"><div class="metric-card">
+      <div class="metric-label">Score range</div>
+      <div class="metric-value">${(s.score_range || []).map(v => _fmt(v)).join(' → ')}</div>
+    </div></div>
+  </div>`;
+
+  // Best balanced
+  if (d.best_balanced && d.best_balanced.param_hash) {
+    const bp = d.best_balanced.params || {};
+    html += `<div class="alert alert-info py-2 px-3" style="font-size:.85rem;">
+      <i class="bi bi-star-fill me-1"></i><strong>Best balanced:</strong>
+      <code>${d.best_balanced.param_hash}</code> · composite ${_fmt(d.best_balanced.scores?.composite)}
+      <details><summary class="text-muted" style="cursor:pointer;">params override</summary>
+      <pre style="font-size:.72rem;margin:.3rem 0 0;">${JSON.stringify(bp, null, 2)}</pre></details>
+    </div>`;
+  }
+
+  // Tabla de results
+  html += `<div class="table-responsive"><table class="table table-sm">
+    <thead><tr>
+      <th>hash</th><th class="text-end">comp</th>
+      <th class="text-end">cal</th><th class="text-end">inn</th>
+      <th class="text-end">cli</th><th class="text-end">sta</th><th class="text-end">acc</th>
+      <th class="text-end">MAE₃₀</th><th class="text-end">ECE</th><th>verdict</th>
+    </tr></thead><tbody>`;
+  for (const r of d.results.slice(0, 30)) {
+    const onFrontier = d.frontier.some(f => f.param_hash === r.param_hash);
+    const mark = onFrontier ? ' <i class="bi bi-star-fill text-warning"></i>' : '';
+    const m = r.metrics || {};
+    html += `<tr>
+      <td><code style="font-size:.7rem;">${r.param_hash}</code>${mark}</td>
+      <td class="text-end"><span class="score-badge ${_scoreCls(r.scores?.composite)}">${_fmt(r.scores?.composite)}</span></td>
+      <td class="text-end">${_fmt(r.scores?.calibration)}</td>
+      <td class="text-end">${_fmt(r.scores?.innovation)}</td>
+      <td class="text-end">${_fmt(r.scores?.clinical)}</td>
+      <td class="text-end">${_fmt(r.scores?.stability)}</td>
+      <td class="text-end">${_fmt(r.scores?.accuracy)}</td>
+      <td class="text-end">${_fmt(m.mae_30, 1)}</td>
+      <td class="text-end">${_fmt(m.ece)}</td>
+      <td><small class="text-muted">${r.verdict || ''}</small></td>
+    </tr>`;
+  }
+  html += `</tbody></table></div>`;
+
+  // 2D Pareto SVG plot
+  if (d.projection_2d && d.projection_2d.all?.length) {
+    html += `<h6 class="fw-semibold mt-3 mb-2" style="font-size:.85rem;">
+      Pareto 2D: ECE vs MAE +30min  <span class="text-muted">(★ = frontier)</span></h6>`;
+    html += renderParetoSVG(d.projection_2d, 'ECE (lower=better)', 'MAE +30min (mg/dL, lower=better)');
+  }
+
+  detail.innerHTML = html;
+}
+
+function renderParetoSVG(proj, xLabel, yLabel) {
+  const all = proj.all || [];
+  if (!all.length) return '';
+  const W = 480, H = 280, P = 38;
+  const xs = all.map(p => p.x);
+  const ys = all.map(p => p.y);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = Math.min(...ys), yMax = Math.max(...ys);
+  const X = x => P + (W - 2*P) * (x - xMin) / Math.max(1e-6, xMax - xMin);
+  const Y = y => H - P - (H - 2*P) * (y - yMin) / Math.max(1e-6, yMax - yMin);
+
+  let svg = `<svg width="100%" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="background:var(--surface);border-radius:8px;">`;
+  // Frontier polyline
+  const front = (proj.frontier || []).slice().sort((a, b) => a.x - b.x);
+  if (front.length > 1) {
+    const pts = front.map(p => `${X(p.x)},${Y(p.y)}`).join(' ');
+    svg += `<polyline points="${pts}" stroke="#6366f1" stroke-width="1.5" fill="none" stroke-dasharray="4,3"/>`;
+  }
+  // All points
+  for (const p of all) {
+    const onF = p.frontier;
+    svg += `<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="${onF ? 5 : 3}"
+              fill="${onF ? '#6366f1' : 'rgba(100,116,139,.5)'}"
+              stroke="${onF ? '#4338ca' : 'none'}" stroke-width="1">
+              <title>${p.label} · x=${_fmt(p.x)} y=${_fmt(p.y)}</title>
+            </circle>`;
+  }
+  // Axes
+  svg += `<line x1="${P}" y1="${H-P}" x2="${W-P}" y2="${H-P}" stroke="var(--text-muted)" stroke-width="1"/>`;
+  svg += `<line x1="${P}" y1="${P}" x2="${P}" y2="${H-P}" stroke="var(--text-muted)" stroke-width="1"/>`;
+  svg += `<text x="${W/2}" y="${H-8}" text-anchor="middle" font-size="11" fill="var(--text-muted)">${xLabel}</text>`;
+  svg += `<text x="12" y="${H/2}" text-anchor="middle" font-size="11"
+                transform="rotate(-90 12 ${H/2})" fill="var(--text-muted)">${yLabel}</text>`;
+  svg += `</svg>`;
+  return svg;
+}
+
+async function loadDiagnostics() {
+  const el = document.getElementById('diag-content');
+  el.innerHTML = `<div class="text-center py-3">
+    <div class="spinner-border spinner-border-sm"></div> Analizando innovations...</div>`;
+  const r = await fetch('/api/tuning/diagnostics?days=14');
+  const d = await r.json();
+  if (!d.ok) { el.innerHTML = `<div class="text-danger">${d.error}</div>`; return; }
+  const a = d.analysis;
+  if (!a.n || a.n < 10) {
+    el.innerHTML = `<div class="text-muted">
+      Innovations insuficientes (${a.n || 0}) — esperá más data del SSM en vivo.</div>`;
+    return;
+  }
+
+  let html = `<div class="row g-2">
+    <div class="col-md-3 col-6"><div class="metric-card">
+      <div class="metric-label">n samples</div>
+      <div class="metric-value">${a.n}</div></div></div>
+    <div class="col-md-3 col-6"><div class="metric-card">
+      <div class="metric-label">mean / var</div>
+      <div class="metric-value">${_fmt(a.moments?.mean)}<span class="metric-unit">/ ${_fmt(a.moments?.var)}</span></div></div></div>
+    <div class="col-md-3 col-6"><div class="metric-card">
+      <div class="metric-label">skew / kurt</div>
+      <div class="metric-value">${_fmt(a.moments?.skew)}<span class="metric-unit">/ ${_fmt(a.moments?.kurt)}</span></div></div></div>
+    <div class="col-md-3 col-6"><div class="metric-card">
+      <div class="metric-label">Jarque-Bera p</div>
+      <div class="metric-value">${_fmt(a.jarque_bera?.p_value)}<span class="metric-unit">${a.jarque_bera?.normal ? '✓ normal' : '✗ no-normal'}</span></div></div></div>
+  </div>`;
+
+  if (a.by_regime && typeof a.by_regime === 'object') {
+    html += `<h6 class="fw-semibold mt-3 mb-2" style="font-size:.85rem;">Por régimen fisiológico</h6>
+      <div class="table-responsive"><table class="table table-sm">
+      <thead><tr><th>Régimen</th><th class="text-end">n</th><th class="text-end">mean</th>
+      <th class="text-end">var</th><th class="text-end">kurt</th><th>Veredicto</th></tr></thead><tbody>`;
+    for (const [reg, st] of Object.entries(a.by_regime)) {
+      if (st.n != null && st.n < 5) continue;
+      const verdictCls = (st.verdict || '').startsWith('OK') ? 'text-success' :
+                         (st.verdict || '').startsWith('BIAS') ? 'text-danger' :
+                         (st.verdict || '').includes('DISPER') ? 'text-warning' : '';
+      html += `<tr><td><strong>${reg}</strong></td>
+        <td class="text-end">${st.n}</td>
+        <td class="text-end">${_fmt(st.mean)}</td>
+        <td class="text-end">${_fmt(st.var)}</td>
+        <td class="text-end">${_fmt(st.kurt)}</td>
+        <td><small class="${verdictCls}">${st.verdict || ''}</small></td></tr>`;
+    }
+    html += `</tbody></table></div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+document.addEventListener('DOMContentLoaded', loadExperiments);
+</script>
+{% endblock %}
