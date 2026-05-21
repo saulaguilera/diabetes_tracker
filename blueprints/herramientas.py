@@ -50,6 +50,16 @@ def calculadora():
     except Exception:
         pass
 
+    # PMM ISF / ICR — estimación Bayesiana con incertidumbre
+    pmm_isf = {}
+    pmm_icr = {}
+    try:
+        from pmm.core.parameter_store import get_isf_now, get_icr_now
+        pmm_isf = get_isf_now(hora=hora_actual)
+        pmm_icr = get_icr_now(hora=hora_actual)
+    except Exception:
+        pass
+
     # Última inyección basal registrada (para mostrar en la card)
     from datetime import timedelta
     ultima_basal = (
@@ -82,6 +92,8 @@ def calculadora():
         icr_ahora=icr_ahora,
         icr_bloque_label=icr_bloque_label,
         fuente_icr_ahora=fuente_icr_ahora,
+        pmm_isf=pmm_isf,
+        pmm_icr=pmm_icr,
     )
 
 
@@ -102,6 +114,28 @@ def api_calculadora_correccion():
     if hora is None:
         hora = datetime.now().hour
 
+    # ── PMM ISF / ICR + Drift ─────────────────────────────────────────────────
+    pmm_isf_data  = {}
+    pmm_icr_data  = {}
+    drift_factor  = 1.0
+    pmm_drift_dir = None
+    try:
+        from pmm.core.parameter_store import get_isf_now, get_icr_now
+        from pmm.engines.drift import get_drift_status
+        pmm_isf_data  = get_isf_now(hora=hora)
+        pmm_icr_data  = get_icr_now(hora=hora)
+        drift_st      = get_drift_status()
+        drift_factor  = drift_st.get("drift_factor", 1.0)
+        pmm_drift_dir = drift_st.get("drift_dir")
+    except Exception:
+        pass
+
+    # PMM activo cuando el modelo tiene datos reales (no solo el prior)
+    pmm_active     = (pmm_isf_data.get("source") not in (None, "prior")
+                      and (pmm_isf_data.get("n_obs") or 0) >= 3)
+    pmm_icr_active = (pmm_icr_data.get("source") not in (None, "prior")
+                      and (pmm_icr_data.get("n_obs") or 0) >= 3)
+
     isf_personal, n_isf = _calcular_isf_personal()
     icr_personal, n_icr = _calcular_icr_personal()
 
@@ -118,6 +152,11 @@ def api_calculadora_correccion():
         "calculado"
     )
 
+    # PMM overrides classical ISF when it has learned data and no manual override
+    if pmm_active and not isf_manual and not isf_guardado:
+        isf_base   = pmm_isf_data["mu"]
+        isf_fuente = "pmm"
+
     # ICR: manual > guardado > circadiano para la hora actual > global calculado
     icr_guardado_raw = _get_setting("icr")
     icr_guardado_val = float(icr_guardado_raw) if icr_guardado_raw else None
@@ -131,6 +170,11 @@ def api_calculadora_correccion():
         "circadiano"  if (icr_bloque and fuente_icr_circ == "circadiano") else
         "calculado"
     )
+
+    # PMM overrides classical ICR when it has learned data and no manual override
+    if pmm_icr_active and not icr_manual and not icr_guardado_val:
+        icr        = pmm_icr_data["mu"]
+        icr_fuente = "pmm"
 
     if not glucemia or glucemia <= 0:
         return jsonify({"error": "Glucemia inválida"})
@@ -153,8 +197,11 @@ def api_calculadora_correccion():
     except Exception:
         pass
 
-    # Apply exercise factor to ISF (more sensitive → higher effective ISF → smaller dose)
-    isf = round((isf_base or 0) * exercise_factor, 1)
+    # Apply exercise + drift factors to ISF.
+    # drift_factor > 1 (resistance) → eff ISF smaller → more correction per mg/dL
+    # drift_factor < 1 (sensitivity) → eff ISF larger → less correction per mg/dL
+    # Formula: eff_ISF = isf_base × exercise_factor / drift_factor
+    isf = round((isf_base or 0) * exercise_factor / max(0.1, drift_factor), 1)
 
     # ── Componente de corrección ──────────────────────────────────────────────
     if glucemia > objetivo:
@@ -178,17 +225,21 @@ def api_calculadora_correccion():
         except Exception:
             pass
 
-    # ── IOB + ROC (ambos del mismo snapshot) ─────────────────────────────────
-    # Solo se deduce IOB de bolus (insulina rápida activa).
-    # El IOB basal (Toujeo, Lantus, etc.) NO se resta porque cubre la producción
-    # hepática basal, no el exceso de glucosa que estamos corrigiendo.
-    iob_actual = 0.0
-    roc_mgdl_min = None   # mg/dL/min — None si no hay lecturas CGM recientes
+    # ── IOB + COB + ROC (todos del mismo snapshot) ───────────────────────────
+    # IOB de bolus (insulina rápida activa) — la basal cubre producción hepática
+    # y no se resta del bolo.
+    # COB = carbohidratos aún absorbiéndose (de comidas anteriores). Importante
+    # para evitar doble-conteo del IOB: si tenés 2U IOB pero también COB
+    # pendiente que va a necesitar ~3U, el IOB "libre" para descontar es 0.
+    iob_actual    = 0.0
+    cob_actual    = 0.0
+    roc_mgdl_min  = None   # mg/dL/min — None si no hay lecturas CGM recientes
     try:
         from utils.kinetics import get_kinetics_snapshot
-        snap       = get_kinetics_snapshot(hours_lookback=6)
-        iob_actual = snap.get("iob_bolus", 0.0)  # solo bolus, nunca basal
-        roc_mgdl_min = snap.get("roc")            # puede ser None
+        snap         = get_kinetics_snapshot(hours_lookback=6)
+        iob_actual   = snap.get("iob_bolus", 0.0)   # solo bolus, nunca basal
+        cob_actual   = snap.get("cob", 0.0)         # carbohidratos pendientes
+        roc_mgdl_min = snap.get("roc")              # puede ser None
     except Exception:
         pass
 
@@ -239,7 +290,23 @@ def api_calculadora_correccion():
     else:
         correccion_exacta = 0.0
 
-    iob_deduccion = min(iob_actual, correccion_exacta + bolo_comida_exacto)
+    # ── IOB deduction: COB-aware (estilo AAPS / OpenAPS) ─────────────────────
+    # El IOB ya activo cubre principalmente:
+    #   - el efecto de los carbos que aún están absorbiéndose (COB)
+    #   - cualquier hiperglucemia residual del estado actual
+    #
+    # Si descontás el IOB total del bolo de comida NUEVA, estás asumiendo que
+    # ese IOB va a cubrir los carbos nuevos — pero esos carbos aún no se han
+    # absorbido y el IOB ya estará casi extinto cuando lo hagan. Resultado:
+    # sub-dosificación de la comida nueva.
+    #
+    # Solución: calcular IOB "libre" = IOB total − insulina necesaria para COB.
+    # Solo el IOB libre se descuenta del nuevo bolo total.
+    icr_ref = icr if (icr and icr > 0) else 12.0
+    iob_para_cob = cob_actual / icr_ref     # U necesarias para los carbos pendientes
+    iob_libre    = max(0.0, iob_actual - iob_para_cob)
+
+    iob_deduccion = min(iob_libre, correccion_exacta + bolo_comida_exacto)
 
     # ── Total ─────────────────────────────────────────────────────────────────
     total_exacto      = correccion_exacta + bolo_comida_exacto
@@ -248,12 +315,47 @@ def api_calculadora_correccion():
 
     resultado_esperado = round(glucemia_proyectada - correccion_exacta * isf, 0)
 
+    # ── PMM Dose Range via IC 95% ─────────────────────────────────────────────
+    # Using PMM uncertainty to compute the plausible dose interval.
+    # Low dose  → use CI-high ISF (least aggressive) + CI-high ICR (least carb coverage)
+    # High dose → use CI-low  ISF (most aggressive)  + CI-low  ICR (most carb coverage)
+    dose_lo = dose_hi = None
+    if pmm_active:
+        # ISF CI bounds adjusted for exercise + drift, clamped to valid range
+        _ci_lo_raw = (pmm_isf_data.get("ci_95_lo") or pmm_isf_data["mu"]) * exercise_factor / max(0.1, drift_factor)
+        _ci_hi_raw = (pmm_isf_data.get("ci_95_hi") or pmm_isf_data["mu"]) * exercise_factor / max(0.1, drift_factor)
+        isf_ci_lo = max(5.0, _ci_lo_raw)
+        isf_ci_hi = max(5.0, _ci_hi_raw)
+
+        # Correction component of the range
+        if glucemia_proyectada > objetivo:
+            corr_lo = (glucemia_proyectada - objetivo) / isf_ci_hi   # least aggressive
+            corr_hi = (glucemia_proyectada - objetivo) / isf_ci_lo   # most aggressive
+        else:
+            corr_lo = corr_hi = 0.0
+
+        # Carb coverage component of the range
+        if pmm_icr_active and carbs and carbs > 0:
+            _icr_lo = max(1.0, pmm_icr_data.get("ci_95_lo") or pmm_icr_data["mu"])
+            _icr_hi = max(1.0, pmm_icr_data.get("ci_95_hi") or pmm_icr_data["mu"])
+            carb_lo = carbs / _icr_hi   # highest ICR → least insulin per gram
+            carb_hi = carbs / _icr_lo   # lowest  ICR → most  insulin per gram
+        else:
+            carb_lo = carb_hi = bolo_comida_exacto
+
+        # Net totals after IOB deduction
+        dose_lo = round(max(0.0, corr_lo + carb_lo - iob_deduccion) * 2) / 2
+        dose_hi = round(max(0.0, corr_hi + carb_hi - iob_deduccion) * 2) / 2
+
     return jsonify({
         # Totales
         "total_exacto":     round(total_exacto, 2),
         "total_sugerido":   total_redondeado,
-        # IOB
+        # IOB / COB
         "iob_actual":       round(iob_actual, 2),
+        "iob_libre":        round(iob_libre, 2),       # IOB no comprometido con COB
+        "iob_para_cob":     round(iob_para_cob, 2),    # IOB earmarked para COB
+        "cob_actual":       round(cob_actual, 1),
         "iob_deduccion":    round(iob_deduccion, 2),
         "total_neto_exacto": round(total_neto_exacto, 2),
         # Componentes
@@ -296,6 +398,28 @@ def api_calculadora_correccion():
         "roc_label":           roc_label or "",
         "roc_alerta":          roc_alerta or "",
         "glucemia_proyectada": glucemia_proyectada,
+        # PMM — estimación Bayesiana + rango de dosis
+        "pmm": {
+            "active":       pmm_active,
+            "isf_mu":       pmm_isf_data.get("mu"),
+            "isf_sigma":    pmm_isf_data.get("sigma"),
+            "isf_ci_lo":    pmm_isf_data.get("ci_95_lo"),
+            "isf_ci_hi":    pmm_isf_data.get("ci_95_hi"),
+            "isf_n_obs":    pmm_isf_data.get("n_obs"),
+            "isf_source":   pmm_isf_data.get("source"),
+            "isf_block":    pmm_isf_data.get("block_label"),
+            "icr_active":   pmm_icr_active,
+            "icr_mu":       pmm_icr_data.get("mu") if pmm_icr_active else None,
+            "icr_sigma":    pmm_icr_data.get("sigma") if pmm_icr_active else None,
+            "icr_ci_lo":    pmm_icr_data.get("ci_95_lo") if pmm_icr_active else None,
+            "icr_ci_hi":    pmm_icr_data.get("ci_95_hi") if pmm_icr_active else None,
+            "confidence":   pmm_isf_data.get("confidence"),
+            "drift_active": drift_factor != 1.0,
+            "drift_factor": round(drift_factor, 3),
+            "drift_dir":    pmm_drift_dir,
+            "dose_lo":      dose_lo,
+            "dose_hi":      dose_hi,
+        },
     })
 
 

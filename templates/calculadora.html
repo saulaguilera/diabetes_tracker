@@ -31,9 +31,62 @@
             <span class="text-muted">(mg/dL por unidad)</span>
           </label>
 
-          {# ISF activo ahora — único número relevante para el bolo #}
+          {# ISF activo ahora — PMM primero si disponible, clásico como fallback #}
           {% set isf_activo = isf_manual_guardado or isf_ahora or isf_personal %}
+          {% set pmm_isf_ok = pmm_isf and pmm_isf.source != 'prior' and pmm_isf.n_obs >= 3 %}
+
+          {% if pmm_isf_ok and not isf_manual_guardado %}
+          {# ── PMM display ── #}
+          <div class="mb-2 p-2 rounded"
+               style="background:rgba(139,92,246,.07);border:1px solid rgba(139,92,246,.25);">
+            <div class="d-flex align-items-baseline gap-2">
+              <div style="font-size:1.4rem;font-weight:800;color:var(--text);line-height:1;">
+                {{ pmm_isf.mu | round(1) }}
+              </div>
+              <div style="font-size:.78rem;color:var(--text-muted);">
+                ± {{ pmm_isf.sigma | round(1) }} mg/dL·U
+              </div>
+              <span style="margin-left:auto;font-size:.68rem;font-weight:700;
+                           background:linear-gradient(135deg,#8b5cf6,#6366f1);
+                           color:#fff;border-radius:4px;padding:1px 6px;letter-spacing:.03em;">
+                PMM
+              </span>
+            </div>
+            <div style="font-size:.7rem;color:var(--text-muted);margin-top:.3rem;">
+              IC 95%:
+              <strong style="color:rgba(139,92,246,.9);">
+                {{ pmm_isf.ci_95_lo }} – {{ pmm_isf.ci_95_hi }}
+              </strong>
+              ·
+              {% if pmm_isf.source == 'circadiano' %}
+                <i class="bi bi-clock me-1" style="color:#6366f1;"></i>{{ pmm_isf.block_label }}
+              {% else %}
+                <i class="bi bi-globe me-1" style="color:#6366f1;"></i>global
+              {% endif %}
+              · {{ pmm_isf.n_obs }} obs
+            </div>
+            {# Barra de confianza #}
+            {% set conf_pct = ((pmm_isf.confidence or 0) * 100) | int %}
+            <div style="margin-top:.4rem;">
+              <div style="font-size:.65rem;color:var(--text-muted);margin-bottom:2px;">
+                Confianza: {{ conf_pct }}%
+              </div>
+              <div style="height:4px;background:var(--surface2);border-radius:4px;overflow:hidden;">
+                <div style="height:100%;width:{{ conf_pct }}%;
+                            background:linear-gradient(90deg,#8b5cf6,#6366f1);
+                            border-radius:4px;transition:width .4s;"></div>
+              </div>
+            </div>
+          </div>
           {% if isf_activo %}
+          <div style="font-size:.7rem;color:var(--text-muted);margin-bottom:.3rem;">
+            Clásico: {{ isf_activo | float | round(1) }} mg/dL·U
+            ({% if fuente_isf_ahora == 'circadiano' %}circ.{% else %}global{% endif %})
+          </div>
+          {% endif %}
+
+          {% elif isf_activo %}
+          {# ── Clásico display (sin PMM) ── #}
           <div class="mb-2 p-2 rounded" style="background:var(--surface2);border:1px solid var(--border);">
             <div style="font-size:1.4rem;font-weight:800;color:var(--text);line-height:1;">
               {{ isf_activo | float | round(1) }}
@@ -71,7 +124,19 @@
             <strong>Ratio I:CH</strong> — Insulina por carbohidratos
             <span class="text-muted">(g CH por unidad)</span>
           </label>
-          {% if icr_personal %}
+          {% set pmm_icr_ok = pmm_icr and pmm_icr.source != 'prior' and pmm_icr.n_obs >= 3 %}
+          {% if pmm_icr_ok %}
+          <div class="mb-1 p-1 rounded"
+               style="font-size:.76rem;background:rgba(139,92,246,.07);border:1px solid rgba(139,92,246,.2);">
+            <span style="font-size:.65rem;font-weight:700;
+                         background:linear-gradient(135deg,#8b5cf6,#6366f1);
+                         color:#fff;border-radius:3px;padding:0 5px;margin-right:4px;">PMM</span>
+            1U c/ <strong>{{ pmm_icr.mu | round(1) }}</strong> g CH
+            <span style="color:var(--text-muted);">
+              ± {{ pmm_icr.sigma | round(1) }} · IC95 {{ pmm_icr.ci_95_lo }}–{{ pmm_icr.ci_95_hi }}
+            </span>
+          </div>
+          {% elif icr_personal %}
           <div class="text-success mb-1" style="font-size:.78rem;">
             <i class="bi bi-cpu me-1"></i>Estimado de tus datos:
             <strong>1U cada {{ icr_personal }}g CH</strong>
@@ -523,6 +588,14 @@
 
 {% block scripts %}
 <style>
+/* ── PMM dose range card ────────────────────────────────────────────────────── */
+.pmm-range-card {
+  background: rgba(139,92,246,.06);
+  border: 1px solid rgba(139,92,246,.25);
+  border-radius: 10px;
+  padding: .6rem .85rem;
+}
+
 /* ── Fat+protein alert ──────────────────────────────────────────────────────── */
 .fp-alert {
   display: flex; align-items: flex-start; gap: .6rem;
@@ -791,8 +864,9 @@
     }
 
     let isfLabel;
-    if (d.fuente_isf === 'manual')       isfLabel = 'ISF manual';
+    if (d.fuente_isf === 'manual')        isfLabel = 'ISF manual';
     else if (d.fuente_isf === 'guardado') isfLabel = 'ISF configurado';
+    else if (d.fuente_isf === 'pmm')      isfLabel = `ISF PMM (${(d.pmm?.isf_n_obs||0)} obs)`;
     else if (d.fuente_isf === 'circadiano')
       isfLabel = `ISF circadiano ${d.bloque_label} (${d.n_isf} muestras)`;
     else isfLabel = `ISF global calculado (${d.n_isf} muestras)`;
@@ -804,21 +878,29 @@
           ${isfDiff > 0 ? '+' : ''}${isfDiff} vs global
         </span>` : '';
 
-    const icrLabel = d.icr && d.fuente_icr === 'calculado'
-      ? `I:CH estimado (${d.n_icr} comidas)` : 'I:CH configurado manualmente';
+    const icrLabel = d.fuente_icr === 'pmm'
+      ? `I:CH PMM (${(d.pmm?.isf_n_obs||0)} obs)`
+      : (d.icr && d.fuente_icr === 'calculado'
+          ? `I:CH estimado (${d.n_icr} comidas)` : 'I:CH configurado manualmente');
 
-    // IOB deduction row
+    // IOB deduction row (COB-aware)
     let iobRow = '';
     if (d.iob_actual && d.iob_actual > 0.05) {
+      // Si el COB está consumiendo parte del IOB, se muestra
+      const cobNote = (d.iob_para_cob && d.iob_para_cob > 0.1)
+        ? `<div style="font-size:.7rem; color:#f59e0b; font-family:monospace;">
+             ${d.iob_para_cob.toFixed(2)}U comprometida con COB (${d.cob_actual}g) — no se descuenta
+           </div>` : '';
       iobRow = `
         <div class="d-flex justify-content-between align-items-center py-2 border-bottom"
              style="background:rgba(99,102,241,.05); border-radius:6px; padding:.5rem .75rem!important;">
           <div>
             <i class="bi bi-capsule-pill me-2" style="color:#6366f1;"></i>
-            <span style="font-size:.88rem;">IOB activo (descontar)</span>
+            <span style="font-size:.88rem;">IOB libre (descontar)</span>
             <div style="font-size:.75rem; color:#6366f1; font-family:monospace;">
-              insulina aún activa en sangre
+              ${d.iob_actual.toFixed(2)}U total · ${d.iob_libre.toFixed(2)}U libre
             </div>
+            ${cobNote}
           </div>
           <strong style="color:#6366f1;">− ${d.iob_deduccion.toFixed(2)} U</strong>
         </div>`;
@@ -827,6 +909,62 @@
     const totalLabel = d.iob_actual > 0.05
       ? `Bolo neto sugerido <small class="text-muted fw-normal">(−IOB)</small>`
       : 'Bolo total sugerido';
+
+    // ── PMM dose range block ──────────────────────────────────────────────────
+    const pmm = d.pmm || {};
+    let pmmRangeHtml = '';
+    if (pmm.active && pmm.dose_lo != null && pmm.dose_hi != null && pmm.dose_lo !== pmm.dose_hi) {
+      const confPct   = Math.round((pmm.confidence || 0) * 100);
+      const driftNote = pmm.drift_active
+        ? `<span style="font-size:.7rem;color:${pmm.drift_dir === 'resistance' ? '#ef4444' : '#f59e0b'};">
+             · drift ${pmm.drift_dir === 'resistance' ? 'resistencia' : 'sensibilidad'}
+             ×${pmm.drift_factor?.toFixed(2)}
+           </span>` : '';
+
+      pmmRangeHtml = `
+        <div class="pmm-range-card mb-3">
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <span style="font-size:.68rem;font-weight:700;
+                         background:linear-gradient(135deg,#8b5cf6,#6366f1);
+                         color:#fff;border-radius:4px;padding:1px 7px;">PMM</span>
+            <span style="font-size:.78rem;color:var(--text-muted);">
+              Rango de dosis (IC 95%)
+            </span>
+            ${driftNote}
+          </div>
+          <div class="d-flex align-items-center justify-content-center gap-3">
+            <div class="text-center">
+              <div style="font-size:.7rem;color:var(--text-muted);">mín</div>
+              <div style="font-size:1.5rem;font-weight:800;color:#8b5cf6;">${pmm.dose_lo} U</div>
+            </div>
+            <div style="font-size:1.1rem;color:var(--text-muted);">—</div>
+            <div class="text-center">
+              <div style="font-size:.7rem;color:var(--text-muted);">máx</div>
+              <div style="font-size:1.5rem;font-weight:800;color:#8b5cf6;">${pmm.dose_hi} U</div>
+            </div>
+          </div>
+          <div style="margin-top:.4rem;">
+            <div style="font-size:.65rem;color:var(--text-muted);margin-bottom:2px;">
+              ISF: ${pmm.isf_ci_lo}–${pmm.isf_ci_hi} mg/dL·U · confianza ${confPct}%
+            </div>
+            <div style="height:4px;background:var(--surface2);border-radius:4px;overflow:hidden;">
+              <div style="height:100%;width:${confPct}%;
+                          background:linear-gradient(90deg,#8b5cf6,#6366f1);
+                          border-radius:4px;"></div>
+            </div>
+          </div>
+        </div>`;
+    } else if (pmm.active && pmm.dose_lo === pmm.dose_hi && pmm.dose_lo != null) {
+      pmmRangeHtml = `
+        <div class="pmm-range-card mb-2" style="padding:.4rem .75rem;">
+          <span style="font-size:.68rem;font-weight:700;
+                       background:linear-gradient(135deg,#8b5cf6,#6366f1);
+                       color:#fff;border-radius:4px;padding:1px 7px;margin-right:6px;">PMM</span>
+          <span style="font-size:.78rem;color:var(--text-muted);">
+            IC 95%: ${pmm.isf_ci_lo}–${pmm.isf_ci_hi} mg/dL·U · ${Math.round((pmm.confidence||0)*100)}% confianza
+          </span>
+        </div>`;
+    }
 
     box.innerHTML = `
       <!-- Total -->
@@ -840,6 +978,9 @@
           }
         </div>
       </div>
+
+      <!-- PMM dose range -->
+      ${pmmRangeHtml}
 
       <!-- Desglose -->
       <div class="mb-3">${desglose}${iobRow}</div>
@@ -930,16 +1071,30 @@
 
       <!-- Fuentes -->
       <div class="d-flex flex-wrap gap-1 justify-content-center">
-        <span class="badge ${d.fuente_isf === 'circadiano' ? '' : 'bg-secondary'}"
-              style="font-size:.7rem;${d.fuente_isf === 'circadiano' ? 'background:rgba(99,102,241,.15);color:#6366f1;' : ''}">
-          ${isfLabel}${isfDiffNote}
-        </span>
-        ${d.icr ? `<span class="badge bg-secondary" style="font-size:.7rem;">${icrLabel}</span>` : ''}
+        ${d.fuente_isf === 'pmm'
+          ? `<span class="badge" style="font-size:.7rem;background:linear-gradient(135deg,rgba(139,92,246,.2),rgba(99,102,241,.2));color:#8b5cf6;border:1px solid rgba(139,92,246,.3);">
+               ISF PMM μ=${pmm.isf_mu?.toFixed(1)} ±${pmm.isf_sigma?.toFixed(1)}
+             </span>`
+          : `<span class="badge ${d.fuente_isf === 'circadiano' ? '' : 'bg-secondary'}"
+                  style="font-size:.7rem;${d.fuente_isf === 'circadiano' ? 'background:rgba(99,102,241,.15);color:#6366f1;' : ''}">
+               ${isfLabel}${isfDiffNote}
+             </span>`
+        }
+        ${d.fuente_icr === 'pmm'
+          ? `<span class="badge" style="font-size:.7rem;background:linear-gradient(135deg,rgba(139,92,246,.2),rgba(99,102,241,.2));color:#8b5cf6;border:1px solid rgba(139,92,246,.3);">
+               I:CH PMM ${pmm.icr_mu?.toFixed(1)} g/U
+             </span>`
+          : (d.icr ? `<span class="badge bg-secondary" style="font-size:.7rem;">${icrLabel}</span>` : '')
+        }
         ${d.iob_actual > 0.05 ? `<span class="badge" style="font-size:.7rem;background:rgba(99,102,241,.15);color:#6366f1;">IOB ${d.iob_actual.toFixed(1)} U descontado</span>` : ''}
         ${d.exercise_factor && Math.abs(d.exercise_factor - 1) >= 0.05
           ? `<span class="badge" style="font-size:.7rem;background:${d.exercise_factor >= 1 ? 'rgba(34,197,94,.15)' : 'rgba(239,68,68,.15)'};color:${d.exercise_factor >= 1 ? '#15803d' : '#dc2626'};">
               ejercicio ×${d.exercise_factor.toFixed(2)}
             </span>` : ''}
+        ${pmm.drift_active
+          ? `<span class="badge" style="font-size:.7rem;background:${pmm.drift_dir === 'resistance' ? 'rgba(239,68,68,.12)' : 'rgba(245,158,11,.12)'};color:${pmm.drift_dir === 'resistance' ? '#dc2626' : '#d97706'};">
+               drift ${pmm.drift_dir === 'resistance' ? 'resistencia' : 'sensibilidad'} ×${pmm.drift_factor?.toFixed(2)}
+             </span>` : ''}
         ${d.roc_label
           ? `<span class="badge" style="font-size:.7rem;background:rgba(100,100,100,.1);color:var(--text-muted);">
                ${d.roc_label}
