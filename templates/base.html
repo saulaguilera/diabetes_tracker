@@ -706,6 +706,10 @@
       IA
     </span>
   </a>
+  <a href="{{ url_for('bench.bench_page') }}" class="nav-link {% if ep == 'bench_page' %}active{% endif %}">
+    <i class="bi bi-clipboard-data" style="color:#0ea5e9 !important"></i>
+    Backtest
+  </a>
 
   <div class="nav-section">Clínico</div>
   <a href="{{ url_for('reporte_semanal') }}" class="nav-link {% if ep == 'reporte_semanal' %}active{% endif %}">

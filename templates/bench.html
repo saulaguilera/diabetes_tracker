@@ -1,0 +1,421 @@
+{% extends "base.html" %}
+{% block title %}Backtest — DiabetesTracker{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+  <div>
+    <h1><i class="bi bi-clipboard-data me-2 text-primary"></i>Backtest del modelo</h1>
+    <small class="text-muted">Validación contra ground-truth: accuracy · calibration · clinical</small>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <select id="bench-days" class="form-select form-select-sm" style="width:auto;">
+      <option value="7">Últimos 7 días</option>
+      <option value="14">14 días</option>
+      <option value="30" selected>30 días</option>
+      <option value="60">60 días</option>
+      <option value="90">90 días</option>
+      <option value="180">180 días</option>
+    </select>
+    <button id="bench-run" class="btn btn-sm btn-primary" onclick="runBench()">
+      <i class="bi bi-play-circle me-1"></i>Correr
+    </button>
+  </div>
+</div>
+
+<div id="bench-loading" class="text-center text-muted py-5" style="display:none;">
+  <div class="spinner-border" role="status"></div>
+  <div class="mt-2">Corriendo backtest…</div>
+</div>
+
+<div id="bench-empty" class="text-center text-muted py-5">
+  <i class="bi bi-clipboard-data fs-1 d-block mb-2 opacity-25"></i>
+  Pulsa "Correr" para evaluar el modelo sobre los datos guardados.
+</div>
+
+<div id="bench-result" style="display:none;">
+
+  <!-- ── Verdict card ── -->
+  <div class="chart-box mb-3" id="verdict-box">
+    <div class="d-flex justify-content-between align-items-start">
+      <div>
+        <div style="font-size:.75rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em;">
+          Veredicto global
+        </div>
+        <div class="d-flex align-items-center gap-2 mt-1">
+          <span id="verdict-badge" class="badge"
+                style="font-size:1.1rem;padding:.5rem .9rem;">—</span>
+          <span id="verdict-model" class="text-muted" style="font-size:.85rem;"></span>
+        </div>
+      </div>
+      <div class="text-end" style="font-size:.75rem; color:var(--text-muted);">
+        <div id="meta-run-at"></div>
+        <div id="meta-records"></div>
+      </div>
+    </div>
+    <div class="row g-2 mt-3" id="verdict-checks"></div>
+  </div>
+
+  <!-- ── Accuracy ── -->
+  <div class="chart-box mb-3">
+    <h6 class="fw-semibold mb-3">
+      <i class="bi bi-rulers me-2 text-info"></i>Accuracy
+    </h6>
+    <div class="row g-3" id="accuracy-cards"></div>
+    <div class="mt-3">
+      <h6 class="fw-semibold mt-3 mb-2" style="font-size:.85rem;">Por contexto</h6>
+      <div class="table-responsive">
+        <table class="table table-sm" id="ctx-table">
+          <thead><tr>
+            <th>Contexto</th><th class="text-end">n</th>
+            <th class="text-end">MAE</th><th class="text-end">RMSE</th>
+            <th class="text-end">MARD%</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="mt-3">
+      <h6 class="fw-semibold mt-3 mb-2" style="font-size:.85rem;">Por rango glucémico</h6>
+      <div class="table-responsive">
+        <table class="table table-sm" id="rng-table">
+          <thead><tr>
+            <th>Rango</th><th class="text-end">n</th>
+            <th class="text-end">MAE</th><th class="text-end">MARD%</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Calibration ── -->
+  <div class="chart-box mb-3">
+    <h6 class="fw-semibold mb-3">
+      <i class="bi bi-arrows-collapse-vertical me-2 text-warning"></i>Calibration
+      <small class="text-muted" style="font-weight:normal;">
+        — ¿la σ predicha refleja el error real?
+      </small>
+    </h6>
+    <div id="calibration-content" class="row g-3"></div>
+  </div>
+
+  <!-- ── Clinical ── -->
+  <div class="chart-box mb-3">
+    <h6 class="fw-semibold mb-3">
+      <i class="bi bi-heart-pulse me-2 text-danger"></i>Clinical
+    </h6>
+    <div id="clinical-content" class="row g-3"></div>
+  </div>
+
+  <!-- ── Raw JSON (debug) ── -->
+  <details class="chart-box">
+    <summary class="fw-semibold" style="cursor:pointer;">
+      <i class="bi bi-braces me-2 text-secondary"></i>Reporte JSON completo
+    </summary>
+    <pre id="raw-json" style="font-size:.72rem;max-height:400px;overflow:auto;
+                              background:var(--surface2);padding:.75rem;
+                              border-radius:6px;margin-top:.75rem;"></pre>
+  </details>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+.metric-card {
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: .75rem 1rem;
+  border: 1px solid var(--border);
+}
+.metric-card .metric-label {
+  font-size: .7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.metric-card .metric-value {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.1;
+}
+.metric-card .metric-unit {
+  font-size: .75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.metric-card.pass  { border-color: rgba(34,197,94,.4);  background: rgba(34,197,94,.05); }
+.metric-card.warn  { border-color: rgba(245,158,11,.4); background: rgba(245,158,11,.05); }
+.metric-card.fail  { border-color: rgba(239,68,68,.4);  background: rgba(239,68,68,.05); }
+
+.badge-pass { background: rgba(34,197,94,.15); color: #15803d; }
+.badge-warn { background: rgba(245,158,11,.15); color: #d97706; }
+.badge-fail { background: rgba(239,68,68,.15); color: #dc2626; }
+
+.reliability-chart {
+  background: var(--surface);
+  border-radius: 6px;
+  padding: .5rem;
+}
+</style>
+
+<script>
+async function runBench() {
+  const btn = document.getElementById('bench-run');
+  const days = document.getElementById('bench-days').value;
+  document.getElementById('bench-empty').style.display = 'none';
+  document.getElementById('bench-result').style.display = 'none';
+  document.getElementById('bench-loading').style.display = '';
+  btn.disabled = true;
+
+  try {
+    const r = await fetch(`/api/bench/run?days=${days}`);
+    const d = await r.json();
+    if (!d.ok) {
+      alert('Error: ' + (d.error || 'desconocido'));
+      return;
+    }
+    renderReport(d.report);
+    document.getElementById('bench-result').style.display = '';
+  } catch (e) {
+    alert('Error de red: ' + e.message);
+  } finally {
+    document.getElementById('bench-loading').style.display = 'none';
+    btn.disabled = false;
+  }
+}
+
+function renderReport(report) {
+  document.getElementById('raw-json').textContent = JSON.stringify(report, null, 2);
+  document.getElementById('meta-run-at').textContent = `Corrido: ${report.meta.run_at}`;
+  document.getElementById('meta-records').textContent =
+    `${report.meta.n_records_total} predicciones · ventana ${report.meta.window_days}d`;
+
+  // Verdict
+  const v = report.verdict || {};
+  const badge = document.getElementById('verdict-badge');
+  const overall = v.overall || 'no_data';
+  const labels = {pass:'✅ PASS', warn:'🟡 WARN', fail:'🔴 FAIL', no_data:'⚪ SIN DATOS'};
+  badge.textContent = labels[overall] || overall.toUpperCase();
+  badge.className = 'badge badge-' + (overall === 'no_data' ? 'warn' : overall);
+  document.getElementById('verdict-model').textContent =
+    v.model ? `modelo: ${v.model}` : '';
+
+  // Checks
+  const checksEl = document.getElementById('verdict-checks');
+  checksEl.innerHTML = '';
+  const checks = v.checks || {};
+  const targets = v.targets || {};
+  for (const [k, c] of Object.entries(checks)) {
+    const cls = c.status === 'pass' ? 'pass' : c.status === 'warn' ? 'warn' : c.status === 'fail' ? 'fail' : '';
+    checksEl.insertAdjacentHTML('beforeend', `
+      <div class="col-md-4 col-6">
+        <div class="metric-card ${cls}">
+          <div class="metric-label">${k}</div>
+          <div class="metric-value">${c.value ?? '—'}
+            <span class="metric-unit">target ${targets[k] ?? '—'}</span></div>
+        </div>
+      </div>`);
+  }
+
+  // Tomar el primer modelo (o el filtrado)
+  const models = Object.keys(report.by_model || {});
+  if (!models.length) return;
+  const m = report.by_model[models[0]];
+  if (m.note) {
+    alert(m.note);
+    return;
+  }
+
+  // Accuracy cards
+  const accEl = document.getElementById('accuracy-cards');
+  accEl.innerHTML = '';
+  const acc = m.accuracy;
+  const byH = m.accuracy_by_horizon;
+  const accMetrics = [
+    {label:'MAE global', value:acc.mae, unit:'mg/dL'},
+    {label:'RMSE global', value:acc.rmse, unit:'mg/dL'},
+    {label:'MARD global', value:acc.mard, unit:'%'},
+    {label:'BIAS', value:acc.bias, unit:'mg/dL'},
+    {label:'MAE +30min', value:byH['+30min']?.mae, unit:'mg/dL'},
+    {label:'MAE +60min', value:byH['+60min']?.mae, unit:'mg/dL'},
+  ];
+  for (const m of accMetrics) {
+    accEl.insertAdjacentHTML('beforeend', `
+      <div class="col-md-2 col-4">
+        <div class="metric-card">
+          <div class="metric-label">${m.label}</div>
+          <div class="metric-value">${m.value ?? '—'}
+            <span class="metric-unit">${m.unit}</span></div>
+        </div>
+      </div>`);
+  }
+
+  // Tabla contexto
+  const ctxBody = document.querySelector('#ctx-table tbody');
+  ctxBody.innerHTML = '';
+  for (const [tag, td] of Object.entries(m.accuracy_by_context)) {
+    if (td.n === 0) continue;
+    ctxBody.insertAdjacentHTML('beforeend', `
+      <tr>
+        <td>${tag}</td>
+        <td class="text-end">${td.n}</td>
+        <td class="text-end">${td.mae ?? '—'}</td>
+        <td class="text-end">${td.rmse ?? '—'}</td>
+        <td class="text-end">${td.mard ?? '—'}</td>
+      </tr>`);
+  }
+
+  // Tabla rango
+  const rngBody = document.querySelector('#rng-table tbody');
+  rngBody.innerHTML = '';
+  for (const [rng, td] of Object.entries(m.accuracy_by_glucose)) {
+    if (td.n === 0) continue;
+    rngBody.insertAdjacentHTML('beforeend', `
+      <tr>
+        <td>${rng}</td>
+        <td class="text-end">${td.n}</td>
+        <td class="text-end">${td.mae ?? '—'}</td>
+        <td class="text-end">${td.mard ?? '—'}</td>
+      </tr>`);
+  }
+
+  // Calibration
+  const calEl = document.getElementById('calibration-content');
+  calEl.innerHTML = '';
+  for (const [hLabel, key] of [['+30min','calibration_+30min'],['+60min','calibration_+60min']]) {
+    const cal = m[key];
+    if (!cal || (cal.n_with_sigma || 0) === 0) {
+      calEl.insertAdjacentHTML('beforeend', `
+        <div class="col-md-6">
+          <div class="metric-card">
+            <div class="metric-label">${hLabel}</div>
+            <div class="text-muted" style="font-size:.85rem;margin-top:.4rem;">
+              ${cal?.note || 'Sin σ predictivo aún — esperá ~7d de datos nuevos.'}
+            </div>
+          </div>
+        </div>`);
+      continue;
+    }
+    const eceVal = cal.ece;
+    const eceCls = eceVal <= 0.05 ? 'pass' : eceVal <= 0.10 ? 'warn' : 'fail';
+    const svg = renderReliabilitySVG(cal.reliability);
+    calEl.insertAdjacentHTML('beforeend', `
+      <div class="col-md-6">
+        <div class="metric-card ${eceCls}">
+          <div class="metric-label">${hLabel}</div>
+          <div class="d-flex gap-3 flex-wrap mt-1">
+            <div><span class="metric-value" style="font-size:1.15rem;">${cal.crps}</span>
+                 <span class="metric-unit">CRPS</span></div>
+            <div><span class="metric-value" style="font-size:1.15rem;">${cal.ece}</span>
+                 <span class="metric-unit">ECE</span></div>
+            <div><span class="metric-value" style="font-size:1.15rem;">${cal.sharpness}</span>
+                 <span class="metric-unit">σ̄</span></div>
+            <div class="ms-auto text-muted" style="font-size:.7rem;">
+              n=${cal.n_with_sigma}/${cal.n_total}
+            </div>
+          </div>
+          <div class="reliability-chart mt-2">${svg}</div>
+        </div>
+      </div>`);
+  }
+
+  // Clinical
+  const clinEl = document.getElementById('clinical-content');
+  clinEl.innerHTML = '';
+  const tir = m.clinical.tir;
+  clinEl.insertAdjacentHTML('beforeend', `
+    <div class="col-12">
+      <div class="metric-card">
+        <div class="metric-label">TIR observado en el periodo</div>
+        <div class="d-flex gap-3 flex-wrap mt-1">
+          <div><span class="metric-value" style="font-size:1.15rem;color:#15803d;">${tir.tir_pct}%</span>
+               <span class="metric-unit">en rango</span></div>
+          <div><span class="metric-value" style="font-size:1.15rem;color:#dc2626;">${tir.hypo_pct}%</span>
+               <span class="metric-unit">hipo</span></div>
+          <div><span class="metric-value" style="font-size:1.15rem;color:#f59e0b;">${tir.hyper_pct}%</span>
+               <span class="metric-unit">hiper</span></div>
+          <div class="ms-auto text-muted" style="font-size:.7rem;">
+            severos: hipo ${tir.severe_hypo_pct}% · hiper ${tir.severe_hyper_pct}%
+          </div>
+        </div>
+      </div>
+    </div>`);
+
+  for (const [h, key] of [['+30min','hypo_+30min'],['+60min','hypo_+60min']]) {
+    const hd = m.clinical[key];
+    const recallCls = (hd.recall ?? 0) >= 0.85 ? 'pass' : (hd.recall ?? 0) >= 0.6 ? 'warn' : 'fail';
+    const faCls     = (hd.false_alarm_rate_per_day ?? 99) <= 1.0 ? 'pass' :
+                      (hd.false_alarm_rate_per_day ?? 99) <= 2.0 ? 'warn' : 'fail';
+    clinEl.insertAdjacentHTML('beforeend', `
+      <div class="col-md-6">
+        <div class="metric-card ${recallCls}">
+          <div class="metric-label">Hipoglucemia ${h}</div>
+          <div class="d-flex gap-3 flex-wrap mt-1">
+            <div><span class="metric-value" style="font-size:1.15rem;">${(hd.recall ?? '—')}</span>
+                 <span class="metric-unit">recall</span></div>
+            <div><span class="metric-value" style="font-size:1.15rem;">${(hd.precision ?? '—')}</span>
+                 <span class="metric-unit">precision</span></div>
+            <div><span class="metric-value" style="font-size:1.15rem;">${hd.false_alarm_rate_per_day ?? '—'}</span>
+                 <span class="metric-unit">FA/día</span></div>
+          </div>
+          <div class="text-muted mt-2" style="font-size:.75rem;">
+            ${hd.n_real_hypos ?? 0} hipos reales · ${hd.n_alerts ?? 0} alertas · ${hd.n_true_positives ?? 0} aciertos
+            ${hd.severity_recall != null
+              ? ` · severos (&lt;54): ${hd.severity_recall} recall (${hd.n_severe_real} reales)` : ''}
+          </div>
+        </div>
+      </div>`);
+  }
+}
+
+// ── SVG reliability diagram (sin libs externas) ───────────────────────────
+function renderReliabilitySVG(rel) {
+  if (!rel || !rel.quantiles?.length) return '';
+  const W = 280, H = 200, P = 30;
+  // Coordinates helper
+  const X = q => P + q * (W - 2*P);
+  const Y = f => H - P - f * (H - 2*P);
+
+  // Diagonal perfecta (target)
+  let svg = `<svg width="100%" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  svg += `<line x1="${X(0)}" y1="${Y(0)}" x2="${X(1)}" y2="${Y(1)}"
+                stroke="rgba(100,116,139,.4)" stroke-dasharray="3,3"/>`;
+
+  // Banda ±5pp (zona "bien calibrado")
+  svg += `<polygon points="${X(0)},${Y(0.05)} ${X(1)},${Y(1.05)} ${X(1)},${Y(0.95)} ${X(0)},${Y(-0.05)}"
+                  fill="rgba(34,197,94,.08)" stroke="none"/>`;
+
+  // Línea observada
+  const pts = rel.quantiles.map((q,i)=>`${X(q)},${Y(rel.observed_freqs[i])}`).join(' ');
+  svg += `<polyline points="${pts}" stroke="#6366f1" stroke-width="2" fill="none"/>`;
+
+  // Puntos
+  for (let i=0; i<rel.quantiles.length; i++) {
+    const q = rel.quantiles[i], o = rel.observed_freqs[i];
+    const diff = Math.abs(o - q);
+    const color = diff < 0.05 ? '#15803d' : diff < 0.10 ? '#d97706' : '#dc2626';
+    svg += `<circle cx="${X(q)}" cy="${Y(o)}" r="4" fill="${color}"/>`;
+  }
+
+  // Labels
+  svg += `<text x="${W/2}" y="${H-5}" text-anchor="middle"
+                font-size="10" fill="var(--text-muted)">predicted quantile</text>`;
+  svg += `<text x="10" y="${H/2}" text-anchor="middle"
+                transform="rotate(-90 10 ${H/2})"
+                font-size="10" fill="var(--text-muted)">observed freq</text>`;
+  // Marks 0 / 0.5 / 1 en ambos ejes
+  for (const v of [0, 0.5, 1]) {
+    svg += `<text x="${X(v)}" y="${H-P+12}" text-anchor="middle" font-size="9"
+                  fill="var(--text-muted)">${v}</text>`;
+    svg += `<text x="${P-6}" y="${Y(v)+3}" text-anchor="end" font-size="9"
+                  fill="var(--text-muted)">${v}</text>`;
+  }
+  svg += `</svg>`;
+  return svg;
+}
+
+// Auto-run al cargar
+document.addEventListener('DOMContentLoaded', runBench);
+</script>
+{% endblock %}

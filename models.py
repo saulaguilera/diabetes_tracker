@@ -173,6 +173,11 @@ class GlucosePrediction(db.Model):
     # Valores predichos
     g_pred_30    = db.Column(db.Float)    # predicción a +30min
     g_pred_60    = db.Column(db.Float)    # predicción a +60min
+    sigma_30     = db.Column(db.Float)    # incertidumbre σ a +30min (mg/dL) — para calibración
+    sigma_60     = db.Column(db.Float)    # incertidumbre σ a +60min — para calibración
+    # Identificador de versión del modelo que generó la predicción.
+    # Permite separar métricas por versión en el backtest.
+    model_version= db.Column(db.String(40))
 
     # Valores reales (se llenan cuando llega la lectura)
     g_real_30    = db.Column(db.Float)

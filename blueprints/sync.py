@@ -1170,12 +1170,18 @@ def api_predict_glucose():
             }
 
         # ── Guardar predicción en BD para feedback posterior ──────────────
+        # Identificador del modelo: cambiar al introducir cambios estructurales
+        # para que el backtest pueda separar métricas por versión.
+        _MODEL_VERSION = "mc_ar_gp_pmm_v1"
         try:
             save_prediction(
                 predicted_at = now,
                 g_actual     = g_actual,
                 g_pred_30    = predictions["+30min"]["glucemia_pred"],
                 g_pred_60    = predictions["+60min"]["glucemia_pred"],
+                sigma_30     = predictions["+30min"].get("sigma"),
+                sigma_60     = predictions["+60min"].get("sigma"),
+                model_version= _MODEL_VERSION,
                 iob          = iob_now,
                 cob          = cob_now,
                 roc          = roc,

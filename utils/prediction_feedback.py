@@ -160,6 +160,9 @@ def save_prediction(
     isf_used: Optional[float],
     icr_used: Optional[float],
     ex_factor: float,
+    sigma_30: Optional[float] = None,
+    sigma_60: Optional[float] = None,
+    model_version: Optional[str] = None,
 ) -> None:
     """
     Persiste una predicción en la tabla glucose_predictions.
@@ -178,16 +181,19 @@ def save_prediction(
         return
 
     pred = GlucosePrediction(
-        predicted_at = predicted_at,
-        g_actual     = round(g_actual, 1),
-        g_pred_30    = round(g_pred_30, 1),
-        g_pred_60    = round(g_pred_60, 1),
-        iob          = round(iob, 3),
-        cob          = round(cob, 1),
-        roc          = round(roc, 3) if roc is not None else None,
-        isf_used     = isf_used,
-        icr_used     = icr_used,
-        ex_factor    = round(ex_factor, 3),
+        predicted_at  = predicted_at,
+        g_actual      = round(g_actual, 1),
+        g_pred_30     = round(g_pred_30, 1),
+        g_pred_60     = round(g_pred_60, 1),
+        sigma_30      = round(sigma_30, 2) if sigma_30 is not None else None,
+        sigma_60      = round(sigma_60, 2) if sigma_60 is not None else None,
+        model_version = model_version,
+        iob           = round(iob, 3),
+        cob           = round(cob, 1),
+        roc           = round(roc, 3) if roc is not None else None,
+        isf_used      = isf_used,
+        icr_used      = icr_used,
+        ex_factor     = round(ex_factor, 3),
     )
     db.session.add(pred)
     db.session.commit()

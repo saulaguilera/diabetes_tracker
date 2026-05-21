@@ -149,6 +149,18 @@ with app.app_context():
         # db.create_all() ya la crea si no existe — esto es solo un guard extra
         if "glucose_predictions" not in existing_tables:
             db.create_all()   # dialect-aware: funciona en SQLite y PostgreSQL
+        else:
+            # Migración incremental: columnas para calibración y versionado
+            gp_cols = [c["name"] for c in inspector.get_columns("glucose_predictions")]
+            if "sigma_30" not in gp_cols:
+                conn.execute(text("ALTER TABLE glucose_predictions ADD COLUMN sigma_30 REAL"))
+                conn.commit()
+            if "sigma_60" not in gp_cols:
+                conn.execute(text("ALTER TABLE glucose_predictions ADD COLUMN sigma_60 REAL"))
+                conn.commit()
+            if "model_version" not in gp_cols:
+                conn.execute(text("ALTER TABLE glucose_predictions ADD COLUMN model_version VARCHAR(40)"))
+                conn.commit()
 
         # ── PMM: Personal Metabolic Model ─────────────────────────────────────
         # db.create_all() crea las tablas nuevas automáticamente.
@@ -317,14 +329,16 @@ from blueprints.herramientas import bp as herramientas_bp
 from blueprints.reportes     import bp as reportes_bp
 from blueprints.patrones     import bp as patrones_bp
 from blueprints.pmm_bp       import bp as pmm_bp
+from blueprints.bench_bp     import bp as bench_bp
 
 for _bp in [auth_bp, glucemia_bp, insulina_bp, actividad_bp, alimentos_bp,
             backup_bp, sync_bp, comidas_bp, herramientas_bp, reportes_bp,
-            patrones_bp, pmm_bp]:
+            patrones_bp, pmm_bp, bench_bp]:
     app.register_blueprint(_bp)
 
 # PMM blueprint exento de CSRF (API JSON)
 csrf.exempt(pmm_bp)
+csrf.exempt(bench_bp)
 
 # sync blueprint: exento de CSRF (cron externo + APIs JSON)
 csrf.exempt(sync_bp)
