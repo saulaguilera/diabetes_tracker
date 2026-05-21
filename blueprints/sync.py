@@ -1194,6 +1194,64 @@ def api_predict_glucose():
             logging.getLogger(__name__).warning(f"save_prediction falló: {_e}")
             # nunca romper la predicción por fallo de persistencia
 
+        # ── SHADOW MODE: SSM v0 corre en paralelo y guarda como model_version separado.
+        # No afecta la respuesta al usuario. Permite comparar via /bench una vez
+        # acumuladas predicciones resueltas (~7d).
+        _ssm_pred = None
+        try:
+            from pmm.ssm.filter import run_filter, forward_predict
+            ssm_result = run_filter(
+                now=now,
+                isf_prior=isf_base,
+                isf_sigma=pmm_isf_sigma,
+                drift_factor=drift_factor,
+                icr_for_meals=(icr if icr and icr > 0 else 12.0),
+                pmm_speed_factors=pmm_speed_factors,
+            )
+            if ssm_result.error is None and ssm_result.n_cgm_used >= 3:
+                ssm_preds = forward_predict(
+                    ssm_result,
+                    horizons_min=(30, 60),
+                    drift_factor=drift_factor,
+                    icr_for_meals=(icr if icr and icr > 0 else 12.0),
+                    exercise_drop_rate=0.0,
+                    dawn_rate=dawn_roc,
+                    ex_sensitivity_mult=ex_factor,
+                )
+                save_prediction(
+                    predicted_at  = now,
+                    g_actual      = g_actual,
+                    g_pred_30     = float(ssm_preds[30].g_pred),
+                    g_pred_60     = float(ssm_preds[60].g_pred),
+                    sigma_30      = float(ssm_preds[30].sigma),
+                    sigma_60      = float(ssm_preds[60].sigma),
+                    model_version = "ssm_v0_ukf6",
+                    iob           = iob_now,
+                    cob           = cob_now,
+                    roc           = roc,
+                    isf_used      = isf_ef,
+                    icr_used      = icr,
+                    ex_factor     = ex_factor,
+                )
+                _ssm_pred = {
+                    "+30min": {"g": float(ssm_preds[30].g_pred),
+                               "sigma": float(ssm_preds[30].sigma),
+                               "p_hypo": float(ssm_preds[30].p_hypo)},
+                    "+60min": {"g": float(ssm_preds[60].g_pred),
+                               "sigma": float(ssm_preds[60].sigma),
+                               "p_hypo": float(ssm_preds[60].p_hypo)},
+                    "filter":  {
+                        "n_cgm":   ssm_result.n_cgm_used,
+                        "n_steps": ssm_result.n_steps,
+                        "log_evi": round(ssm_result.log_evidence, 2),
+                        "outliers": ssm_result.n_outliers,
+                    },
+                }
+        except Exception as _e:
+            import logging
+            logging.getLogger(__name__).debug(f"SSM shadow falló (silencioso): {_e}")
+            # SSM shadow NUNCA debe romper la predicción primary
+
         # ── Accuracy del modelo (últimas N predicciones resueltas) ────────
         accuracy = get_model_accuracy(n=20)
 
@@ -1217,6 +1275,7 @@ def api_predict_glucose():
             "icr":            icr,
             "ex_factor":      ex_factor,
             "predictions":    predictions,
+            "ssm_shadow":     _ssm_pred,    # SSM v0 corriendo en shadow (informativo)
             "confianza_baja": confianza_baja,
             "bias":           bias,
             "accuracy":       accuracy,

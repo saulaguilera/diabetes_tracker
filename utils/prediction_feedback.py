@@ -170,12 +170,15 @@ def save_prediction(
     """
     from models import db, GlucosePrediction
 
-    # Evitar duplicados: no guardar si ya existe una predicción en los
-    # últimos 8 minutos (el dashboard se refresca periódicamente)
+    # Evitar duplicados: no guardar si ya existe una predicción del MISMO
+    # modelo en los últimos 8 minutos. Modelos distintos (shadow mode) pueden
+    # coexistir en el mismo timestamp para permitir comparación side-by-side
+    # en el backtest.
     cutoff = predicted_at - timedelta(minutes=8)
     existe = GlucosePrediction.query.filter(
         GlucosePrediction.predicted_at >= cutoff,
         GlucosePrediction.predicted_at <= predicted_at,
+        GlucosePrediction.model_version == model_version,
     ).first()
     if existe:
         return
