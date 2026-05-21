@@ -209,12 +209,56 @@ def api_calculadora_correccion():
     else:
         correccion_exacta = 0.0   # glucemia baja: no corregir
 
+    # ── SAFETY GATE: glucemia cerca o bajo umbral de hipo ────────────────────
+    # Protocolo clínico estándar (ADA Standards 2024, ISPAD 2022):
+    #   G < 70:     HIPOGLUCEMIA ACTIVA  → NO inyectar insulina, tratar primero.
+    #   70 ≤ G < 80: zona crítica        → bolo comida REDUCIDO + comer carbs antes.
+    #   80 ≤ G < 90: precaución          → bolo normal con monitoreo cercano.
+    #
+    # Bug reportado: la calculadora recomendaba 0.5U con G=74. Si el usuario
+    # ingresó carbohidratos para una comida futura, bolo_comida = carbs/icr
+    # se calculaba sin chequear la glucemia actual — clínicamente peligroso.
+    SAFETY_HYPO_HARD  = 70.0    # mg/dL  → bloquear bolo completamente
+    SAFETY_HYPO_SOFT  = 80.0    # mg/dL  → reducir bolo comida 50%
+    SAFETY_CAUTION    = 90.0    # mg/dL  → warning visible pero bolo normal
+
+    low_glucose_alert = None      # 'hypo' | 'near_hypo' | 'caution' | None
+    safety_factor     = 1.0       # multiplicador aplicado al bolo final
+    safety_message    = ""
+
+    if glucemia < SAFETY_HYPO_HARD:
+        low_glucose_alert = "hypo"
+        safety_factor     = 0.0   # nada de insulina
+        safety_message    = (
+            f"⚠️ HIPOGLUCEMIA ACTIVA ({glucemia:.0f} mg/dL). "
+            f"NO inyectes insulina. Tomá 15g de carbohidratos rápidos "
+            f"(jugo, glucosa) y re-checá en 15 min antes de calcular cualquier bolo."
+        )
+    elif glucemia < SAFETY_HYPO_SOFT:
+        low_glucose_alert = "near_hypo"
+        safety_factor     = 0.5   # bolo comida reducido a la mitad
+        safety_message    = (
+            f"⚠️ Glucemia baja ({glucemia:.0f} mg/dL). Comé los carbohidratos "
+            f"PRIMERO y esperá a que la glucosa suba a 100+ antes de inyectar. "
+            f"Si insistís, el bolo se reduce automáticamente al 50%."
+        )
+    elif glucemia < SAFETY_CAUTION:
+        low_glucose_alert = "caution"
+        safety_factor     = 1.0   # bolo normal pero alertar
+        safety_message    = (
+            f"Glucemia en zona de precaución ({glucemia:.0f} mg/dL). "
+            f"Considerá comer los carbohidratos primero o reducir levemente el bolo."
+        )
+
     # ── Componente de comida ──────────────────────────────────────────────────
     bolo_comida_exacto = 0.0
     if carbs and carbs > 0:
         if not icr:
             return jsonify({"error": "Sin I:CH — ingresalo en Configuración"})
         bolo_comida_exacto = carbs / icr
+        # Aplicar safety factor al componente de comida — la corrección ya
+        # es 0 cuando G < objetivo por la lógica de arriba.
+        bolo_comida_exacto *= safety_factor
 
     # ── Fat + protein split-bolus recommendation ─────────────────────────────
     split_rec = None
@@ -398,6 +442,10 @@ def api_calculadora_correccion():
         "roc_label":           roc_label or "",
         "roc_alerta":          roc_alerta or "",
         "glucemia_proyectada": glucemia_proyectada,
+        # ── Safety: alerta clínica por glucemia baja ──
+        "low_glucose_alert":   low_glucose_alert,    # 'hypo'|'near_hypo'|'caution'|None
+        "safety_factor":       safety_factor,
+        "safety_message":      safety_message,
         # PMM — estimación Bayesiana + rango de dosis
         "pmm": {
             "active":       pmm_active,

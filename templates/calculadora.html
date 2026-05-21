@@ -596,6 +596,70 @@
   padding: .6rem .85rem;
 }
 
+/* ── Safety banners (clinical alerts) ──────────────────────────────────────── */
+.safety-banner {
+  padding: 1rem 1.2rem;
+  border-radius: 12px;
+  border: 2px solid;
+  margin-bottom: 1rem;
+  text-align: left;
+}
+.safety-banner-icon {
+  font-size: 2rem;
+  line-height: 1;
+  margin-bottom: .35rem;
+}
+.safety-banner-title {
+  font-weight: 800;
+  font-size: 1.05rem;
+  margin-bottom: .4rem;
+  letter-spacing: -.01em;
+}
+.safety-banner-msg {
+  font-size: .92rem;
+  line-height: 1.45;
+  margin-bottom: .5rem;
+}
+.safety-banner-stats {
+  font-size: .82rem;
+  background: rgba(0,0,0,.06);
+  padding: .4rem .6rem;
+  border-radius: 6px;
+  margin-bottom: .5rem;
+}
+.safety-banner-action {
+  font-size: .85rem;
+  padding-top: .4rem;
+  border-top: 1px solid rgba(0,0,0,.1);
+}
+
+.safety-hypo {
+  background: rgba(239, 68, 68, .12);
+  border-color: rgba(239, 68, 68, .6);
+  animation: safety-pulse 1.6s ease-in-out infinite;
+}
+.safety-hypo .safety-banner-icon,
+.safety-hypo .safety-banner-title { color: #dc2626; }
+
+@keyframes safety-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(239, 68, 68, .15); }
+  50%      { box-shadow: 0 0 0 8px rgba(239, 68, 68, .25); }
+}
+
+.safety-near-hypo {
+  background: rgba(245, 158, 11, .12);
+  border-color: rgba(245, 158, 11, .5);
+}
+.safety-near-hypo .safety-banner-icon,
+.safety-near-hypo .safety-banner-title { color: #d97706; }
+
+.safety-caution {
+  background: rgba(59, 130, 246, .10);
+  border-color: rgba(59, 130, 246, .4);
+}
+.safety-caution .safety-banner-icon,
+.safety-caution .safety-banner-title { color: #2563eb; }
+
 /* ── Fat+protein alert ──────────────────────────────────────────────────────── */
 .fp-alert {
   display: flex; align-items: flex-start; gap: .6rem;
@@ -802,6 +866,46 @@
 
     if (d.error) { mostrarError(d.error); return; }
 
+    // ── SAFETY GATE: glucemia baja ────────────────────────────────────────
+    // Si la API devolvió low_glucose_alert, se muestra una banda roja muy
+    // prominente ANTES de cualquier otra info. Bloquea visualmente al usuario.
+    if (d.low_glucose_alert === 'hypo') {
+      box.innerHTML = `
+        <div class="safety-banner safety-hypo">
+          <div class="safety-banner-icon"><i class="bi bi-exclamation-octagon-fill"></i></div>
+          <div class="safety-banner-title">HIPOGLUCEMIA — NO inyectar insulina</div>
+          <div class="safety-banner-msg">${d.safety_message || ''}</div>
+          <div class="safety-banner-stats">
+            Glucemia actual: <strong>${d.glucemia} mg/dL</strong> ·
+            objetivo: ${d.objetivo} mg/dL
+          </div>
+          <div class="safety-banner-action">
+            <strong>Acción:</strong> Tomá 15g de carbohidratos rápidos (jugo, glucosa en gel, miel).
+            Esperá 15 minutos y re-checá tu glucemia. Solo entonces volvé a calcular un bolo.
+          </div>
+        </div>`;
+      return;   // bolo NO se muestra
+    }
+
+    let safetyAlert = '';
+    if (d.low_glucose_alert === 'near_hypo' || d.low_glucose_alert === 'caution') {
+      const cls = d.low_glucose_alert === 'near_hypo' ? 'safety-near-hypo' : 'safety-caution';
+      const title = d.low_glucose_alert === 'near_hypo'
+        ? '⚠ Glucemia baja — comé primero, inyectá después'
+        : '⚠ Zona de precaución';
+      const factorNote = d.safety_factor < 1
+        ? `<div class="text-muted mt-1" style="font-size:.78rem;">
+             Bolo comida reducido automáticamente al ${Math.round(d.safety_factor*100)}%
+             como medida de seguridad.</div>` : '';
+      safetyAlert = `
+        <div class="safety-banner ${cls}">
+          <div class="safety-banner-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+          <div class="safety-banner-title">${title}</div>
+          <div class="safety-banner-msg">${d.safety_message || ''}</div>
+          ${factorNote}
+        </div>`;
+    }
+
     const colorTotal = d.total_sugerido >= 6 ? 'text-danger'
                      : d.total_sugerido >= 3 ? 'text-warning' : 'text-success';
 
@@ -967,6 +1071,7 @@
     }
 
     box.innerHTML = `
+      ${safetyAlert}
       <!-- Total -->
       <div class="text-center mb-3">
         <div class="text-muted mb-1" style="font-size:.85rem;">${totalLabel}</div>

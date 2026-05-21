@@ -231,6 +231,7 @@
       fiber:    {{ c.fiber_g  | default(0) }},
       gi:       {{ c.glycemic_index | tojson if c.glycemic_index else 'null' }},
       grams:    {{ c.grams    | tojson if c.grams else 'null' }},
+      ml:       {{ c.ml       | tojson if c.ml    else 'null' }},
       food_id:  {{ c.food_item_id | tojson if c.food_item_id else 'null' }}
     }{% if not loop.last %},{% endif %}
     {% endfor %}
@@ -363,10 +364,27 @@ function addComponent(data = {}) {
         <input type="number" name="comp_gi[]" class="form-control ci-gi"
                step="1" min="0" max="100" placeholder="—" value="${data.gi ?? ''}">
       </div>
-      <div class="comp-macro-field" style="grid-column: span 2; display:flex; align-items:flex-end;">
+      <div class="comp-macro-field">
+        <label class="comp-macro-lbl-sm" style="color:#0ea5e9;">
+          Gramos
+          <span class="comp-gi-hint" title="Peso del ingrediente. Si ingresás mL en su lugar, se convierte automáticamente.">?</span>
+        </label>
+        <input type="number" name="comp_grams[]" class="form-control ci-grams"
+               step="1" min="0" placeholder="0" value="${data.grams ?? ''}"
+               oninput="onAmountChange(this, 'g')">
+      </div>
+      <div class="comp-macro-field">
+        <label class="comp-macro-lbl-sm" style="color:#06b6d4;">
+          mL
+          <span class="comp-gi-hint" title="Volumen para líquidos (leche, jugo, refrescos). Se convierte a gramos usando densidad del alimento.">?</span>
+        </label>
+        <input type="number" name="comp_ml[]" class="form-control ci-ml"
+               step="1" min="0" placeholder="0" value="${data.ml ?? ''}"
+               oninput="onAmountChange(this, 'ml')">
+      </div>
+      <div class="comp-macro-field" style="display:flex; align-items:flex-end;">
         <div class="comp-gi-badge" id="gi-badge-${idx}" style="display:none;"></div>
       </div>
-      <input type="hidden" name="comp_grams[]" class="ci-grams" value="${data.grams || ''}">
     </div>
 
     <button type="button" class="comp-estimar-btn" onclick="estimarMacros(this)" title="Estimar proteínas y grasas automáticamente">
@@ -407,10 +425,28 @@ function removeComponent(btn) {
 }
 
 /* ── Estimar macros via API ──────────────────────────────────────────── */
+// Handler: cuando el usuario edita gramos o ml en una row, se sincroniza el otro.
+// Si llenó ml → al estimar macros, se envía ml y el backend convierte usando densidad.
+// Si llenó gramos → modo tradicional.
+function onAmountChange(input, unit) {
+  const row = input.closest('.comp-row');
+  if (!row) return;
+  // Limpieza visual: cuando se modifica uno, el "otro" se vuelve placeholder
+  if (unit === 'g' && input.value) {
+    const mlField = row.querySelector('.ci-ml');
+    if (mlField && mlField.value === '') mlField.placeholder = '— (gramos activo)';
+  } else if (unit === 'ml' && input.value) {
+    const gField = row.querySelector('.ci-grams');
+    if (gField && gField.value === '') gField.placeholder = '— (ml activo, se autocalcula)';
+  }
+}
+
 async function estimarMacros(btn) {
   const row    = btn.closest('.comp-row');
   const nombre = row.querySelector('.ci-name').value.trim();
   const carbs  = parseFloat(row.querySelector('.ci-carbs').value) || 0;
+  const grams  = parseFloat(row.querySelector('.ci-grams')?.value) || 0;
+  const ml     = parseFloat(row.querySelector('.ci-ml')?.value)    || 0;
 
   if (!nombre) { alert('Escribí primero el nombre del ingrediente.'); return; }
 
@@ -418,7 +454,10 @@ async function estimarMacros(btn) {
   btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Estimando…';
 
   try {
-    const url = `/api/estimar-macros?nombre=${encodeURIComponent(nombre)}&carbs=${carbs}`;
+    // Construir URL — incluir ml o grams si se ingresaron explícitamente
+    let url = `/api/estimar-macros?nombre=${encodeURIComponent(nombre)}&carbs=${carbs}`;
+    if (ml > 0)    url += `&ml=${ml}`;
+    else if (grams > 0) url += `&grams=${grams}`;
     const res  = await fetch(url);
     const data = await res.json();
 
@@ -430,16 +469,30 @@ async function estimarMacros(btn) {
     }
 
     // Llenar campos (solo si están vacíos o 0)
-    const protField = row.querySelector('.ci-protein');
-    const fatField  = row.querySelector('.ci-fat');
-    const calField  = row.querySelector('.ci-calories');
-    const carbField = row.querySelector('.ci-carbs');
+    const protField  = row.querySelector('.ci-protein');
+    const fatField   = row.querySelector('.ci-fat');
+    const calField   = row.querySelector('.ci-calories');
+    const carbField  = row.querySelector('.ci-carbs');
+    const gramsField = row.querySelector('.ci-grams');
+    const mlField    = row.querySelector('.ci-ml');
+
     if (!parseFloat(protField.value)) protField.value = data.protein_g;
     if (!parseFloat(fatField.value))  fatField.value  = data.fat_g;
     if (!parseFloat(calField.value))  calField.value  = data.calories;
-    // Para alimentos sin CH o si el usuario no puso CH, llenar con CH netos
+    // CH: si el usuario no especificó, llenar con netos del backend
     if (carbs === 0 && data.carbs_g > 0 && !parseFloat(carbField.value))
       carbField.value = data.carbs_g;
+
+    // Auto-completar gramos cuando el usuario ingresó solo ml
+    // (backend ya hizo la conversión usando densidad del alimento)
+    if (gramsField && data.grams && !parseFloat(gramsField.value)) {
+      gramsField.value = Math.round(data.grams * 10) / 10;
+    }
+    // Y viceversa: si el usuario solo puso gramos pero el alimento es líquido,
+    // mostrar el equivalente en ml en placeholder
+    if (mlField && data.ml && !parseFloat(mlField.value)) {
+      mlField.value = Math.round(data.ml);
+    }
 
     // Fibra e ÍG si vienen de la estimación
     const fiberField = row.querySelector('.ci-fiber');

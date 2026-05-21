@@ -261,11 +261,15 @@ def compute_hypo_risk(force: bool = False) -> dict:
                 pmm_icr_sigma   = pmm_icr_sigma,
             )
 
+            # IMPORTANTE: run_monte_carlo retorna p_hipo como entero 0-100 (%)
+            # Aquí normalizamos a proporción 0-1 para consistencia con la API
+            # (los thresholds _THRESH_* y el JS del banner esperan 0-1).
+            p_hipo_prop = mc["p_hipo"] / 100.0
             entry = {
                 "horizon_min": h,
                 "g_pred":      round(mc["g_pred_median"]),
                 "sigma":       round(mc["sigma"], 1),
-                "p_hipo":      round(mc["p_hipo"], 3),
+                "p_hipo":      round(p_hipo_prop, 3),
                 "p5":          mc.get("p5"),
             }
             per_horizon.append(entry)
