@@ -119,6 +119,12 @@ with app.app_context():
             if "glycemic_index" not in mc_cols:
                 conn.execute(text("ALTER TABLE meal_components ADD COLUMN glycemic_index INTEGER"))
                 conn.commit()
+            if "ml" not in mc_cols:
+                conn.execute(text("ALTER TABLE meal_components ADD COLUMN ml REAL"))
+                conn.commit()
+            if "density_g_ml" not in mc_cols:
+                conn.execute(text("ALTER TABLE meal_components ADD COLUMN density_g_ml REAL"))
+                conn.commit()
         # Migración: fiber_per_serving y glycemic_index en food_items
         fi_cols = [c["name"] for c in inspector.get_columns("food_items")]
         if "fiber_per_serving" not in fi_cols:

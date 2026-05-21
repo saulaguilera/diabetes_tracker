@@ -115,17 +115,19 @@ def api_alimentos_buscar():
 
 @bp.route("/api/estimar-macros", endpoint="api_estimar_macros")
 def api_estimar_macros():
-    """Estima proteínas, grasas y calorías dado un nombre de ingrediente y gramos de CH."""
+    """Estima proteínas, grasas y calorías dado un nombre de ingrediente y gramos de CH.
+    Acepta también `ml` para alimentos líquidos (leche, jugo, refrescos, etc.)."""
     from utils.nutrition_db import estimar, buscar_nutricion
     nombre = request.args.get("nombre", "").strip()
     carbs  = request.args.get("carbs",  0, type=float)
     grams  = request.args.get("grams",  0, type=float)
+    ml     = request.args.get("ml",     0, type=float)
     if not nombre:
         return jsonify({"error": "Falta el nombre"}), 400
 
     # 1. Base nutricional interna (80+ alimentos comunes, siempre disponible)
     from utils.nutrition_db import get_gi, gl_from_gi
-    estimado = estimar(nombre, carbs_usuario=carbs, grams_usuario=grams)
+    estimado = estimar(nombre, carbs_usuario=carbs, grams_usuario=grams, ml_usuario=ml)
     if estimado:
         gi = get_gi(nombre)
         return jsonify({
@@ -137,6 +139,9 @@ def api_estimar_macros():
             "fibra_g":        estimado["fibra_g"],
             "alta_fibra":     estimado["alta_fibra"],
             "glycemic_index": gi,
+            "grams":          estimado.get("grams"),     # gramos finales (incluye conv. mL→g)
+            "ml":             estimado.get("ml"),        # mL detectados (si aplica)
+            "density":        estimado.get("density"),   # densidad usada (g/mL)
             "source":         nombre,
             "origin":         "interno",
             "nota":           estimado["nota"],

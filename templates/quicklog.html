@@ -1602,6 +1602,7 @@ function renderIngredients() {
       <input type="hidden" name="comp_fat[]"      value="${m.fat}">
       <input type="hidden" name="comp_calories[]" value="${m.cal}">
       <input type="hidden" name="comp_grams[]"    value="${ing.grams}">
+      <input type="hidden" name="comp_ml[]"       value="${ing.ml ?? ''}">
       <input type="hidden" name="comp_gi[]"       value="${ing.gi ?? ''}">`;
     list.appendChild(div);
   });

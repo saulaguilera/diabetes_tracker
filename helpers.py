@@ -426,6 +426,7 @@ def _save_meal_components(comida, form):
     comp_fibers   = form.getlist("comp_fiber[]")
     comp_gis      = form.getlist("comp_gi[]")
     comp_grams    = form.getlist("comp_grams[]")
+    comp_ml       = form.getlist("comp_ml[]")        # nuevo: volumen en mL
     comp_food_ids = form.getlist("comp_food_id[]")
 
     componentes = []
@@ -440,6 +441,18 @@ def _save_meal_components(comida, form):
             try: return int(float(lst[idx])) if lst[idx].strip() else None
             except (IndexError, ValueError): return None
 
+        ml_val = _f(comp_ml, i) or None
+        # Si hay mL pero no hay grams, calcular grams desde densidad del alimento
+        grams_val = _f(comp_grams, i) or None
+        density   = None
+        if ml_val and not grams_val:
+            try:
+                from utils.nutrition_db import _densidad_para
+                density   = _densidad_para(name)
+                grams_val = round(ml_val * density, 1)
+            except Exception:
+                pass
+
         componentes.append(MealComponent(
             name           = name,
             food_item_id   = comp_food_ids[i].strip() or None if i < len(comp_food_ids) else None,
@@ -449,7 +462,9 @@ def _save_meal_components(comida, form):
             calories       = _f(comp_cals, i),
             fiber_g        = _f(comp_fibers, i),
             glycemic_index = _i(comp_gis, i),
-            grams          = _f(comp_grams, i) or None,
+            grams          = grams_val,
+            ml             = ml_val,
+            density_g_ml   = density,
         ))
 
     # Actualizar totales en la comida padre

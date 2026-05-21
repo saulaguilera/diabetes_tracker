@@ -8,6 +8,116 @@ CH netos = carbs_total - fibra  ← esto es lo que impacta la glucemia
 
 import re
 
+# ── Volúmenes estándar (mL por unidad común) ──────────────────────────────────
+# Usado por el parser cuando el usuario escribe "1 vaso de leche", "1 lata de coca", etc.
+VOLUMENES_ML = {
+    "vaso":         250,
+    "vasos":        250,
+    "copa":         150,
+    "copas":        150,
+    "taza":         240,   # taza estándar (cuando se usa para líquidos)
+    "tazas":        240,
+    "mug":          300,
+    "lata":         355,
+    "latas":        355,
+    "botella":      500,    # genérico — para PET grandes se especifica con "1.5l" o "2l"
+    "botellas":     500,
+    "shot":          30,
+    "shots":         30,
+    "cucharada":     15,    # sopera (cuando se aplica a líquido)
+    "cucharadas":    15,
+    "cucharadita":    5,
+    "cucharaditas":   5,
+}
+
+# ── Densidades de líquidos (g por mL) ─────────────────────────────────────────
+# Para convertir mL → gramos antes de aplicar la composición nutricional.
+# Default = 1.0 (agua) si el alimento no está listado.
+DENSIDADES_ML = {
+    "agua":            1.00,
+    "agua mineral":    1.00,
+    "leche":           1.03,
+    "leche entera":    1.03,
+    "leche descremada":1.03,
+    "leche deslactosada":1.03,
+    "leche almendra":  1.01,
+    "leche de soja":   1.02,
+    "leche de avena":  1.02,
+    "leche vegetal":   1.02,
+    "yogur":           1.05,
+    "yogurt":          1.05,
+    "yogur bebible":   1.04,
+    "kefir":           1.04,
+    "jugo":            1.04,
+    "jugo de naranja": 1.04,
+    "jugo de manzana": 1.04,
+    "jugo de uva":     1.05,
+    "néctar":          1.05,
+    "nectar":          1.05,
+    "smoothie":        1.05,
+    "licuado":         1.04,
+    "refresco":        1.04,
+    "gaseosa":         1.04,
+    "coca cola":       1.04,
+    "coca":            1.04,
+    "sprite":          1.04,
+    "fanta":           1.04,
+    "pepsi":           1.04,
+    "ginger ale":      1.04,
+    "tónica":          1.04,
+    "isotónica":       1.03,
+    "gatorade":        1.03,
+    "powerade":        1.03,
+    "energética":      1.04,
+    "red bull":        1.05,
+    "cerveza":         1.01,
+    "vino":            0.99,
+    "vino tinto":      0.99,
+    "vino blanco":     0.99,
+    "champagne":       0.99,
+    "cava":            0.99,
+    "espumante":       0.99,
+    "sidra":           1.02,
+    "whisky":          0.95,
+    "vodka":           0.95,
+    "ron":             0.95,
+    "gin":             0.95,
+    "tequila":         0.95,
+    "licor":           1.04,   # licores dulces
+    "café":            1.00,
+    "cafe":            1.00,
+    "café con leche":  1.02,
+    "té":              1.00,
+    "te":              1.00,
+    "mate":            1.00,
+    "mate cocido":     1.00,
+    "infusión":        1.00,
+    "chocolate caliente":1.05,
+    "submarino":       1.03,
+    "caldo":           1.02,
+    "consomé":         1.02,
+    "consome":         1.02,
+    "sopa":            1.03,
+    "crema":           1.04,    # crema líquida
+    "salsa":           1.05,
+    "aceite":          0.92,
+    "vinagre":         1.01,
+    "miel":            1.42,    # densa
+}
+
+
+def _densidad_para(alimento: str) -> float:
+    """Devuelve g/mL para un alimento. Default 1.0 (agua)."""
+    a = (alimento or "").lower().strip()
+    if a in DENSIDADES_ML:
+        return DENSIDADES_ML[a]
+    # Match parcial: ej. "leche de almendras descremada" → "leche almendra"
+    for key, dens in sorted(DENSIDADES_ML.items(), key=lambda x: -len(x[0])):
+        if key in a:
+            return dens
+    return 1.0
+
+
 # Porción estándar para alimentos contados por unidad.
 # Valor: (gramos_por_unidad, nombre_unidad)
 PORCIONES_ESTANDAR = {
@@ -261,13 +371,92 @@ NUTRITION_DB = {
     "margarina":       ( 0.7, 0.0,  0.2, 80.0, 717),
 
     # ── Bebidas ───────────────────────────────────────────────────────────
+    "jugo de naranja": (10.4, 0.2,  0.7,  0.2,  45),
     "jugo naranja":    (10.4, 0.2,  0.7,  0.2,  45),
+    "jugo de manzana": (11.7, 0.2,  0.1,  0.1,  46),
     "jugo manzana":    (11.7, 0.2,  0.1,  0.1,  46),
+    "jugo de uva":     (14.0, 0.1,  0.3,  0.1,  60),
+    "jugo de durazno": (11.0, 0.2,  0.4,  0.1,  47),
+    "jugo de pera":    (11.5, 0.2,  0.1,  0.1,  46),
+    "jugo de pomelo":  (10.0, 0.1,  0.6,  0.1,  41),
+    "jugo de limón":   ( 6.0, 0.3,  0.4,  0.2,  22),
+    "jugo de tomate":  ( 4.2, 0.4,  0.8,  0.1,  17),
+    "jugo de zanahoria":(9.3, 0.8,  0.9,  0.2,  40),
+    "néctar":          (13.0, 0.1,  0.2,  0.1,  54),
+    "nectar":          (13.0, 0.1,  0.2,  0.1,  54),
+    "smoothie":        (15.0, 1.5,  1.0,  0.3,  68),
+    "licuado":         (12.0, 0.8,  2.5,  1.0,  68),
     "leche chocolatada":(10.4, 0.3,  3.4,  1.5,  68),
+    "leche con cacao": (10.4, 0.3,  3.4,  1.5,  68),
+    "leche de almendra":( 1.0, 0.2,  0.5,  1.1,  17),
+    "leche de soja":   ( 3.3, 0.4,  3.3,  1.8,  43),
+    "leche de avena":  ( 7.0, 0.4,  1.0,  1.5,  47),
+    "leche vegetal":   ( 4.0, 0.3,  1.5,  1.5,  35),
+    "yogur":           ( 4.7, 0.0,  3.8,  3.3,  61),   # natural
+    "yogurt":          ( 4.7, 0.0,  3.8,  3.3,  61),
+    "yogur bebible":   (11.0, 0.0,  3.0,  1.5,  68),
+    "yogur natural":   ( 4.7, 0.0,  3.8,  3.3,  61),
+    "yogur de frutas": (13.0, 0.0,  3.5,  2.5,  84),
+    "kefir":           ( 4.0, 0.0,  3.5,  1.0,  43),
     "café":            ( 0.0, 0.0,  0.3,  0.0,   2),
+    "cafe":            ( 0.0, 0.0,  0.3,  0.0,   2),
+    "café con leche":  ( 4.0, 0.0,  3.0,  2.5,  50),
+    "cafe con leche":  ( 4.0, 0.0,  3.0,  2.5,  50),
+    "cortado":         ( 4.5, 0.0,  2.5,  2.0,  48),
+    "capuccino":       ( 5.0, 0.0,  3.0,  3.0,  60),
     "té":              ( 0.2, 0.0,  0.0,  0.0,   1),
+    "te":              ( 0.2, 0.0,  0.0,  0.0,   1),
+    "mate":            ( 0.0, 0.0,  0.0,  0.0,   0),
+    "mate cocido":     ( 0.0, 0.0,  0.0,  0.0,   0),
+    "infusión":        ( 0.0, 0.0,  0.0,  0.0,   1),
+    "infusion":        ( 0.0, 0.0,  0.0,  0.0,   1),
+    "chocolate caliente":(13.0, 0.5,  3.0,  3.5,  90),
+    "submarino":       (13.0, 0.5,  3.5,  4.0,  98),
+    # ── Refrescos / gaseosas ──────────────────────────────────────────────
+    "coca cola":       (10.6, 0.0,  0.0,  0.0,  42),
+    "coca":            (10.6, 0.0,  0.0,  0.0,  42),
+    "coca cola zero":  ( 0.0, 0.0,  0.0,  0.0,   1),
+    "coca light":      ( 0.0, 0.0,  0.0,  0.0,   1),
+    "coca zero":       ( 0.0, 0.0,  0.0,  0.0,   1),
+    "pepsi":           (11.0, 0.0,  0.0,  0.0,  43),
+    "sprite":          ( 9.0, 0.0,  0.0,  0.0,  38),
+    "fanta":           (11.5, 0.0,  0.0,  0.0,  46),
+    "ginger ale":      ( 9.0, 0.0,  0.0,  0.0,  36),
+    "tónica":          ( 8.8, 0.0,  0.0,  0.0,  35),
+    "tonica":          ( 8.8, 0.0,  0.0,  0.0,  35),
+    "gatorade":        ( 5.6, 0.0,  0.0,  0.0,  22),
+    "powerade":        ( 5.0, 0.0,  0.0,  0.0,  20),
+    "red bull":        (11.0, 0.0,  0.3,  0.0,  45),
+    "energética":      (11.0, 0.0,  0.3,  0.0,  45),
+    "energetica":      (11.0, 0.0,  0.3,  0.0,  45),
     "bebida":          (10.6, 0.0,  0.0,  0.0,  42),
     "gaseosa":         (10.6, 0.0,  0.0,  0.0,  42),
+    "refresco":        (10.6, 0.0,  0.0,  0.0,  42),
+    # ── Alcohol ───────────────────────────────────────────────────────────
+    "cerveza":         ( 3.6, 0.0,  0.5,  0.0,  43),
+    "cerveza light":   ( 1.3, 0.0,  0.4,  0.0,  29),
+    "vino tinto":      ( 2.6, 0.0,  0.1,  0.0,  85),
+    "vino blanco":     ( 2.6, 0.0,  0.1,  0.0,  82),
+    "vino rosado":     ( 2.5, 0.0,  0.1,  0.0,  83),
+    "champagne":       ( 1.4, 0.0,  0.2,  0.0,  76),
+    "espumante":       ( 1.4, 0.0,  0.2,  0.0,  76),
+    "sidra":           ( 4.4, 0.0,  0.1,  0.0,  46),
+    "whisky":          ( 0.0, 0.0,  0.0,  0.0, 235),
+    "vodka":           ( 0.0, 0.0,  0.0,  0.0, 231),
+    "ron":             ( 0.0, 0.0,  0.0,  0.0, 231),
+    "gin":             ( 0.0, 0.0,  0.0,  0.0, 231),
+    "tequila":         ( 0.0, 0.0,  0.0,  0.0, 231),
+    "fernet":          (12.0, 0.0,  0.0,  0.0, 232),
+    "campari":         (20.0, 0.0,  0.0,  0.0, 240),
+    # ── Caldos / sopas líquidas ───────────────────────────────────────────
+    "caldo":           ( 0.5, 0.0,  1.0,  0.5,  10),
+    "consomé":         ( 0.5, 0.0,  1.0,  0.5,  10),
+    "consome":         ( 0.5, 0.0,  1.0,  0.5,  10),
+    # ── Agua ──────────────────────────────────────────────────────────────
+    "agua":            ( 0.0, 0.0,  0.0,  0.0,   0),
+    "agua mineral":    ( 0.0, 0.0,  0.0,  0.0,   0),
+    "agua con gas":    ( 0.0, 0.0,  0.0,  0.0,   0),
+    "agua saborizada": ( 4.0, 0.0,  0.0,  0.0,  16),
 
     # ── Preparaciones / comidas completas ─────────────────────────────────
     "pizza":           (33.0, 2.3, 11.0, 10.0, 266),
@@ -375,20 +564,70 @@ def _parsear_nombre(nombre: str):
     """
     Extrae cantidad y nombre limpio de un string libre.
     Soporta:
-      "250 g Carne"   → (250, True,  "carne")
-      "Carne 250 g"   → (250, True,  "carne")
-      "4 huevos"      → (4,   False, "huevos")
-      "1/2 cebolla"   → (0.5, False, "cebolla")
-      "1/2 taza arroz"→ (0.5, False, "arroz")   [taza = unidad ignorada]
-      "3/4 de palta"  → (0.75,False, "palta")
-      "1 1/2 banana"  → (1.5, False, "banana")
+      "250 g Carne"      → (250, True,  "carne")             [es_gramos=True]
+      "Carne 250 g"      → (250, True,  "carne")
+      "4 huevos"         → (4,   False, "huevos")
+      "1/2 cebolla"      → (0.5, False, "cebolla")
+      "1/2 taza arroz"   → (0.5, False, "arroz")
+      "3/4 de palta"     → (0.75,False, "palta")
+      "1 1/2 banana"     → (1.5, False, "banana")
+      "200 ml leche"     → (200, True,  "leche")             [es_gramos=True, será convertido]
+      "1 vaso de jugo"   → (250, True,  "jugo")              [vaso → 250mL]
+      "1 lata de coca"   → (355, True,  "coca")
+      "0.5 l agua"       → (500, True,  "agua")
+      "1.5 litros agua"  → (1500,True,  "agua")
+
     Devuelve: (cantidad_o_None, es_gramos: bool, nombre_limpio: str)
+    Nota: el flag "es_gramos" se setea True también para mL (porque la cantidad
+    está expresada en unidad de masa/volumen, no en "1 unidad"). La conversión
+    mL → g se hace en `estimar()` usando la densidad del alimento.
     """
     s = nombre.strip()
 
     # Patrón numérico: entero, decimal, fracción o entero+fracción
     NUM_PAT  = r'(\d+(?:[.,]\d+)?|\d+\s+\d+/\d+|\d+/\d+)'
-    UNIG_PAT = r'(gr?(?:amos?)?)'   # g / gr / gramos
+    UNIG_PAT = r'(gr?(?:amos?)?)'                   # g / gr / gramos
+    # Unidades de volumen explícitas: ml, cc (≈1 ml), l/lt/litros
+    UNIVOL_PAT = r'(ml|m\.?l|cc|l(?:itros?)?|lts?)'
+
+    # ── PRIMERO probar VOLUMEN explícito (ml/L) al inicio ────────────────
+    # "200 ml leche", "1.5 l agua", "0.5 litros jugo"
+    m = re.match(r'^' + NUM_PAT + r'\s*' + UNIVOL_PAT + r'\s+(.+)$', s, re.IGNORECASE)
+    if m:
+        cantidad      = _parse_cantidad(m.group(1))
+        unidad        = m.group(2).lower()
+        nombre_limpio = m.group(3).strip()
+        # Si es litros, multiplicar por 1000
+        if unidad.startswith("l"):
+            cantidad *= 1000
+        nombre_limpio = re.sub(r'^\s*de\s+', '', nombre_limpio, flags=re.IGNORECASE).strip()
+        # Marcamos cantidad como negativa para que `estimar()` sepa que es mL.
+        # Convención interna: cantidad < 0 → es mL (en valor absoluto).
+        return -abs(cantidad), True, nombre_limpio.lower()
+
+    # ── Volumen explícito al final: "leche 200 ml" ───────────────────────
+    m = re.match(r'^(.+?)\s+' + NUM_PAT + r'\s*' + UNIVOL_PAT + r'\s*$', s, re.IGNORECASE)
+    if m:
+        nombre_limpio = m.group(1).strip()
+        cantidad      = _parse_cantidad(m.group(2))
+        unidad        = m.group(3).lower()
+        if unidad.startswith("l"):
+            cantidad *= 1000
+        return -abs(cantidad), True, nombre_limpio.lower()
+
+    # ── Unidad de volumen nombrada (vaso/copa/lata/etc.) ─────────────────
+    # "1 vaso de jugo", "2 copas de vino", "1 lata coca"
+    vol_units_pat = r'(' + r'|'.join(VOLUMENES_ML.keys()) + r')'
+    m = re.match(r'^' + NUM_PAT + r'\s+' + vol_units_pat + r'\s+(?:de\s+)?(.+)$',
+                 s, re.IGNORECASE)
+    if m:
+        n_units       = _parse_cantidad(m.group(1))
+        unit_name     = m.group(2).lower()
+        nombre_limpio = m.group(3).strip()
+        ml_per_unit   = VOLUMENES_ML.get(unit_name, 0)
+        if ml_per_unit > 0:
+            total_ml = n_units * ml_per_unit
+            return -abs(total_ml), True, nombre_limpio.lower()
 
     # ── "CANTIDAD [g] texto" al inicio ─────────────────────────────────
     m = re.match(r'^' + NUM_PAT + r'\s*' + UNIG_PAT + r'?\s+(.+)$', s, re.IGNORECASE)
@@ -488,17 +727,20 @@ def buscar_nutricion(nombre: str):
     return None
 
 
-def estimar(nombre: str, carbs_usuario: float = 0, grams_usuario: float = 0):
+def estimar(nombre: str, carbs_usuario: float = 0, grams_usuario: float = 0,
+            ml_usuario: float = 0):
     """
     Estima macros dado un nombre de alimento.
     Siempre devuelve CH netos (= CH totales - fibra) para uso en bolo.
 
     Prioridad de escalado:
-    1. Gramos en el nombre ("250g carne")
-    2. grams_usuario
-    3. CH del usuario → escalar por ratio (alimentos con carbohidratos)
-    4. Unidades en el nombre ("4 huevos") × porción estándar
-    5. Fallback 100g
+    1. Volumen en el nombre ("200ml leche", "1 vaso de jugo") → convertir a g
+    2. ml_usuario (volumen ingresado por el usuario)            → convertir a g
+    3. Gramos en el nombre ("250g carne")
+    4. grams_usuario
+    5. CH del usuario → escalar por ratio (alimentos con carbohidratos)
+    6. Unidades en el nombre ("4 huevos") × porción estándar
+    7. Fallback 100g
     """
     found = buscar_nutricion(nombre)
     if found is None:
@@ -510,12 +752,29 @@ def estimar(nombre: str, carbs_usuario: float = 0, grams_usuario: float = 0):
 
     alta_fibra = fibra_100 >= 2.0  # Marcador para avisar al usuario
 
+    # Densidad usada (solo si el caso es por mL — informativo)
+    densidad     = _densidad_para(db_key)
+    ml_detectado = None   # mL del input para devolver al usuario
+
     # ── Determinar total_g ────────────────────────────────────────────────
     total_g = 0
     base    = "carbs"
     nota    = ""
 
-    if cantidad_nombre and es_gramos:
+    # Cantidad < 0 ⇒ es mL (convención interna del parser)
+    if cantidad_nombre is not None and cantidad_nombre < 0:
+        ml_detectado = abs(cantidad_nombre)
+        total_g  = ml_detectado * densidad
+        base     = "ml"
+        nota     = f"{ml_detectado:.0f}ml de {db_key} × {densidad}g/ml = {total_g:.0f}g"
+
+    elif ml_usuario and ml_usuario > 0:
+        ml_detectado = ml_usuario
+        total_g  = ml_usuario * densidad
+        base     = "ml"
+        nota     = f"{ml_usuario:.0f}ml de {db_key} × {densidad}g/ml = {total_g:.0f}g"
+
+    elif cantidad_nombre and es_gramos:
         total_g = cantidad_nombre
         base    = "gramos"
         nota    = f"{total_g:.0f}g de {db_key}"
@@ -568,7 +827,9 @@ def estimar(nombre: str, carbs_usuario: float = 0, grams_usuario: float = 0):
         "fibra_g":     fibra,
         "alta_fibra":  alta_fibra,
         "base":        base,
-        "grams":       total_g,
+        "grams":       round(total_g, 1),
+        "ml":          round(ml_detectado, 1) if ml_detectado else None,
+        "density":     densidad if ml_detectado else None,
         "key":         db_key,
         "nota":        nota,
     }
