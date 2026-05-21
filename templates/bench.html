@@ -197,13 +197,16 @@ async function runBench() {
 }
 
 function renderReport(report) {
-  document.getElementById('raw-json').textContent = JSON.stringify(report, null, 2);
-  document.getElementById('meta-run-at').textContent = `Corrido: ${report.meta.run_at}`;
+  try {
+    document.getElementById('raw-json').textContent = JSON.stringify(report, null, 2);
+  } catch(_) {}
+  document.getElementById('meta-run-at').textContent =
+    `Corrido: ${report?.meta?.run_at || '—'}`;
   document.getElementById('meta-records').textContent =
-    `${report.meta.n_records_total} predicciones · ventana ${report.meta.window_days}d`;
+    `${report?.meta?.n_records_total ?? 0} predicciones · ventana ${report?.meta?.window_days ?? 0}d`;
 
   // Verdict
-  const v = report.verdict || {};
+  const v = report?.verdict || {};
   const badge = document.getElementById('verdict-badge');
   const overall = v.overall || 'no_data';
   const labels = {pass:'✅ PASS', warn:'🟡 WARN', fail:'🔴 FAIL', no_data:'⚪ SIN DATOS'};
@@ -229,44 +232,62 @@ function renderReport(report) {
       </div>`);
   }
 
-  // Tomar el primer modelo (o el filtrado)
-  const models = Object.keys(report.by_model || {});
-  if (!models.length) return;
-  const m = report.by_model[models[0]];
-  if (m.note) {
-    alert(m.note);
+  // Limpiar contenedores antes (por si la corrida anterior tenía data)
+  document.getElementById('accuracy-cards').innerHTML = '';
+  document.querySelector('#ctx-table tbody').innerHTML = '';
+  document.querySelector('#rng-table tbody').innerHTML = '';
+  document.getElementById('calibration-content').innerHTML = '';
+  document.getElementById('clinical-content').innerHTML = '';
+
+  // ── Detectar estado "sin datos" elegantemente ──
+  const models = Object.keys(report?.by_model || {});
+  if (!models.length) {
+    document.getElementById('accuracy-cards').innerHTML = _emptyStateHTML(
+      "Sin predicciones todavía",
+      "El backtest se llena automáticamente con las predicciones que se resuelven cuando el CGM sincroniza (cada 5 min). Después de las primeras lecturas, esta pantalla mostrará MAE, RMSE, calibration, etc."
+    );
     return;
   }
 
-  // Accuracy cards
+  const m = report.by_model[models[0]] || {};
+  const total = report?.meta?.n_records_total ?? 0;
+
+  // Caso 1: el modelo tiene "note" → estado de espera
+  if (m.note || !m.accuracy) {
+    document.getElementById('accuracy-cards').innerHTML = _emptyStateHTML(
+      total === 0 ? "Acumulando data del CGM" : `Modelo "${models[0]}" sin predicciones resueltas todavía`,
+      m.note || `Se necesitan al menos 1-2 lecturas del CGM resueltas (cada predicción se resuelve 30 min después de hacerse). Estado actual: ${total} predicciones registradas en la ventana.`
+    );
+    return;
+  }
+
+  // Caso 2: hay accuracy parcial — render defensivo
+  const acc = m.accuracy || {};
+  const byH = m.accuracy_by_horizon || {};
   const accEl = document.getElementById('accuracy-cards');
-  accEl.innerHTML = '';
-  const acc = m.accuracy;
-  const byH = m.accuracy_by_horizon;
   const accMetrics = [
-    {label:'MAE global', value:acc.mae, unit:'mg/dL'},
-    {label:'RMSE global', value:acc.rmse, unit:'mg/dL'},
-    {label:'MARD global', value:acc.mard, unit:'%'},
-    {label:'BIAS', value:acc.bias, unit:'mg/dL'},
+    {label:'MAE global', value:acc.mae,  unit:'mg/dL'},
+    {label:'RMSE global',value:acc.rmse, unit:'mg/dL'},
+    {label:'MARD global',value:acc.mard, unit:'%'},
+    {label:'BIAS',       value:acc.bias, unit:'mg/dL'},
     {label:'MAE +30min', value:byH['+30min']?.mae, unit:'mg/dL'},
     {label:'MAE +60min', value:byH['+60min']?.mae, unit:'mg/dL'},
   ];
-  for (const m of accMetrics) {
+  for (const mc of accMetrics) {
     accEl.insertAdjacentHTML('beforeend', `
       <div class="col-md-2 col-4">
         <div class="metric-card">
-          <div class="metric-label">${m.label}</div>
-          <div class="metric-value">${m.value ?? '—'}
-            <span class="metric-unit">${m.unit}</span></div>
+          <div class="metric-label">${mc.label}</div>
+          <div class="metric-value">${mc.value ?? '—'}
+            <span class="metric-unit">${mc.unit}</span></div>
         </div>
       </div>`);
   }
 
   // Tabla contexto
   const ctxBody = document.querySelector('#ctx-table tbody');
-  ctxBody.innerHTML = '';
-  for (const [tag, td] of Object.entries(m.accuracy_by_context)) {
-    if (td.n === 0) continue;
+  for (const [tag, td] of Object.entries(m.accuracy_by_context || {})) {
+    if (!td || td.n === 0) continue;
     ctxBody.insertAdjacentHTML('beforeend', `
       <tr>
         <td>${tag}</td>
@@ -279,9 +300,8 @@ function renderReport(report) {
 
   // Tabla rango
   const rngBody = document.querySelector('#rng-table tbody');
-  rngBody.innerHTML = '';
-  for (const [rng, td] of Object.entries(m.accuracy_by_glucose)) {
-    if (td.n === 0) continue;
+  for (const [rng, td] of Object.entries(m.accuracy_by_glucose || {})) {
+    if (!td || td.n === 0) continue;
     rngBody.insertAdjacentHTML('beforeend', `
       <tr>
         <td>${rng}</td>
@@ -331,33 +351,34 @@ function renderReport(report) {
       </div>`);
   }
 
-  // Clinical
+  // Clinical (defensivo)
   const clinEl = document.getElementById('clinical-content');
-  clinEl.innerHTML = '';
-  const tir = m.clinical.tir;
-  clinEl.insertAdjacentHTML('beforeend', `
-    <div class="col-12">
-      <div class="metric-card">
-        <div class="metric-label">TIR observado en el periodo</div>
-        <div class="d-flex gap-3 flex-wrap mt-1">
-          <div><span class="metric-value" style="font-size:1.15rem;color:#15803d;">${tir.tir_pct}%</span>
-               <span class="metric-unit">en rango</span></div>
-          <div><span class="metric-value" style="font-size:1.15rem;color:#dc2626;">${tir.hypo_pct}%</span>
-               <span class="metric-unit">hipo</span></div>
-          <div><span class="metric-value" style="font-size:1.15rem;color:#f59e0b;">${tir.hyper_pct}%</span>
-               <span class="metric-unit">hiper</span></div>
-          <div class="ms-auto text-muted" style="font-size:.7rem;">
-            severos: hipo ${tir.severe_hypo_pct}% · hiper ${tir.severe_hyper_pct}%
+  const clinical = m.clinical || {};
+  const tir = clinical.tir || {};
+  if (tir.n) {
+    clinEl.insertAdjacentHTML('beforeend', `
+      <div class="col-12">
+        <div class="metric-card">
+          <div class="metric-label">TIR observado en el periodo</div>
+          <div class="d-flex gap-3 flex-wrap mt-1">
+            <div><span class="metric-value" style="font-size:1.15rem;color:#15803d;">${tir.tir_pct ?? '—'}%</span>
+                 <span class="metric-unit">en rango</span></div>
+            <div><span class="metric-value" style="font-size:1.15rem;color:#dc2626;">${tir.hypo_pct ?? '—'}%</span>
+                 <span class="metric-unit">hipo</span></div>
+            <div><span class="metric-value" style="font-size:1.15rem;color:#f59e0b;">${tir.hyper_pct ?? '—'}%</span>
+                 <span class="metric-unit">hiper</span></div>
+            <div class="ms-auto text-muted" style="font-size:.7rem;">
+              severos: hipo ${tir.severe_hypo_pct ?? '—'}% · hiper ${tir.severe_hyper_pct ?? '—'}%
+            </div>
           </div>
         </div>
-      </div>
-    </div>`);
+      </div>`);
+  }
 
   for (const [h, key] of [['+30min','hypo_+30min'],['+60min','hypo_+60min']]) {
-    const hd = m.clinical[key];
+    const hd = clinical[key];
+    if (!hd || !hd.n_predictions) continue;   // skip si vacío
     const recallCls = (hd.recall ?? 0) >= 0.85 ? 'pass' : (hd.recall ?? 0) >= 0.6 ? 'warn' : 'fail';
-    const faCls     = (hd.false_alarm_rate_per_day ?? 99) <= 1.0 ? 'pass' :
-                      (hd.false_alarm_rate_per_day ?? 99) <= 2.0 ? 'warn' : 'fail';
     clinEl.insertAdjacentHTML('beforeend', `
       <div class="col-md-6">
         <div class="metric-card ${recallCls}">
@@ -378,6 +399,20 @@ function renderReport(report) {
         </div>
       </div>`);
   }
+}
+
+// Helper para estados de "sin datos" — evita el alert() feo
+function _emptyStateHTML(title, msg) {
+  return `<div class="col-12">
+    <div class="metric-card" style="text-align:center;padding:1.5rem;">
+      <div style="font-size:1.05rem;font-weight:600;color:var(--text);margin-bottom:.4rem;">
+        <i class="bi bi-hourglass-split me-1 text-warning"></i>${title}
+      </div>
+      <div class="text-muted" style="font-size:.85rem;line-height:1.5;max-width:600px;margin:0 auto;">
+        ${msg}
+      </div>
+    </div>
+  </div>`;
 }
 
 // ── SVG reliability diagram (sin libs externas) ───────────────────────────
@@ -430,18 +465,22 @@ function renderReliabilitySVG(rel) {
 function renderValidation(report) {
   const el = document.getElementById('validation-content');
   el.innerHTML = '';
-  const val = report.validation || {};
+  const val = report?.validation || {};
   if (val.error) {
     el.innerHTML = `<div class="col-12 text-danger">Error: ${val.error}</div>`;
     return;
   }
 
   const models = Object.keys(val).filter(k => k !== 'error');
-  if (models.length === 0) {
-    el.innerHTML = `<div class="col-12 text-muted">
-      Sin audits resueltos todavía. PredictionAudit + SSMInnovation se acumularán
-      automáticamente — esperá ~7d en producción para ver validación útil.
-    </div>`;
+  // Si todos los modelos tienen 'note' (sin audits) → mostrar mensaje único
+  const allEmpty = models.every(k => val[k]?.note || !val[k]?.n_audits);
+  if (models.length === 0 || allEmpty) {
+    el.innerHTML = _emptyStateHTML(
+      "Validación científica pendiente",
+      "PredictionAudit + SSMInnovation se acumulan automáticamente con cada predicción. " +
+      "Las primeras métricas formales (coverage IC50/IC90, innovation whiteness, covariance health, " +
+      "longitudinal drift) aparecen después de ~48h en producción con CGM activo."
+    );
     return;
   }
 
