@@ -286,11 +286,26 @@ class TuningExperiment(db.Model):
     error           = db.Column(db.Text)         # si falló
 
     duration_ms     = db.Column(db.Integer)
+
+    # ── Reproducibility hardening ───
+    data_checksum   = db.Column(db.String(40))    # hash de eventos consumidos
+    random_seed     = db.Column(db.Integer)       # seed numpy usado
+    replay_checksum = db.Column(db.String(40))    # hash del output (para verify)
+
+    # ── Lineage ───
+    parent_name     = db.Column(db.String(120), index=True)   # experiment del que deriva
+
+    # ── Automatic failure attribution ───
+    diagnoses_json  = db.Column(db.Text)          # JSON de hipótesis ranked
+    gates_passed    = db.Column(db.Integer)       # de los 8
+    gates_json      = db.Column(db.Text)          # detalle por gate
+
     created_at      = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
     __table_args__ = (
         db.Index("ix_tuning_name_hash", "name", "param_hash"),
         db.Index("ix_tuning_score", "score_composite"),
+        db.Index("ix_tuning_parent", "parent_name"),
     )
 
 

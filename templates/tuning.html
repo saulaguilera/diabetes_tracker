@@ -35,6 +35,46 @@
   </div>
 </div>
 
+<!-- ── PROMOTION GATES DASHBOARD ── -->
+<div class="chart-box mt-3">
+  <div class="d-flex justify-content-between align-items-start mb-3">
+    <h6 class="fw-semibold mb-0">
+      <i class="bi bi-shield-check me-1 text-warning"></i>Promotion Gates
+      <small class="text-muted ms-1">tracking longitudinal de los 8 gates</small>
+    </h6>
+    <button class="btn btn-sm btn-outline-primary" onclick="loadGates()">
+      <i class="bi bi-arrow-clockwise"></i> Cargar
+    </button>
+  </div>
+  <div id="gates-content" class="text-muted">Pulsá "Cargar" para evaluar gates.</div>
+</div>
+
+<!-- ── REGIME ANALYSIS ── -->
+<div class="chart-box mt-3">
+  <div class="d-flex justify-content-between align-items-start mb-3">
+    <h6 class="fw-semibold mb-0">
+      <i class="bi bi-grid-3x3-gap me-1 text-info"></i>Regime-Specific Failure Analysis
+    </h6>
+    <button class="btn btn-sm btn-outline-primary" onclick="loadRegimes()">
+      <i class="bi bi-arrow-clockwise"></i> Cargar
+    </button>
+  </div>
+  <div id="regimes-content" class="text-muted">Pulsá "Cargar" para breakdown por régimen fisiológico.</div>
+</div>
+
+<!-- ── LINEAGE ── -->
+<div class="chart-box mt-3">
+  <div class="d-flex justify-content-between align-items-start mb-3">
+    <h6 class="fw-semibold mb-0">
+      <i class="bi bi-diagram-3 me-1 text-purple"></i>Experiment Lineage
+    </h6>
+    <button class="btn btn-sm btn-outline-primary" onclick="loadLineage()">
+      <i class="bi bi-arrow-clockwise"></i> Cargar
+    </button>
+  </div>
+  <div id="lineage-content" class="text-muted">Pulsá "Cargar" para ver evolución de experiments.</div>
+</div>
+
 <!-- ── Deep Diagnostics ── -->
 <div class="chart-box mt-3">
   <div class="d-flex justify-content-between align-items-start mb-3">
@@ -266,6 +306,188 @@ async function loadDiagnostics() {
     html += `</tbody></table></div>`;
   }
 
+  el.innerHTML = html;
+}
+
+// ─────────────────────────────────────────────────────────────
+// PROMOTION GATES
+// ─────────────────────────────────────────────────────────────
+async function loadGates() {
+  const el = document.getElementById('gates-content');
+  el.innerHTML = `<div class="spinner-border spinner-border-sm"></div> Evaluando gates...`;
+  const r = await fetch('/api/tuning/gates?days=7&rolling=14');
+  const d = await r.json();
+  if (!d.ok) { el.innerHTML = `<div class="text-danger">${d.error}</div>`; return; }
+
+  const cur = d.current;
+  const v   = cur.verdict;
+  const icon = v === 'ready' ? '✅' : v === 'near_ready' ? '🟡' : '🔴';
+  const bgCls = v === 'ready' ? 'pass' : v === 'near_ready' ? 'warn' : 'fail';
+
+  let html = `<div class="metric-card ${bgCls} mb-3">
+    <div class="d-flex justify-content-between align-items-baseline">
+      <div>
+        <div class="metric-label">Promotion readiness</div>
+        <div class="metric-value">${icon} ${cur.n_passed}/${cur.n_total}
+          <span class="metric-unit">${(cur.promotion_readiness*100).toFixed(0)}% · ${v}</span></div>
+      </div>
+      <div class="text-muted" style="font-size:.75rem;">window: ${d.days}d</div>
+    </div>
+  </div>`;
+
+  // Tabla de gates
+  html += `<div class="table-responsive"><table class="table table-sm">
+    <thead><tr><th>Gate</th><th>Value</th><th>Target</th><th>Status</th></tr></thead><tbody>`;
+  for (const g of cur.gates) {
+    const cls = g.passed ? 'text-success' : 'text-danger';
+    const mark = g.passed ? '✓' : '✗';
+    html += `<tr>
+      <td><strong>${g.name}</strong><br/><small class="text-muted">${g.note}</small></td>
+      <td>${_fmt(g.value, 3)}</td>
+      <td><code style="font-size:.7rem;">${g.target}</code></td>
+      <td class="${cls}">${mark}</td>
+    </tr>`;
+  }
+  html += `</tbody></table></div>`;
+
+  // Rolling history
+  if (d.history && d.history.length) {
+    html += `<h6 class="fw-semibold mt-3 mb-2" style="font-size:.85rem;">
+             Rolling ${d.rolling}d history</h6>`;
+    html += `<div class="d-flex flex-wrap gap-1">`;
+    for (const h of d.history) {
+      if (h.readiness == null) {
+        html += `<div title="${h.day}: ${h.note}" style="width:30px;height:30px;
+                 background:var(--surface2);border-radius:4px;
+                 display:flex;align-items:center;justify-content:center;
+                 font-size:.65rem;color:var(--text-muted);">—</div>`;
+        continue;
+      }
+      const pct = h.readiness;
+      const bg = pct >= 0.99 ? '#16a34a' : pct >= 0.7 ? '#f59e0b' : '#dc2626';
+      html += `<div title="${h.day}: ${h.n_passed}/8 (${h.verdict})
+${(h.blockers||[]).join(', ') || 'all pass'}"
+        style="width:30px;height:30px;background:${bg};opacity:${Math.max(0.4, pct)};
+        border-radius:4px;display:flex;align-items:center;justify-content:center;
+        font-size:.7rem;color:#fff;font-weight:600;">
+        ${h.n_passed}</div>`;
+    }
+    html += `</div>`;
+    if (d.stability && d.stability.n_days) {
+      html += `<div class="row g-2 mt-2">
+        <div class="col-md-3 col-6"><div class="metric-card">
+          <div class="metric-label">mean readiness</div>
+          <div class="metric-value">${d.stability.mean_readiness}</div></div></div>
+        <div class="col-md-3 col-6"><div class="metric-card">
+          <div class="metric-label">volatilidad</div>
+          <div class="metric-value">${d.stability.stdev_readiness}<span class="metric-unit">std</span></div></div></div>
+        <div class="col-md-3 col-6"><div class="metric-card">
+          <div class="metric-label">streak ready</div>
+          <div class="metric-value">${d.stability.max_streak_ready}<span class="metric-unit">días</span></div></div></div>
+        <div class="col-md-3 col-6"><div class="metric-card">
+          <div class="metric-label">most blocking</div>
+          <div class="metric-value" style="font-size:.85rem;">
+            ${d.stability.most_blocking ? d.stability.most_blocking[0] : '—'}
+          </div></div></div>
+      </div>`;
+    }
+  }
+  el.innerHTML = html;
+}
+
+// ─────────────────────────────────────────────────────────────
+// REGIME ANALYSIS
+// ─────────────────────────────────────────────────────────────
+async function loadRegimes() {
+  const el = document.getElementById('regimes-content');
+  el.innerHTML = `<div class="spinner-border spinner-border-sm"></div> Analizando regímenes...`;
+  const r = await fetch('/api/tuning/regimes?days=14&horizon=30');
+  const d = await r.json();
+  if (!d.ok) { el.innerHTML = `<div class="text-danger">${d.error}</div>`; return; }
+  const ev = d.regimes;
+  if (!ev || ev.n === 0 || !ev.regimes) {
+    el.innerHTML = `<div class="text-muted">Sin audits resueltos en este horizon.</div>`;
+    return;
+  }
+
+  let html = `<div class="text-muted mb-2" style="font-size:.85rem;">
+    Total audits: ${ev.n_total}
+    ${ev.worst_regime ? ` · ⚠ peor: <strong>${ev.worst_regime}</strong>` : ''}
+  </div>`;
+
+  html += `<div class="table-responsive"><table class="table table-sm">
+    <thead><tr>
+      <th>Régimen</th><th class="text-end">n</th>
+      <th class="text-end">MAE</th>
+      <th class="text-end">IC50</th><th class="text-end">IC90</th>
+      <th class="text-end">mean_z</th><th class="text-end">var_z</th>
+      <th>Veredicto</th></tr></thead><tbody>`;
+  for (const [regime, st] of Object.entries(ev.regimes)) {
+    const n = st.n || 0;
+    if (n < 1) continue;
+    const okCls = (st.verdict || '').startsWith('OK') ? 'text-success' : 'text-warning';
+    const insufficient = n < 5;
+    html += `<tr>
+      <td><strong>${regime}</strong></td>
+      <td class="text-end">${n}</td>
+      <td class="text-end">${_fmt(st.mae,1)}</td>
+      <td class="text-end">${_fmt(st.ic50_coverage,2)}</td>
+      <td class="text-end">${_fmt(st.ic90_coverage,2)}</td>
+      <td class="text-end">${_fmt(st.mean_z,2)}</td>
+      <td class="text-end">${_fmt(st.var_z,2)}</td>
+      <td><small class="${insufficient ? 'text-muted' : okCls}">${insufficient ? '— insuf.' : st.verdict}</small></td>
+    </tr>`;
+  }
+  html += `</tbody></table></div>`;
+
+  if (d.diagnoses && d.diagnoses.length) {
+    html += `<h6 class="fw-semibold mt-3 mb-2" style="font-size:.85rem;">
+      Diagnoses regime-specific</h6>`;
+    for (const dg of d.diagnoses.slice(0, 5)) {
+      html += `<div class="alert alert-warning py-2 px-3 mb-1" style="font-size:.82rem;">
+        <strong>[${dg.confidence.toFixed(2)}]</strong>
+        <code>${dg.regime}</code> · <em>${dg.rule}</em><br/>
+        <span class="text-muted">${dg.hypothesis}</span>
+      </div>`;
+    }
+  }
+  el.innerHTML = html;
+}
+
+// ─────────────────────────────────────────────────────────────
+// LINEAGE
+// ─────────────────────────────────────────────────────────────
+async function loadLineage() {
+  const el = document.getElementById('lineage-content');
+  el.innerHTML = `<div class="spinner-border spinner-border-sm"></div> Cargando...`;
+  const r = await fetch('/api/tuning/lineage');
+  const d = await r.json();
+  if (!d.ok) { el.innerHTML = `<div class="text-danger">${d.error}</div>`; return; }
+
+  if (!d.latest || !d.latest.length) {
+    el.innerHTML = `<div class="text-muted">Aún no hay experiments persistidos.</div>`;
+    return;
+  }
+
+  let html = `<div class="table-responsive"><table class="table table-sm">
+    <thead><tr>
+      <th>Experiment</th><th>Parent</th>
+      <th class="text-end">Best composite</th>
+      <th class="text-end">Δ vs parent</th>
+      <th>When</th></tr></thead><tbody>`;
+  for (const r of d.latest) {
+    const dC = r['Δcomposite'];
+    const dCls = dC == null ? '' : dC > 0.02 ? 'text-success' : dC < -0.02 ? 'text-danger' : 'text-muted';
+    const arrow = dC == null ? '' : dC > 0 ? '↑' : dC < 0 ? '↓' : '·';
+    html += `<tr>
+      <td><strong>${r.name}</strong></td>
+      <td><small>${r.parent || '—'}</small></td>
+      <td class="text-end"><span class="score-badge ${_scoreCls(r.best_score)}">${_fmt(r.best_score)}</span></td>
+      <td class="text-end ${dCls}">${dC != null ? (arrow + ' ' + _fmt(dC, 3)) : '—'}</td>
+      <td><small class="text-muted">${(r.when || '').substring(0, 16)}</small></td>
+    </tr>`;
+  }
+  html += `</tbody></table></div>`;
   el.innerHTML = html;
 }
 

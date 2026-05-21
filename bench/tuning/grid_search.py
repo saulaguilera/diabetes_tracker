@@ -52,6 +52,7 @@ class ExperimentSpec:
     decision_every_min : frecuencia de "predicciones" en el replay
     base_params : SSMParameters base sobre la que aplicar overrides
     skip_existing : si True, omite combos ya evaluadas
+    parent_name : experiment del que deriva (para lineage tracking)
     """
     name:               str
     param_grid:         dict[str, list]
@@ -59,12 +60,36 @@ class ExperimentSpec:
     decision_every_min: int = 30
     base_params:        Optional[SSMParameters] = None
     skip_existing:      bool = True
+    parent_name:        Optional[str] = None
 
     def total_combos(self) -> int:
         n = 1
         for vals in self.param_grid.values():
             n *= len(vals)
         return n
+
+    def validate_combinations(self) -> list[dict]:
+        """
+        Para cada combo del grid, valida que sea físicamente plausible.
+        Returns lista de combos problemáticos con sus warnings.
+        """
+        from bench.tuning.protocol import validate_combination
+        base = self.base_params or SSMParameters()
+        problems = []
+        for override in _iter_grid(self.param_grid):
+            params = base.override(**override)
+            warnings = validate_combination(params)
+            if warnings:
+                problems.append({
+                    "params": override,
+                    "warnings": warnings,
+                })
+        return problems
+
+    def estimated_runtime(self) -> dict:
+        from bench.tuning.protocol import estimate_runtime
+        return estimate_runtime(self.total_combos(), self.days,
+                                 self.decision_every_min)
 
 
 # ── Resultado de un solo experiment run ─────────────────────────────────
@@ -125,6 +150,18 @@ def run_experiment(spec: ExperimentSpec) -> list[ExperimentResult]:
     combos = list(_iter_grid(spec.param_grid))
     logger.info(f"Grid search '{spec.name}': {len(combos)} combos × {spec.days}d window")
 
+    # Pre-flight: data checksum + estimated runtime (informativo en logs)
+    try:
+        from datetime import datetime as _dt
+        from bench.tuning.reproducibility import data_checksum
+        from bench.tuning.protocol import estimate_runtime
+        ds_chk = data_checksum(_dt.now(), spec.days)
+        et = estimate_runtime(len(combos), spec.days, spec.decision_every_min)
+        logger.info(f"  data_checksum={ds_chk}  estimated_runtime={et['total_str']}")
+    except Exception as _e:
+        ds_chk = None
+        logger.debug(f"pre-flight failed: {_e}")
+
     results = []
     for i, override_dict in enumerate(combos):
         params = base.override(**override_dict)
@@ -137,6 +174,28 @@ def run_experiment(spec: ExperimentSpec) -> list[ExperimentResult]:
             if existing:
                 logger.debug(f"  [{i+1}/{len(combos)}] skip existing {ph} — {override_dict}")
                 continue
+
+        # Validar combinación física
+        from bench.tuning.protocol import validate_combination
+        validation_problems = validate_combination(params)
+        if validation_problems:
+            logger.warning(f"  [{i+1}/{len(combos)}] skip invalid {ph}: "
+                           f"{'; '.join(validation_problems)}")
+            # Persistir como skipped con error
+            try:
+                row = TuningExperiment(
+                    name=spec.name, param_hash=ph,
+                    params_json=params.to_json(),
+                    days_window=spec.days,
+                    parent_name=spec.parent_name,
+                    data_checksum=ds_chk,
+                    error="; ".join(validation_problems),
+                    verdict="invalid",
+                )
+                db.session.add(row); db.session.commit()
+            except Exception:
+                db.session.rollback()
+            continue
 
         logger.info(f"  [{i+1}/{len(combos)}] evaluating {ph}: {override_dict}")
         t0 = time.time()
@@ -152,9 +211,38 @@ def run_experiment(spec: ExperimentSpec) -> list[ExperimentResult]:
 
         res.duration_ms = int((time.time() - t0) * 1000)
 
-        # Persistir
+        # Persistir con extensiones (lineage + reproducibility + diagnoses + gates)
         try:
-            row = TuningExperiment(**res.to_db_row())
+            row_data = res.to_db_row()
+            row_data["parent_name"]   = spec.parent_name
+            row_data["data_checksum"] = ds_chk
+
+            # Reproducibility hash del output
+            try:
+                from bench.tuning.reproducibility import replay_checksum, random_seed_for
+                if res.metrics and "_records_for_checksum" in res.metrics:
+                    row_data["replay_checksum"] = replay_checksum(
+                        res.metrics["_records_for_checksum"])
+                    del res.metrics["_records_for_checksum"]  # no persistir records
+                row_data["random_seed"] = random_seed_for(ph, ds_chk or "")
+            except Exception:
+                pass
+
+            # Failure attribution + gates
+            try:
+                from bench.tuning.attribution import diagnose
+                from bench.tuning.promotion_gates import evaluate_gates
+                flat = (res.metrics or {}).get("flat", {})
+                diagnoses = diagnose(flat) if flat else []
+                gates    = evaluate_gates(flat) if flat else None
+                row_data["diagnoses_json"] = json.dumps(diagnoses)
+                if gates:
+                    row_data["gates_passed"] = gates["n_passed"]
+                    row_data["gates_json"]   = json.dumps(gates)
+            except Exception as _e:
+                logger.debug(f"diagnoses/gates fallaron: {_e}")
+
+            row = TuningExperiment(**row_data)
             db.session.add(row)
             db.session.commit()
         except Exception as exc:
@@ -245,6 +333,7 @@ def _evaluate_single(params: SSMParameters, spec: ExperimentSpec,
         "clinical":      clin,
         "flat":          flat,
         "overrides":     overrides,
+        "_records_for_checksum": records,   # consumido por persistir, no se guarda
     }
     return ExperimentResult(
         params=params, param_hash=params.fingerprint(), name=spec.name,

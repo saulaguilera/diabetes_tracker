@@ -179,6 +179,22 @@ with app.app_context():
             db.create_all()
         if "tuning_experiments" not in existing_tables:
             db.create_all()
+        else:
+            # Migración incremental: extensiones para lineage / reproducibility / gates
+            te_cols = [c["name"] for c in inspector.get_columns("tuning_experiments")]
+            for col_sql in [
+                ("data_checksum",   "ALTER TABLE tuning_experiments ADD COLUMN data_checksum VARCHAR(40)"),
+                ("random_seed",     "ALTER TABLE tuning_experiments ADD COLUMN random_seed INTEGER"),
+                ("replay_checksum", "ALTER TABLE tuning_experiments ADD COLUMN replay_checksum VARCHAR(40)"),
+                ("parent_name",     "ALTER TABLE tuning_experiments ADD COLUMN parent_name VARCHAR(120)"),
+                ("diagnoses_json",  "ALTER TABLE tuning_experiments ADD COLUMN diagnoses_json TEXT"),
+                ("gates_passed",    "ALTER TABLE tuning_experiments ADD COLUMN gates_passed INTEGER"),
+                ("gates_json",      "ALTER TABLE tuning_experiments ADD COLUMN gates_json TEXT"),
+            ]:
+                col_name, ddl = col_sql
+                if col_name not in te_cols:
+                    conn.execute(text(ddl))
+                    conn.commit()
 
 
 # ── Configuración LibreLinkUp ─────────────────────────────────────────────────
