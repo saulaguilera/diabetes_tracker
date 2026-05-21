@@ -381,6 +381,19 @@
 </div>
 {% endif %}
 
+{# ── Hypo-risk Banner (predicción +15-30min) — se llena via JS ─────────────── #}
+<div id="pmm-hypo-banner" class="pmm-hypo-banner mb-3" style="display:none;">
+  <div class="phb-icon" id="phb-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+  <div class="phb-body">
+    <div class="phb-title" id="phb-title">Riesgo de hipoglucemia</div>
+    <div class="phb-text"  id="phb-text"></div>
+    <div class="phb-action" id="phb-action"></div>
+  </div>
+  <button class="phb-close" onclick="document.getElementById('pmm-hypo-banner').style.display='none'" aria-label="Cerrar">
+    <i class="bi bi-x"></i>
+  </button>
+</div>
+
 {# ── PMM Drift Banner ─────────────────────────────────────────────────────── #}
 {% if pmm and pmm.drift and pmm.drift.drift_active %}
 {% set drift_dir = pmm.drift.drift_dir %}
@@ -1538,6 +1551,68 @@ a.insight-chip:hover {
   }
   .isr-cell .insight-chip { height: 100%; }
 }
+
+/* ── PMM Hypo-Risk Banner ──────────────────────────────────────────────────── */
+.pmm-hypo-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  padding: .75rem 1rem;
+  border-radius: 12px;
+  border: 1.5px solid;
+  position: relative;
+  animation: phb-slide-in .35s ease-out;
+}
+@keyframes phb-slide-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.pmm-hypo-banner.phb-critical {
+  background: rgba(239, 68, 68, .12);
+  border-color: rgba(239, 68, 68, .5);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, .08);
+  animation: phb-slide-in .35s ease-out, phb-pulse 1.8s ease-in-out infinite;
+}
+@keyframes phb-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(239, 68, 68, .08); }
+  50%      { box-shadow: 0 0 0 6px rgba(239, 68, 68, .18); }
+}
+.pmm-hypo-banner.phb-alert {
+  background: rgba(245, 158, 11, .10);
+  border-color: rgba(245, 158, 11, .4);
+}
+.pmm-hypo-banner.phb-watch {
+  background: rgba(59, 130, 246, .08);
+  border-color: rgba(59, 130, 246, .3);
+}
+.phb-icon {
+  font-size: 1.6rem;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.phb-critical .phb-icon { color: #dc2626; }
+.phb-alert    .phb-icon { color: #d97706; }
+.phb-watch    .phb-icon { color: #2563eb; }
+
+.phb-body  { flex: 1; }
+.phb-title { font-weight: 700; font-size: .92rem; margin-bottom: .15rem; }
+.phb-critical .phb-title { color: #dc2626; }
+.phb-alert    .phb-title { color: #d97706; }
+.phb-watch    .phb-title { color: #2563eb; }
+.phb-text   { font-size: .82rem; color: var(--text-muted); line-height: 1.45; }
+.phb-action {
+  margin-top: .35rem;
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.phb-close {
+  position: absolute; top: .35rem; right: .5rem;
+  background: transparent; border: none; cursor: pointer;
+  font-size: 1.1rem; color: var(--text-muted); padding: 2px 6px;
+  border-radius: 6px;
+}
+.phb-close:hover { background: rgba(0,0,0,.06); color: var(--text); }
 </style>
 
 <script>
@@ -1778,6 +1853,69 @@ a.insight-chip:hover {
     }
     _iaModal.show();
   }
+
+  // ── PMM Hypo-Risk Banner ─────────────────────────────────────────────────
+  // Llama /api/pmm/hypo-risk al cargar y cada 90s mientras la pestaña esté activa.
+  // Muestra/oculta el banner según el nivel detectado.
+  async function cargarHypoRisk() {
+    try {
+      const r = await fetch('/api/pmm/hypo-risk');
+      const d = await r.json();
+      const banner = document.getElementById('pmm-hypo-banner');
+      if (!banner) return;
+
+      if (!d.ok || !d.active) {
+        banner.style.display = 'none';
+        return;
+      }
+
+      // Reset clases de nivel
+      banner.classList.remove('phb-critical', 'phb-alert', 'phb-watch');
+      banner.classList.add(`phb-${d.level}`);
+
+      // Icono por nivel
+      const iconEl = document.getElementById('phb-icon');
+      const iconMap = {
+        critical: 'bi-exclamation-triangle-fill',
+        alert:    'bi-exclamation-circle-fill',
+        watch:    'bi-eye-fill',
+      };
+      if (iconEl) iconEl.innerHTML = `<i class="bi ${iconMap[d.level] || 'bi-info-circle'}"></i>`;
+
+      // Título
+      const titleEl = document.getElementById('phb-title');
+      if (titleEl) {
+        const titleMap = {
+          critical: 'Hipoglucemia inminente',
+          alert:    'Riesgo alto de hipoglucemia',
+          watch:    'Vigilar — riesgo moderado',
+        };
+        const pPct = Math.round((d.p_hipo || 0) * 100);
+        titleEl.textContent = `${titleMap[d.level] || 'Riesgo'} · ${pPct}% en ${d.horizon_min} min`;
+      }
+
+      // Narrativa
+      const textEl = document.getElementById('phb-text');
+      if (textEl) textEl.textContent = d.narrativa || '';
+
+      // Acción recomendada
+      const actEl = document.getElementById('phb-action');
+      if (actEl) {
+        actEl.innerHTML = d.action
+          ? `<i class="bi bi-arrow-right-circle-fill me-1"></i>${d.action}`
+          : '';
+      }
+
+      banner.style.display = 'flex';
+    } catch (e) {
+      // fallo silencioso — no romper el dashboard
+    }
+  }
+  document.addEventListener('DOMContentLoaded', cargarHypoRisk);
+  // Refresh cada 90s mientras la pestaña esté visible
+  setInterval(() => {
+    if (document.visibilityState === 'visible') cargarHypoRisk();
+  }, 90_000);
 
   async function pedirAnalisis() {
     // Mostrar spinner, ocultar el resto

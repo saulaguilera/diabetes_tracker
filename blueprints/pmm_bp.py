@@ -291,6 +291,35 @@ def api_pmm_explain():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@bp.route("/api/pmm/hypo-risk", endpoint="api_pmm_hypo_risk")
+def api_pmm_hypo_risk():
+    """
+    Predicción de riesgo de hipoglucemia en horizonte corto (15–30 min).
+
+    Evalúa P(G < 70) en horizontes [15, 20, 30] min con Monte Carlo y
+    determina:
+      level       : 'normal' | 'watch' | 'alert' | 'critical'
+      horizon_min : horizonte del peor caso
+      g_pred      : predicción central
+      sigma       : incertidumbre
+      p_hipo      : probabilidad de hipoglucemia
+      action      : recomendación de acción
+      narrativa   : descripción legible
+
+    Query params:
+        force=1 : invalida el cache de 60s
+    """
+    err = _require_login()
+    if err:
+        return err
+    try:
+        from utils.hypo_predictor import compute_hypo_risk
+        force = request.args.get("force", "0") in ("1", "true", "yes")
+        return jsonify(compute_hypo_risk(force=force))
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc), "active": False}), 500
+
+
 @bp.route("/api/pmm/gp-status", endpoint="api_pmm_gp_status")
 def api_pmm_gp_status():
     """
