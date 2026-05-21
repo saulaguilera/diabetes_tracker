@@ -107,6 +107,17 @@
     <div id="clinical-content" class="row g-3"></div>
   </div>
 
+  <!-- ── Scientific Validation ── -->
+  <div class="chart-box mb-3">
+    <h6 class="fw-semibold mb-3">
+      <i class="bi bi-shield-check me-2 text-success"></i>Validation científica
+      <small class="text-muted" style="font-weight:normal;">
+        — coverage, innovation diagnostics, covariance health, drift longitudinal
+      </small>
+    </h6>
+    <div id="validation-content" class="row g-3"></div>
+  </div>
+
   <!-- ── Raw JSON (debug) ── -->
   <details class="chart-box">
     <summary class="fw-semibold" style="cursor:pointer;">
@@ -414,6 +425,204 @@ function renderReliabilitySVG(rel) {
   svg += `</svg>`;
   return svg;
 }
+
+// ── Scientific Validation Section ────────────────────────────────────────
+function renderValidation(report) {
+  const el = document.getElementById('validation-content');
+  el.innerHTML = '';
+  const val = report.validation || {};
+  if (val.error) {
+    el.innerHTML = `<div class="col-12 text-danger">Error: ${val.error}</div>`;
+    return;
+  }
+
+  const models = Object.keys(val).filter(k => k !== 'error');
+  if (models.length === 0) {
+    el.innerHTML = `<div class="col-12 text-muted">
+      Sin audits resueltos todavía. PredictionAudit + SSMInnovation se acumularán
+      automáticamente — esperá ~7d en producción para ver validación útil.
+    </div>`;
+    return;
+  }
+
+  for (const model of models) {
+    const v = val[model];
+    if (v.note) {
+      el.insertAdjacentHTML('beforeend',
+        `<div class="col-12 metric-card">
+           <div class="metric-label">${model}</div>
+           <div class="text-muted mt-1" style="font-size:.85rem;">${v.note}</div>
+         </div>`);
+      continue;
+    }
+    el.insertAdjacentHTML('beforeend', renderModelValidation(model, v));
+  }
+}
+
+function renderModelValidation(model, v) {
+  let html = `<div class="col-12">
+    <div class="chart-box" style="background:var(--surface);">
+      <h6 class="fw-semibold mb-2" style="font-size:.95rem;">
+        <i class="bi bi-cpu-fill me-1" style="color:#8b5cf6;"></i>${model}
+        <small class="text-muted" style="font-weight:normal;">${v.n_audits} audits resueltos</small>
+      </h6>`;
+
+  // Coverage (más importante)
+  for (const [hLabel, key] of [['+30min','coverage_30'],['+60min','coverage_60']]) {
+    const c = v[key]?.interval_coverage;
+    if (!c || !c.n) continue;
+    const c50cls = c.ic50_status === 'good' ? 'pass' : c.ic50_status === 'narrow' ? 'fail' : 'warn';
+    const c90cls = c.ic90_status === 'good' ? 'pass' : c.ic90_status === 'narrow' ? 'fail' : 'warn';
+    html += `<div class="row g-2 mt-2">
+      <div class="col-12"><strong style="font-size:.85rem;">Coverage ${hLabel}</strong>
+                          <span class="text-muted" style="font-size:.75rem;">n=${c.n}</span></div>
+      <div class="col-md-3 col-6">
+        <div class="metric-card ${c50cls}">
+          <div class="metric-label">IC 50% observado</div>
+          <div class="metric-value">${(c.ic50_coverage*100).toFixed(1)}<span class="metric-unit">% · target 50%</span></div>
+          <div style="font-size:.7rem;margin-top:.2rem;">${c.ic50_status === 'good' ? '✓ calibrado' :
+                                                            c.ic50_status === 'narrow' ? '✗ intervalos muy estrechos' :
+                                                            '~ intervalos anchos'}</div>
+        </div>
+      </div>
+      <div class="col-md-3 col-6">
+        <div class="metric-card ${c90cls}">
+          <div class="metric-label">IC 90% observado</div>
+          <div class="metric-value">${(c.ic90_coverage*100).toFixed(1)}<span class="metric-unit">% · target 90%</span></div>
+          <div style="font-size:.7rem;margin-top:.2rem;">${c.ic90_status === 'good' ? '✓ calibrado' :
+                                                            c.ic90_status === 'narrow' ? '✗ sobre-confiado' :
+                                                            '~ sub-confiado'}</div>
+        </div>
+      </div>`;
+    // Brier scores
+    const bh = v[key]?.brier_hypo;
+    const bH = v[key]?.brier_hyper;
+    if (bh?.n) html += `
+      <div class="col-md-3 col-6">
+        <div class="metric-card">
+          <div class="metric-label">Brier hipo</div>
+          <div class="metric-value">${bh.brier_score}<span class="metric-unit">·skill ${bh.skill_score}</span></div>
+        </div>
+      </div>`;
+    if (bH?.n) html += `
+      <div class="col-md-3 col-6">
+        <div class="metric-card">
+          <div class="metric-label">Brier hiper</div>
+          <div class="metric-value">${bH.brier_score}<span class="metric-unit">·skill ${bH.skill_score}</span></div>
+        </div>
+      </div>`;
+
+    // MCE + tradeoff
+    const mce = v[key]?.maximum_calibration_error;
+    const tr  = v[key]?.sharpness_tradeoff;
+    if (mce?.n) {
+      const mceCls = mce.mce <= 0.05 ? 'pass' : mce.mce <= 0.10 ? 'warn' : 'fail';
+      html += `<div class="col-md-6">
+        <div class="metric-card ${mceCls}">
+          <div class="metric-label">MCE / ECE ${hLabel}</div>
+          <div class="metric-value">${mce.mce}<span class="metric-unit">MCE · ECE ${mce.ece}</span></div>
+          <div style="font-size:.7rem;color:var(--text-muted);margin-top:.3rem;">${tr?.interpretation || ''}</div>
+        </div>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+
+  // Innovation diagnostics (sólo SSM)
+  const idg = v.innovation_diagnostics;
+  if (idg && idg.n) {
+    const vCls = idg.verdict === 'white' ? 'pass' : idg.verdict === 'no_data' ? '' : 'fail';
+    html += `<div class="row g-2 mt-3">
+      <div class="col-12"><strong style="font-size:.85rem;">Innovation diagnostics</strong>
+                          <span class="text-muted" style="font-size:.75rem;">n=${idg.n}</span></div>
+      <div class="col-md-6">
+        <div class="metric-card ${vCls}">
+          <div class="metric-label">Veredicto whiteness</div>
+          <div class="metric-value">${idg.verdict}<span class="metric-unit"></span></div>
+          <div style="font-size:.7rem;color:var(--text-muted);margin-top:.3rem;">${idg.note || ''}</div>
+        </div>
+      </div>
+      <div class="col-md-3 col-6">
+        <div class="metric-card">
+          <div class="metric-label">mean_z · var_z</div>
+          <div class="metric-value">${idg.mean_z}<span class="metric-unit">μ · ${idg.var_z} σ²</span></div>
+          <div style="font-size:.7rem;color:var(--text-muted);margin-top:.3rem;">
+            ideal: μ≈0, σ²≈1
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3 col-6">
+        <div class="metric-card">
+          <div class="metric-label">Ljung-Box p-value</div>
+          <div class="metric-value">${idg.ljung_box?.p_value ?? '—'}<span class="metric-unit">${idg.ljung_box?.white_noise ? '✓white' : '✗autocorr'}</span></div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // Covariance health (sólo SSM)
+  const cov = v.covariance_health;
+  if (cov && cov.n) {
+    const vCls = cov.verdict === 'healthy' ? 'pass' : cov.verdict === 'warnings' ? 'warn' : 'fail';
+    html += `<div class="row g-2 mt-3">
+      <div class="col-12"><strong style="font-size:.85rem;">Filter covariance health</strong></div>
+      <div class="col-md-4 col-6">
+        <div class="metric-card ${vCls}">
+          <div class="metric-label">Veredicto P</div>
+          <div class="metric-value">${cov.verdict}<span class="metric-unit">trend: ${cov.trace_trend}</span></div>
+        </div>
+      </div>
+      <div class="col-md-4 col-6">
+        <div class="metric-card">
+          <div class="metric-label">tr(P) p50 / p95</div>
+          <div class="metric-value">${cov.trace_stats?.p50}<span class="metric-unit">/ ${cov.trace_stats?.p95}</span></div>
+        </div>
+      </div>
+      <div class="col-md-4 col-6">
+        <div class="metric-card ${cov.n_non_psd ? 'fail' : ''}">
+          <div class="metric-label">Eventos anómalos</div>
+          <div class="metric-value">${cov.n_non_psd}<span class="metric-unit">non-PSD · ${cov.n_explosion} explosion · ${cov.n_high_kappa} κ-alta</span></div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // Longitudinal drift
+  const ld = v.longitudinal;
+  if (ld && ld.n_buckets) {
+    const hasAlerts = (ld.alerts || []).length > 0;
+    html += `<div class="row g-2 mt-3">
+      <div class="col-12"><strong style="font-size:.85rem;">Longitudinal drift</strong>
+                          <span class="text-muted" style="font-size:.75rem;">${ld.n_buckets} buckets diarios</span></div>
+      <div class="col-md-6">
+        <div class="metric-card ${hasAlerts ? 'warn' : 'pass'}">
+          <div class="metric-label">Mann-Kendall MAE trend</div>
+          <div class="metric-value">${ld.trends?.mae?.trend || '—'}<span class="metric-unit">p=${ld.trends?.mae?.p_value ?? '—'}</span></div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="metric-card ${hasAlerts ? 'warn' : 'pass'}">
+          <div class="metric-label">IC90 coverage trend</div>
+          <div class="metric-value">${ld.trends?.ic90_coverage?.trend || '—'}<span class="metric-unit">p=${ld.trends?.ic90_coverage?.p_value ?? '—'}</span></div>
+        </div>
+      </div>
+      ${hasAlerts ? `<div class="col-12 text-warning" style="font-size:.85rem;margin-top:.4rem;">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+        ${ld.alerts.join(' · ')}
+      </div>` : ''}
+    </div>`;
+  }
+
+  html += `</div></div>`;
+  return html;
+}
+
+// ── extender runBench original para llamar renderValidation ──
+const _origRender = renderReport;
+renderReport = function(report) {
+  _origRender(report);
+  renderValidation(report);
+};
 
 // Auto-run al cargar
 document.addEventListener('DOMContentLoaded', runBench);

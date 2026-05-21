@@ -126,6 +126,15 @@ class FilterResult:
     n_steps:      int = 0
     error:        Optional[str] = None
 
+    # ── Innovation log (granular, una entrada por update CGM) ──
+    # Cada entrada: {ts, y_obs, y_pred, sigma_pred, g_state, p_g_g,
+    #                rejected, log_likelihood}
+    innovations: list = field(default_factory=list)
+
+    # Última innovation (para audit rápido)
+    last_innov:    Optional[float] = None
+    last_innov_z:  Optional[float] = None
+
 
 def run_filter(
     now:           datetime,
@@ -183,6 +192,9 @@ def run_filter(
     log_evidence = 0.0
     n_steps     = 0
     s_i_target  = isf_prior if isf_prior else S_I_DEFAULT
+    innovations: list[dict] = []      # log granular de cada update CGM
+    last_innov   = None
+    last_innov_z = None
 
     # Procesar eventos en orden (excluyendo el CGM inicial que ya inicializó)
     for evt in events:
@@ -225,16 +237,37 @@ def run_filter(
             y = evt.payload["g"]
             # Predecir observación para detectar outlier
             g_pred  = ukf.x[state_index("G")]
-            sig_g   = float(np.sqrt(max(0.0, ukf.P[state_index("G"), state_index("G")])))
+            p_g_g   = float(max(0.0, ukf.P[state_index("G"), state_index("G")]))
+            sig_g   = float(np.sqrt(p_g_g))
             R_obs   = R_cgm(g_pred)
-            sig_pred= float(np.sqrt(sig_g**2 + R_obs[0,0]))
-            if gating_outlier(y, g_pred, sig_pred, OUTLIER_GATE_SIGMA):
+            sig_pred= float(np.sqrt(sig_g**2 + R_obs[0, 0]))
+            innov   = float(y - g_pred)
+            rejected = gating_outlier(y, g_pred, sig_pred, OUTLIER_GATE_SIGMA)
+
+            inn_entry = {
+                "ts":             evt.ts,
+                "y_obs":          float(y),
+                "y_pred":         float(g_pred),
+                "sigma_pred":     sig_pred,
+                "g_state":        float(g_pred),
+                "p_g_g":          p_g_g,
+                "rejected":       rejected,
+                "log_likelihood": None,   # se llena si no es rechazado
+            }
+
+            if rejected:
                 n_outliers += 1
                 logger.debug(f"SSM: outlier CGM rechazado y={y} pred={g_pred:.0f}±{sig_pred:.0f}")
             else:
                 ll = ukf.update(z=np.array([y]), hx=h_cgm, R=R_obs)
                 log_evidence += ll
                 n_cgm_used += 1
+                inn_entry["log_likelihood"] = float(ll)
+                # Tracking del último innovation (post-update sigma para audit)
+                last_innov   = innov
+                last_innov_z = innov / sig_pred if sig_pred > 0 else None
+
+            innovations.append(inn_entry)
 
         # Aplicar bounds suaves al posterior (evitar derivas absurdas)
         _apply_bounds(ukf)
@@ -260,6 +293,9 @@ def run_filter(
         n_outliers=n_outliers,
         log_evidence=log_evidence,
         n_steps=n_steps,
+        innovations=innovations,
+        last_innov=last_innov,
+        last_innov_z=last_innov_z,
     )
 
 

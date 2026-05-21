@@ -247,6 +247,117 @@ class CGMImport(db.Model):
 # Personal Metabolic Model (PMM) — tablas de aprendizaje adaptativo
 # ══════════════════════════════════════════════════════════════════════════════
 
+class PredictionAudit(db.Model):
+    """
+    Log inmutable de auditoría científica de cada predicción.
+
+    Una row por (predicted_at, horizon_min, model_version). Persiste TODO lo
+    necesario para análisis de calibración, innovation diagnostics, coverage
+    validation y rolling stability — sin tocar las predicciones primary
+    (glucose_predictions) que usa la UI.
+
+    Las columnas realized_* y inside_* se llenan post-hoc cuando llega la
+    lectura CGM real en t + horizon_min ± tolerance.
+
+    Diseño
+    ------
+    Append-only. Nunca se modifica una row excepto para resolverla.
+    Pensado para consumirse vía bench/ sin afectar performance del hot path.
+    """
+    __tablename__ = "prediction_audit"
+
+    id              = db.Column(db.Integer, primary_key=True)
+    predicted_at    = db.Column(db.DateTime, nullable=False, index=True)
+    horizon_min     = db.Column(db.Integer,  nullable=False)        # 30 | 60
+    model_version   = db.Column(db.String(40), nullable=False, index=True)
+
+    # Predicción probabilística
+    mu              = db.Column(db.Float, nullable=False)            # μ posterior
+    sigma           = db.Column(db.Float)                            # σ (combina state + R)
+    ic50_low        = db.Column(db.Float)                            # μ − 0.674σ
+    ic50_high       = db.Column(db.Float)                            # μ + 0.674σ
+    ic90_low        = db.Column(db.Float)                            # μ − 1.645σ
+    ic90_high       = db.Column(db.Float)                            # μ + 1.645σ
+    p_hypo          = db.Column(db.Float)                            # P(G<70)
+    p_hyper         = db.Column(db.Float)                            # P(G>180)
+    confidence      = db.Column(db.Float)                            # composite C ∈ [0,1]
+
+    # Estado del filtro (SOLO SSM — NULL para MC/GP)
+    cov_trace       = db.Column(db.Float)                            # tr(P)
+    cov_condition   = db.Column(db.Float)                            # κ(P) = λ_max/λ_min
+    cov_min_eig     = db.Column(db.Float)
+    cov_max_eig     = db.Column(db.Float)
+    psd_ok          = db.Column(db.Boolean)                          # cov positive-definite?
+    log_evidence    = db.Column(db.Float)                            # acumulado en el run
+
+    # Innovation del último update del filtro (SOLO SSM)
+    last_innov      = db.Column(db.Float)                            # z − h(x_pred)
+    last_innov_z    = db.Column(db.Float)                            # innov / sigma_innov
+    n_filter_updates = db.Column(db.Integer)
+
+    # Resolución (se llena cuando llega CGM en t+horizon)
+    realized_glucose = db.Column(db.Float)
+    realized_at      = db.Column(db.DateTime)
+    innovation       = db.Column(db.Float)                           # realized − mu
+    innovation_z     = db.Column(db.Float)                           # (realized − mu) / sigma
+    inside_ic50      = db.Column(db.Boolean)                         # realized ∈ [ic50_low, ic50_high]
+    inside_ic90      = db.Column(db.Boolean)
+    resolved         = db.Column(db.Boolean, default=False, index=True)
+
+    created_at       = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.Index("ix_predaudit_model_pred", "model_version", "predicted_at"),
+        db.Index("ix_predaudit_unresolved", "resolved", "predicted_at"),
+    )
+
+    def __repr__(self):
+        return (f"<PredAudit {self.model_version} +{self.horizon_min}m "
+                f"μ={self.mu:.0f}±{self.sigma:.0f} "
+                f"{'res' if self.resolved else 'pend'}>")
+
+
+class SSMInnovation(db.Model):
+    """
+    Log de innovations del UKF — granular por update individual.
+
+    Cada vez que el filtro absorbe una observación CGM, calculamos:
+        innovation     = y_obs − h(x_pred)
+        innovation_var = h(P_pred)h.T + R
+        innov_z        = innovation / √innovation_var
+
+    Las innovations bajo un modelo bien especificado deben ser ~ white noise:
+        E[innov]                = 0       (sin bias)
+        Var[innov]              = innov_var_pred (calibrado)
+        Autocorr[innov]         ≈ 0       (sin info dejada en la señal)
+
+    Tests downstream (bench/metrics/innovations.py):
+      - Ljung-Box sobre la secuencia de innov_z
+      - Mean/Var rolling
+      - PSD: si cov_health degrada, innovations escalan mal
+    """
+    __tablename__ = "ssm_innovations"
+
+    id              = db.Column(db.Integer, primary_key=True)
+    ts              = db.Column(db.DateTime, nullable=False, index=True)    # del CGM observado
+    run_at          = db.Column(db.DateTime, nullable=False, index=True)    # cuándo se computó
+    model_version   = db.Column(db.String(40), nullable=False)
+
+    y_obs           = db.Column(db.Float, nullable=False)
+    y_pred          = db.Column(db.Float, nullable=False)
+    innovation      = db.Column(db.Float, nullable=False)            # y_obs − y_pred
+    sigma_pred      = db.Column(db.Float, nullable=False)            # √(H P H.T + R)
+    innovation_z    = db.Column(db.Float, nullable=False)            # innov / sigma_pred
+
+    # Snapshot ligero del filter en ese instante
+    g_state         = db.Column(db.Float)                            # G en x_pred
+    p_g_g           = db.Column(db.Float)                            # var de G en P_pred
+    rejected        = db.Column(db.Boolean, default=False)           # outlier gating
+    log_likelihood  = db.Column(db.Float)                            # log p(y|x_pred,P_pred)
+
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class PMMParameter(db.Model):
     """
     Parámetro metabólico aprendido con incertidumbre Bayesiana.

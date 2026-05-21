@@ -172,6 +172,12 @@ with app.app_context():
         if "pmm_drift_state" not in existing_tables:
             db.create_all()
 
+        # Tablas de validación científica (logging + diagnostics)
+        if "prediction_audit" not in existing_tables:
+            db.create_all()
+        if "ssm_innovations" not in existing_tables:
+            db.create_all()
+
 
 # ── Configuración LibreLinkUp ─────────────────────────────────────────────────
 _LIBRE_EMAIL    = os.environ.get("LIBRE_EMAIL", "")

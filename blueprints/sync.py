@@ -76,6 +76,13 @@ def _do_libre_sync(email: str, password: str) -> dict:
         except Exception:
             pass
 
+        # Resolver audits científicos (idem, separado por robustez)
+        try:
+            from utils.audit_logger import resolve_audits
+            resolve_audits(nuevas_ord if insertadas else [])
+        except Exception:
+            pass
+
         # Reajustar modelo AR si no se ha entrenado en las últimas 6h
         # (lazy: solo cuando llegan datos nuevos, máx 1 vez cada 6h)
         try:
@@ -1194,6 +1201,25 @@ def api_predict_glucose():
             logging.getLogger(__name__).warning(f"save_prediction falló: {_e}")
             # nunca romper la predicción por fallo de persistencia
 
+        # ── AUDIT: log científico de cada predicción primary (MC+AR+GP) ──
+        # Append-only para análisis de calibración / coverage / rolling stability.
+        try:
+            from utils.audit_logger import log_prediction_audit
+            for h_label, h in (("+30min", 30), ("+60min", 60)):
+                pred = predictions.get(h_label, {})
+                log_prediction_audit(
+                    predicted_at  = now,
+                    horizon_min   = h,
+                    model_version = _MODEL_VERSION,
+                    mu            = float(pred.get("glucemia_pred")),
+                    sigma         = pred.get("sigma"),
+                    p_hypo        = pred.get("p_hipo"),
+                    p_hyper       = pred.get("p_hiper"),
+                )
+        except Exception as _e:
+            import logging
+            logging.getLogger(__name__).debug(f"audit primary falló: {_e}")
+
         # ── SHADOW MODE: SSM v0 corre en paralelo y guarda como model_version separado.
         # No afecta la respuesta al usuario. Permite comparar via /bench una vez
         # acumuladas predicciones resueltas (~7d).
@@ -1233,6 +1259,45 @@ def api_predict_glucose():
                     icr_used      = icr,
                     ex_factor     = ex_factor,
                 )
+
+                # AUDIT: log científico del SSM con covariance + innovations
+                try:
+                    from utils.audit_logger import (
+                        log_prediction_audit, log_filter_innovations,
+                        covariance_diagnostics,
+                    )
+                    cov_diag = covariance_diagnostics(ssm_result.P)
+                    for h_min in (30, 60):
+                        pp = ssm_preds[h_min]
+                        log_prediction_audit(
+                            predicted_at     = now,
+                            horizon_min      = h_min,
+                            model_version    = "ssm_v0_ukf6",
+                            mu               = float(pp.g_pred),
+                            sigma            = float(pp.sigma),
+                            p_hypo           = float(pp.p_hypo),
+                            p_hyper          = float(pp.p_hyper),
+                            cov_trace        = cov_diag.get("trace"),
+                            cov_condition    = cov_diag.get("condition"),
+                            cov_min_eig      = cov_diag.get("min_eig"),
+                            cov_max_eig      = cov_diag.get("max_eig"),
+                            psd_ok           = cov_diag.get("psd_ok"),
+                            log_evidence     = float(ssm_result.log_evidence),
+                            last_innov       = ssm_result.last_innov,
+                            last_innov_z     = ssm_result.last_innov_z,
+                            n_filter_updates = int(ssm_result.n_cgm_used),
+                        )
+                    # Innovations granulares para whiteness tests
+                    if ssm_result.innovations:
+                        log_filter_innovations(
+                            model_version = "ssm_v0_ukf6",
+                            run_at        = now,
+                            innovations   = ssm_result.innovations,
+                        )
+                except Exception as _e:
+                    import logging
+                    logging.getLogger(__name__).debug(f"audit SSM falló: {_e}")
+
                 _ssm_pred = {
                     "+30min": {"g": float(ssm_preds[30].g_pred),
                                "sigma": float(ssm_preds[30].sigma),

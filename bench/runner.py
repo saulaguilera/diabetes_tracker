@@ -27,6 +27,18 @@ from bench.metrics.accuracy    import (
 )
 from bench.metrics.calibration import calibration_summary
 from bench.metrics.clinical    import clinical_summary
+from bench.metrics.coverage    import (
+    load_resolved_audits, coverage_summary,
+)
+from bench.metrics.innovations import (
+    load_innovations, innovation_diagnostics,
+)
+from bench.metrics.covariance  import (
+    load_audits_with_cov, covariance_health, detect_divergence_events,
+)
+from bench.metrics.rolling     import (
+    rolling_metrics, longitudinal_drift,
+)
 
 
 def run_backtest(
@@ -74,6 +86,42 @@ def run_backtest(
             "clinical":              clinical_summary(recs_v),
         }
 
+    # ─── Validation científica (PredictionAudit + SSMInnovation) ─────
+    # Estos datasets son INDEPENDIENTES de GlucosePrediction y proveen
+    # las métricas formales pedidas por el blueprint de validación:
+    # coverage, calibration, innovation whiteness, covariance health,
+    # longitudinal drift.
+    validation: dict = {}
+    try:
+        for v in versions:
+            audits = load_resolved_audits(days=days, model_version=v)
+            if not audits:
+                validation[v] = {"note": "sin audits resueltos todavía"}
+                continue
+
+            vdata = {
+                "n_audits":          len(audits),
+                "coverage_30":       coverage_summary(
+                                        [a for a in audits if a.horizon_min == 30]),
+                "coverage_60":       coverage_summary(
+                                        [a for a in audits if a.horizon_min == 60]),
+                "longitudinal":      longitudinal_drift(audits, granularity="day"),
+                "rolling_hourly":    rolling_metrics(audits, granularity="hour",
+                                                      min_bucket_n=5),
+            }
+
+            # Cobertura/health específicos del SSM
+            if v.startswith("ssm"):
+                cov_audits = load_audits_with_cov(days=days, model_version=v)
+                vdata["covariance_health"]     = covariance_health(cov_audits)
+                vdata["divergence_events"]     = detect_divergence_events(cov_audits)
+                innovs = load_innovations(days=days, model_version=v)
+                vdata["innovation_diagnostics"] = innovation_diagnostics(innovs)
+
+            validation[v] = vdata
+    except Exception as exc:
+        validation["error"] = str(exc)
+
     return {
         "meta": {
             "window_days":      days,
@@ -82,7 +130,8 @@ def run_backtest(
             "models_compared":  versions,
             "horizons":         [30, 60],
         },
-        "by_model": by_model,
+        "by_model":  by_model,
+        "validation": validation,
     }
 
 
