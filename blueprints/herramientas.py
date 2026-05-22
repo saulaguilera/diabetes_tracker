@@ -549,19 +549,43 @@ def quicklog():
         if request.form.get("reg_insulina"):
             units = request.form.get("insulina_units", type=float)
             if units and units > 0:
-                purpose   = request.form.get("purpose", "comida")
-                pre_meal  = request.form.get("pre_meal_min", type=int) if purpose in ("comida", "mixto") else None
-                db.session.add(InsulinDose(
-                    timestamp=ts,
-                    type="bolus",
-                    units=units,
-                    brand=request.form.get("insulina_brand", "").strip(),
-                    notes="",
-                    purpose=purpose,
-                    pre_meal_min=pre_meal,
-                ))
-                label = {"comida": "comida", "correccion": "corrección", "mixto": "mixto"}.get(purpose, "")
-                guardados.append(f"Insulina {units}U {label}")
+                # Tipo: bolus (rápida) o basal — default bolus para back-compat
+                ins_type = request.form.get("insulina_type", "bolus")
+                if ins_type not in ("bolus", "basal"):
+                    ins_type = "bolus"
+
+                if ins_type == "basal":
+                    # Basal: brand obligatorio (tipo de insulina), sin purpose
+                    brand = request.form.get("insulina_brand_basal", "").strip() \
+                            or request.form.get("insulina_brand", "").strip()
+                    db.session.add(InsulinDose(
+                        timestamp=ts,
+                        type="basal",
+                        units=units,
+                        brand=brand,
+                        notes="",
+                        purpose=None,
+                        pre_meal_min=None,
+                    ))
+                    guardados.append(f"Insulina basal {units}U" +
+                                     (f" ({brand})" if brand else ""))
+                else:
+                    # Bolus: purpose + pre_meal_min (comportamiento existente)
+                    purpose   = request.form.get("purpose", "comida")
+                    pre_meal  = (request.form.get("pre_meal_min", type=int)
+                                 if purpose in ("comida", "mixto") else None)
+                    db.session.add(InsulinDose(
+                        timestamp=ts,
+                        type="bolus",
+                        units=units,
+                        brand=request.form.get("insulina_brand", "").strip(),
+                        notes="",
+                        purpose=purpose,
+                        pre_meal_min=pre_meal,
+                    ))
+                    label = {"comida": "comida", "correccion": "corrección",
+                             "mixto": "mixto"}.get(purpose, "")
+                    guardados.append(f"Insulina rápida {units}U {label}")
 
         if guardados:
             db.session.commit()

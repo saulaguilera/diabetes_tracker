@@ -428,6 +428,20 @@
       </button>
     </div>
     <div class="ql-card-body">
+      {# Selector Rápida / Basal — el resto del form se adapta dinámicamente #}
+      <div class="ql-insulin-type-row mb-3">
+        <label class="ql-insulin-type-chip ql-itype-bolus active">
+          <input type="radio" name="insulina_type" value="bolus" checked
+                 onchange="onInsulinaTypeChange('bolus')">
+          <span><i class="bi bi-lightning-charge-fill"></i> Rápida (bolo)</span>
+        </label>
+        <label class="ql-insulin-type-chip ql-itype-basal">
+          <input type="radio" name="insulina_type" value="basal"
+                 onchange="onInsulinaTypeChange('basal')">
+          <span><i class="bi bi-moon-stars-fill"></i> Basal</span>
+        </label>
+      </div>
+
       <div class="ql-big-row mb-2">
         <div class="ql-big-input">
           <input type="number" name="insulina_units" id="insulina_units"
@@ -437,34 +451,55 @@
           <span class="ql-big-unit">U</span>
         </div>
       </div>
-      <div class="ql-chips-row mb-3">
+      <div class="ql-chips-row mb-3" id="insulina-units-chips">
         {% for u in [1, 2, 3, 4, 5, 6, 7, 8, 10, 12] %}
         <button type="button" class="ql-val-chip ql-val-chip-ins"
                 onclick="setInsulina({{ u }})">{{ u }}U</button>
         {% endfor %}
       </div>
-      <div class="ql-purpose-row">
-        {% for val, label, icon in [('comida','Comida','bi-egg-fried'),
-                                     ('correccion','Corrección','bi-arrow-down-circle'),
-                                     ('mixto','Mixto','bi-intersect')] %}
-        <label class="ql-purpose-chip">
-          <input type="radio" name="purpose" value="{{ val }}"
-                 {{ 'checked' if val == 'comida' }}
-                 onchange="qlPurposeChange()">
-          <span><i class="bi {{ icon }}"></i> {{ label }}</span>
-        </label>
-        {% endfor %}
-      </div>
-      <div id="timing-row" class="ql-timing-row mt-2">
-        <span class="ql-timing-label">¿Cuánto antes de comer?</span>
-        <div class="ql-chips-row">
-          {% for m in [0, 5, 10, 15, 20, 30] %}
-          <label class="ql-purpose-chip ql-timing-chip">
-            <input type="radio" name="pre_meal_min" value="{{ m }}"
-                   {{ 'checked' if m == 0 }}>
-            <span>{{ 'Ahora' if m == 0 else (m|string + ' min') }}</span>
+
+      {# ── Bloque BOLUS (purpose + timing) — visible solo si type=bolus ── #}
+      <div id="bolus-only-fields">
+        <div class="ql-purpose-row">
+          {% for val, label, icon in [('comida','Comida','bi-egg-fried'),
+                                       ('correccion','Corrección','bi-arrow-down-circle'),
+                                       ('mixto','Mixto','bi-intersect')] %}
+          <label class="ql-purpose-chip">
+            <input type="radio" name="purpose" value="{{ val }}"
+                   {{ 'checked' if val == 'comida' }}
+                   onchange="qlPurposeChange()">
+            <span><i class="bi {{ icon }}"></i> {{ label }}</span>
           </label>
           {% endfor %}
+        </div>
+        <div id="timing-row" class="ql-timing-row mt-2">
+          <span class="ql-timing-label">¿Cuánto antes de comer?</span>
+          <div class="ql-chips-row">
+            {% for m in [0, 5, 10, 15, 20, 30] %}
+            <label class="ql-purpose-chip ql-timing-chip">
+              <input type="radio" name="pre_meal_min" value="{{ m }}"
+                     {{ 'checked' if m == 0 }}>
+              <span>{{ 'Ahora' if m == 0 else (m|string + ' min') }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      {# ── Bloque BASAL (marca/tipo) — visible solo si type=basal ── #}
+      <div id="basal-only-fields" style="display:none;">
+        <div class="ql-timing-label mb-2">Tipo de insulina basal</div>
+        <select name="insulina_brand_basal" class="form-select form-select-sm">
+          <option value="glargina">Glargina (Lantus / Basaglar) — 24h</option>
+          <option value="toujeo">Toujeo (Glargina U-300) — 36h</option>
+          <option value="detemir">Detemir (Levemir) — 16h</option>
+          <option value="degludec">Degludec (Tresiba) — 42h</option>
+          <option value="nph">NPH (Insulina N) — 12h</option>
+        </select>
+        <div class="text-muted mt-2" style="font-size:.78rem;">
+          <i class="bi bi-info-circle me-1"></i>
+          La basal cubre la producción hepática de glucosa entre comidas. Se registra
+          típicamente 1 vez al día (Glargina, Toujeo) o 2 veces (Detemir, NPH).
         </div>
       </div>
     </div>
@@ -764,6 +799,29 @@
   white-space: nowrap; transition: background .12s;
 }
 .ql-bolo-apply:hover { background: #4f46e5; }
+
+/* Insulin type chips (rápida vs basal) */
+.ql-insulin-type-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: .5rem;
+}
+.ql-insulin-type-chip {
+  cursor: pointer; user-select: none;
+}
+.ql-insulin-type-chip input[type="radio"] { display: none; }
+.ql-insulin-type-chip span {
+  display: flex; align-items: center; justify-content: center; gap: .4rem;
+  padding: .6rem .5rem; border-radius: 12px;
+  border: 2px solid var(--border); background: var(--surface);
+  color: var(--text-muted); font-size: .88rem; font-weight: 600;
+  transition: all .15s;
+}
+.ql-insulin-type-chip i { font-size: 1.1rem; }
+.ql-insulin-type-chip:has(input[value="bolus"]:checked) span {
+  border-color: #f59e0b; background: rgba(245,158,11,.10); color: #d97706;
+}
+.ql-insulin-type-chip:has(input[value="basal"]:checked) span {
+  border-color: #6366f1; background: rgba(99,102,241,.10); color: #6366f1;
+}
 
 /* Purpose chips */
 .ql-purpose-row { display: flex; flex-wrap: wrap; gap: .35rem; }
@@ -1106,6 +1164,24 @@ function qlPurposeChange() {
   const purpose = document.querySelector('[name=purpose]:checked')?.value;
   const tr = document.getElementById('timing-row');
   if (tr) tr.style.display = (purpose === 'comida' || purpose === 'mixto') ? '' : 'none';
+}
+
+function onInsulinaTypeChange(type) {
+  // Mostrar/ocultar bloques según tipo (rápida vs basal)
+  const bolusFields = document.getElementById('bolus-only-fields');
+  const basalFields = document.getElementById('basal-only-fields');
+  if (type === 'basal') {
+    bolusFields.style.display = 'none';
+    basalFields.style.display = '';
+  } else {
+    bolusFields.style.display = '';
+    basalFields.style.display = 'none';
+  }
+  // Estilos visuales del chip activo
+  document.querySelectorAll('.ql-insulin-type-chip').forEach(el => {
+    const checked = el.querySelector('input').checked;
+    el.classList.toggle('active', checked);
+  });
 }
 
 /* ── Bolo sugerido ──────────────────────────────────────────────────────── */
