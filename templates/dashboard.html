@@ -3,6 +3,30 @@
 
 {% block content %}
 
+{# ── Daily Metabolic Brief — card narrativa arriba del fold ────────────── #}
+<div id="daily-brief-card" class="daily-brief-card mb-3" style="display:none;">
+  <div class="daily-brief-header">
+    <div class="daily-brief-title">
+      <i class="bi bi-cup-hot-fill"></i>
+      <span>Daily Brief</span>
+    </div>
+    <div class="daily-brief-meta">
+      <span id="daily-brief-confidence" class="daily-brief-conf"></span>
+      <span id="daily-brief-time" class="daily-brief-time"></span>
+      <button id="daily-brief-refresh" type="button"
+              onclick="refreshDailyBrief()"
+              class="daily-brief-refresh-btn" title="Regenerar brief">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+    </div>
+  </div>
+  <div id="daily-brief-text" class="daily-brief-text"></div>
+  <details id="daily-brief-detail" class="daily-brief-detail">
+    <summary>Ver métricas del día</summary>
+    <div id="daily-brief-metrics" class="daily-brief-metrics"></div>
+  </details>
+</div>
+
 {# ── Área superior: hero + gráfico ────────────────────────────────────────── #}
 <div class="row g-3 mb-3 align-items-stretch">
 
@@ -1552,6 +1576,81 @@ a.insight-chip:hover {
   .isr-cell .insight-chip { height: 100%; }
 }
 
+/* ── Daily Metabolic Brief Card ───────────────────────────────────────────── */
+.daily-brief-card {
+  background: linear-gradient(135deg, rgba(99, 102, 241, .06), rgba(139, 92, 246, .04));
+  border: 1px solid rgba(99, 102, 241, .25);
+  border-radius: 14px;
+  padding: 1rem 1.2rem;
+  position: relative;
+  animation: brief-fade-in .4s ease-out;
+}
+@keyframes brief-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.daily-brief-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: .55rem;
+}
+.daily-brief-title {
+  display: flex; align-items: center; gap: .45rem;
+  font-weight: 700; font-size: .9rem; color: var(--text);
+}
+.daily-brief-title i { font-size: 1.1rem; color: #6366f1; }
+.daily-brief-meta {
+  display: flex; align-items: center; gap: .5rem;
+  font-size: .72rem; color: var(--text-muted);
+}
+.daily-brief-time { font-style: italic; }
+.daily-brief-conf {
+  padding: .1rem .4rem; border-radius: 4px; font-weight: 600;
+  background: rgba(34, 197, 94, .12); color: #15803d;
+}
+.daily-brief-conf.conf-low { background: rgba(245,158,11,.14); color: #d97706; }
+.daily-brief-conf.conf-mid { background: rgba(59,130,246,.12); color: #2563eb; }
+.daily-brief-refresh-btn {
+  background: transparent; border: none; cursor: pointer;
+  color: var(--text-muted); padding: 2px 6px; border-radius: 4px;
+  transition: background .15s;
+}
+.daily-brief-refresh-btn:hover { background: rgba(99,102,241,.1); color: #6366f1; }
+.daily-brief-refresh-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+.daily-brief-text {
+  font-size: .94rem; line-height: 1.55; color: var(--text);
+  white-space: pre-wrap;
+  letter-spacing: -.005em;
+}
+
+.daily-brief-detail {
+  margin-top: .6rem;
+  font-size: .78rem;
+  border-top: 1px solid rgba(99,102,241,.15);
+  padding-top: .4rem;
+}
+.daily-brief-detail summary {
+  cursor: pointer; color: var(--text-muted);
+  list-style: none;
+}
+.daily-brief-detail summary::-webkit-details-marker { display: none; }
+.daily-brief-detail summary::before { content: "▸ "; }
+.daily-brief-detail[open] summary::before { content: "▾ "; }
+.daily-brief-metrics {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: .5rem; margin-top: .5rem;
+}
+.daily-brief-metric {
+  background: var(--surface2); padding: .4rem .6rem; border-radius: 6px;
+}
+.daily-brief-metric .m-label {
+  font-size: .68rem; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.daily-brief-metric .m-value {
+  font-size: .9rem; font-weight: 700;
+}
+
 /* ── PMM Hypo-Risk Banner ──────────────────────────────────────────────────── */
 .pmm-hypo-banner {
   display: flex;
@@ -1853,6 +1952,82 @@ a.insight-chip:hover {
     }
     _iaModal.show();
   }
+
+  // ── Daily Metabolic Brief ────────────────────────────────────────────────
+  // Carga el brief del día al iniciar (cache si existe, sino genera).
+  // No bloquea el resto del dashboard.
+  async function cargarDailyBrief() {
+    const card = document.getElementById('daily-brief-card');
+    if (!card) return;
+    try {
+      const r = await fetch('/api/daily-brief');
+      const d = await r.json();
+      if (!d.ok || !d.narrative) return;
+      renderDailyBrief(d);
+    } catch (e) { /* silencioso, no romper dashboard */ }
+  }
+
+  function renderDailyBrief(d) {
+    const card = document.getElementById('daily-brief-card');
+    if (!card) return;
+    document.getElementById('daily-brief-text').textContent = d.narrative;
+
+    // Timestamp legible
+    if (d.generated_at) {
+      const ts = new Date(d.generated_at);
+      document.getElementById('daily-brief-time').textContent =
+        `generado ${ts.toLocaleString('es', {day:'2-digit', month:'short',
+                                              hour:'2-digit', minute:'2-digit'})}`;
+    }
+
+    // Confidence badge
+    const confEl = document.getElementById('daily-brief-confidence');
+    const c = d.confidence || 0;
+    confEl.classList.remove('conf-low', 'conf-mid');
+    if (c < 0.5)       { confEl.classList.add('conf-low'); confEl.textContent = `conf ${(c*100).toFixed(0)}%`; }
+    else if (c < 0.8)  { confEl.classList.add('conf-mid'); confEl.textContent = `conf ${(c*100).toFixed(0)}%`; }
+    else               { confEl.textContent = `conf ${(c*100).toFixed(0)}%`; }
+
+    // Métricas detalladas (collapsible)
+    const sm = d.summary || {};
+    const metricsEl = document.getElementById('daily-brief-metrics');
+    if (metricsEl && sm) {
+      const items = [
+        ["TIR 24h",       sm.tir_24h != null ? `${sm.tir_24h.toFixed(0)}%` : '—'],
+        ["Glucosa media", sm.avg_glucose_24h != null ? `${sm.avg_glucose_24h.toFixed(0)} mg/dL` : '—'],
+        ["CV 24h",        sm.cv_24h != null ? `${sm.cv_24h.toFixed(0)}%` : '—'],
+        ["Noche",         sm.overnight_stability || '—'],
+        ["Hipos",         sm.hypo_events_24h ?? '—'],
+        ["Comidas",       `${sm.n_meals ?? 0} (${Math.round(sm.total_carbs_24h ?? 0)}g CH)`],
+        ["Bolus / Basal", `${sm.n_boluses ?? 0} / ${sm.n_basal_doses ?? 0}`],
+        ["Patrón",        sm.dominant_pattern || '—'],
+      ];
+      metricsEl.innerHTML = items.map(([l, v]) =>
+        `<div class="daily-brief-metric"><div class="m-label">${l}</div><div class="m-value">${v}</div></div>`
+      ).join('');
+    }
+
+    card.style.display = '';
+  }
+
+  async function refreshDailyBrief() {
+    const btn = document.getElementById('daily-brief-refresh');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+    try {
+      const r = await fetch('/api/daily-brief/refresh', {method: 'POST'});
+      const d = await r.json();
+      if (d.ok) {
+        renderDailyBrief(d);
+      } else if (d.error && d.next_available_in_min) {
+        alert(`Esperá ${d.next_available_in_min} min antes de refrescar de nuevo.`);
+      }
+    } catch (e) {}
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
+  }
+
+  document.addEventListener('DOMContentLoaded', cargarDailyBrief);
 
   // ── PMM Hypo-Risk Banner ─────────────────────────────────────────────────
   // Llama /api/pmm/hypo-risk al cargar y cada 90s mientras la pestaña esté activa.

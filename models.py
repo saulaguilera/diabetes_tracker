@@ -247,6 +247,49 @@ class CGMImport(db.Model):
 # Personal Metabolic Model (PMM) — tablas de aprendizaje adaptativo
 # ══════════════════════════════════════════════════════════════════════════════
 
+class DailyBrief(db.Model):
+    """
+    Resumen narrativo diario del estado metabólico.
+
+    Cache de un día — se genera una vez por día (típicamente al amanecer)
+    y se sirve desde DB en cada request. El refresh manual sobrescribe.
+
+    summary_json: el DailyMetabolicSummary serializado (data determinística
+        calculada por services/daily_brief.py, no por LLM).
+    narrative:    el texto en español generado por Claude a partir del summary.
+    confidence:   score [0,1] de la calidad de los datos (data completeness,
+        sensor gaps). Si <0.5, el narrative es un fallback no-LLM.
+
+    Append-only: si querés re-generar un día específico, se inserta una row
+    nueva y el endpoint sirve la más reciente. Histórico preservado.
+    """
+    __tablename__ = "daily_briefs"
+
+    id              = db.Column(db.Integer, primary_key=True)
+    day             = db.Column(db.Date, nullable=False, index=True)  # día que resume
+    generated_at    = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    summary_json    = db.Column(db.Text, nullable=False)            # JSON
+    narrative       = db.Column(db.Text, nullable=False)
+    confidence      = db.Column(db.Float, default=1.0)
+    tone            = db.Column(db.String(20), default="supportive")
+
+    # Para debugging / observability
+    llm_used        = db.Column(db.Boolean, default=False)          # True si Claude generó
+    llm_model       = db.Column(db.String(40))
+    llm_tokens_in   = db.Column(db.Integer)
+    llm_tokens_out  = db.Column(db.Integer)
+    llm_latency_ms  = db.Column(db.Integer)
+    llm_prompt      = db.Column(db.Text)                             # prompt completo
+    error           = db.Column(db.Text)                             # si falló
+
+    __table_args__ = (
+        db.Index("ix_daily_brief_day", "day"),
+    )
+
+    def __repr__(self):
+        return f"<DailyBrief {self.day} conf={self.confidence:.2f}>"
+
+
 class TuningExperiment(db.Model):
     """
     Persistencia de un experimento de tuning (un único config evaluado).

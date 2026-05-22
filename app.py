@@ -179,6 +179,8 @@ with app.app_context():
             db.create_all()
         if "tuning_experiments" not in existing_tables:
             db.create_all()
+        if "daily_briefs" not in existing_tables:
+            db.create_all()
         else:
             # Migración incremental: extensiones para lineage / reproducibility / gates
             te_cols = [c["name"] for c in inspector.get_columns("tuning_experiments")]
@@ -301,6 +303,17 @@ def _iniciar_scheduler():
                     except Exception:
                         pass
 
+            def _daily_brief_job():
+                """Genera el Daily Metabolic Brief al amanecer (06:30 local)."""
+                with app.app_context():
+                    try:
+                        from blueprints.daily_brief_bp import _generate_and_persist
+                        _generate_and_persist(force=False, tone="supportive")
+                    except Exception as e:
+                        import logging
+                        logging.getLogger("daily_brief.scheduler").warning(
+                            f"daily brief scheduler falló: {e}")
+
             scheduler = BackgroundScheduler(timezone=_tz)  # usa TZ del entorno (America/Santiago)
             scheduler.add_job(_sync_job, "interval", minutes=5, id="libre_sync")
             # PMM recalibración: cada hora
@@ -325,6 +338,14 @@ def _iniciar_scheduler():
                 hour=9,
                 minute=0,
                 id="weekly_report",
+            )
+            # Daily Metabolic Brief: cada día a las 06:30 hora local
+            scheduler.add_job(
+                _daily_brief_job,
+                "cron",
+                hour=6,
+                minute=30,
+                id="daily_brief",
             )
             scheduler.start()
             # Sync inicial al arrancar
@@ -355,16 +376,18 @@ from blueprints.patrones     import bp as patrones_bp
 from blueprints.pmm_bp       import bp as pmm_bp
 from blueprints.bench_bp     import bp as bench_bp
 from blueprints.tuning_bp    import bp as tuning_bp
+from blueprints.daily_brief_bp import bp as daily_brief_bp
 
 for _bp in [auth_bp, glucemia_bp, insulina_bp, actividad_bp, alimentos_bp,
             backup_bp, sync_bp, comidas_bp, herramientas_bp, reportes_bp,
-            patrones_bp, pmm_bp, bench_bp, tuning_bp]:
+            patrones_bp, pmm_bp, bench_bp, tuning_bp, daily_brief_bp]:
     app.register_blueprint(_bp)
 
 # PMM blueprint exento de CSRF (API JSON)
 csrf.exempt(pmm_bp)
 csrf.exempt(bench_bp)
 csrf.exempt(tuning_bp)
+csrf.exempt(daily_brief_bp)
 
 # sync blueprint: exento de CSRF (cron externo + APIs JSON)
 csrf.exempt(sync_bp)
