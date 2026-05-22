@@ -449,10 +449,17 @@ def _serie_compacta(lecturas, meals_periodo, days) -> list[dict]:
         comida_bin = next(
             (c for c in meals_periodo if t_ini <= c.timestamp < t_fin), None
         )
-        ins_bin = [
-            f"{i.units}U {i.type}"
-            for i in insulinas if t_ini <= i.timestamp < t_fin
-        ]
+        # Formato explícito del tipo para que la IA no confunda basal con bolus
+        ins_bin = []
+        for i in insulinas:
+            if t_ini <= i.timestamp < t_fin:
+                tipo_label = ("RÁPIDA" if i.type == "bolus" else
+                              "BASAL"  if i.type == "basal" else
+                              i.type.upper())
+                purpose_label = ""
+                if i.type == "bolus" and getattr(i, "purpose", None):
+                    purpose_label = f"/{i.purpose}"
+                ins_bin.append(f"{i.units}U {tipo_label}{purpose_label}")
         if comida_bin:
             punto["comida"] = f"{comida_bin.name} {round(comida_bin.carbs_g or 0)}gCH"
         if ins_bin:

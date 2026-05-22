@@ -103,7 +103,7 @@ def _seccion_comidas(days: int) -> str:
 
 
 def _seccion_insulina(days: int) -> str:
-    """Lista de dosis de insulina."""
+    """Lista exhaustiva de dosis de insulina del período (registro completo)."""
     try:
         from models import InsulinDose
         desde = datetime.now() - timedelta(days=days)
@@ -112,13 +112,29 @@ def _seccion_insulina(days: int) -> str:
                  .order_by(InsulinDose.timestamp)
                  .all())
         if not dosis:
-            return "Sin dosis registradas en el período."
+            return (f"⚠ SIN INYECCIONES en las últimas {days*24}h. "
+                    "No asumir bolos ni basales no registrados.")
 
-        lineas = []
+        n_bolus = sum(1 for d in dosis if d.type == "bolus")
+        n_basal = sum(1 for d in dosis if d.type == "basal")
+        header  = (f"Total: {len(dosis)} inyecciones registradas "
+                   f"({n_bolus} RÁPIDA / bolus + {n_basal} BASAL). "
+                   "ESTA LISTA ES COMPLETA — el usuario registra cada inyección.")
+
+        lineas = [header, ""]
         for d in dosis:
-            ts    = d.timestamp.strftime("%d/%m %H:%M")
-            marca = f" ({d.brand})" if getattr(d, "brand", None) else ""
-            lineas.append(f"{ts} | {d.type.upper():<6} {d.units}U{marca}")
+            ts = d.timestamp.strftime("%d/%m %H:%M")
+            # Tag explícito y diferenciado para evitar confusión
+            tipo_label = ("RÁPIDA (bolus)" if d.type == "bolus"
+                          else "BASAL"     if d.type == "basal"
+                          else d.type.upper())
+            marca = f" {d.brand}" if getattr(d, "brand", None) else ""
+            purpose = ""
+            if d.type == "bolus" and getattr(d, "purpose", None):
+                purpose = f" · {d.purpose}"
+                if getattr(d, "pre_meal_min", None):
+                    purpose += f" ({d.pre_meal_min}min pre-comida)"
+            lineas.append(f"{ts} | {tipo_label:<18} {d.units}U{marca}{purpose}")
         return "\n".join(lineas)
     except Exception as e:
         return f"(error cargando insulina: {e})"
@@ -331,6 +347,21 @@ def _construir_prompt(datos: dict, days: int) -> tuple[str, str]:
         "ejercicio y parámetros personales del usuario. "
         "Tu objetivo es encontrar conexiones entre todas estas variables y explicarlas "
         "en lenguaje claro y empático.\n\n"
+        "REGLA DE COMPLETITUD DE DATOS (la más importante):\n"
+        "- Los datos provistos son COMPLETOS Y EXHAUSTIVOS dentro del período. "
+        "El usuario registra TODAS sus inyecciones, TODAS sus comidas y TODAS sus actividades.\n"
+        "- Si un bolo de insulina NO aparece listado en la sección 'Insulina' o anotado en la "
+        "'Serie glucémica', ESE BOLO NO EXISTIÓ. No lo inventes. No digas frases como "
+        "'tu bolo antes de comer cubrió bien' si no hay un bolo registrado pre-comida.\n"
+        "- Si la glucosa cayó o se controló SIN un bolo registrado en la ventana, la causa "
+        "es OTRA: IOB residual de bolos anteriores, sensibilidad post-ejercicio, basal con "
+        "efecto, o absorción lenta de la comida. Nunca atribuyas el efecto a un bolo "
+        "que no figura en los datos.\n"
+        "- Distinguí siempre RÁPIDA (bolus, acción 15min-4h) de BASAL (acción prolongada, "
+        "12-42h sin pico) por el tag explícito en cada registro. NUNCA llames a una basal "
+        "'bolo' ni viceversa.\n"
+        "- Si encontrás un patrón sin causa obvia en los datos, decí 'no es explicable solo "
+        "con los datos disponibles' en lugar de inventar una causa.\n\n"
         "Reglas generales:\n"
         "- Respondé siempre en español, segunda persona (vos/te).\n"
         "- Cruzá activamente los datos: relacioná picos de glucosa con comidas, "
