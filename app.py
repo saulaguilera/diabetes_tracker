@@ -145,6 +145,17 @@ with app.app_context():
         if "exercise_type" not in act_cols:
             conn.execute(text("ALTER TABLE activities ADD COLUMN exercise_type VARCHAR(20)"))
             conn.commit()
+        # Migración: columnas de calidad de lectura en glucose_readings
+        gr_cols = [c["name"] for c in inspector.get_columns("glucose_readings")]
+        for col_name, ddl in [
+            ("is_artifact",         "ALTER TABLE glucose_readings ADD COLUMN is_artifact BOOLEAN DEFAULT 0"),
+            ("artifact_reason",     "ALTER TABLE glucose_readings ADD COLUMN artifact_reason VARCHAR(40)"),
+            ("original_value_mgdl", "ALTER TABLE glucose_readings ADD COLUMN original_value_mgdl REAL"),
+            ("corrected_at",        "ALTER TABLE glucose_readings ADD COLUMN corrected_at DATETIME"),
+        ]:
+            if col_name not in gr_cols:
+                conn.execute(text(ddl))
+                conn.commit()
         # Migración: tabla glucose_predictions (feedback del modelo)
         # db.create_all() ya la crea si no existe — esto es solo un guard extra
         if "glucose_predictions" not in existing_tables:

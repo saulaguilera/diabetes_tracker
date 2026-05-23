@@ -72,6 +72,7 @@ def _load_events(now: datetime, hours: int = LOOKBACK_HOURS) -> list[Event]:
     for r in GlucoseReading.query.filter(
         GlucoseReading.timestamp >= cutoff,
         GlucoseReading.timestamp <= now,
+        GlucoseReading.is_artifact == False,   # excluir artefactos del filter
     ).order_by(GlucoseReading.timestamp).all():
         evts.append(Event(ts=r.timestamp, kind="cgm",
                           payload={"g": float(r.value_mgdl)}))

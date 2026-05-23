@@ -65,6 +65,55 @@ def glucemia_nueva():
     )
 
 
+@bp.route("/glucemia/<int:id>/artefacto", methods=["POST"],
+          endpoint="glucemia_marcar_artefacto")
+def glucemia_marcar_artefacto(id):
+    """
+    Marca/desmarca una lectura como artefacto del sensor.
+    Las lecturas marcadas se EXCLUYEN de: hypo predictor, daily brief,
+    SSM filter, kinetics snapshot (ROC y last_glucose).
+    """
+    from flask import jsonify
+    from utils.sensor_quality import mark_as_artifact, unmark_as_artifact
+    row = GlucoseReading.query.get_or_404(id)
+
+    data = request.get_json(silent=True) or {}
+    action = data.get("action")
+    reason = data.get("reason", "manual")
+    if action is None:
+        action = "unmark" if row.is_artifact else "mark"
+
+    if action == "mark":
+        result = mark_as_artifact(id, reason=reason)
+    elif action == "unmark":
+        result = unmark_as_artifact(id)
+    else:
+        return jsonify({"ok": False, "error": "action must be 'mark' or 'unmark'"}), 400
+    return jsonify(result)
+
+
+@bp.route("/api/sensor-quality/scan", methods=["POST"],
+          endpoint="api_sensor_quality_scan")
+def api_sensor_quality_scan():
+    """Corre el detector drop-spike-recover en una ventana custom."""
+    from flask import jsonify
+    from utils.sensor_quality import flag_drop_spike_artifacts
+    data = request.get_json(silent=True) or {}
+    hours   = int(data.get("hours", 24))
+    dry_run = bool(data.get("dry_run", False))
+    result  = flag_drop_spike_artifacts(window_hours=hours, dry_run=dry_run)
+    return jsonify({"ok": True, **result})
+
+
+@bp.route("/api/sensor-quality/artifacts", endpoint="api_sensor_quality_list")
+def api_sensor_quality_list():
+    """Lista artefactos marcados en los últimos N días (default 7)."""
+    from flask import jsonify
+    from utils.sensor_quality import list_recent_artifacts
+    days = int(request.args.get("days", 7))
+    return jsonify({"ok": True, "artifacts": list_recent_artifacts(days=days)})
+
+
 @bp.route("/glucemia/<int:id>/eliminar", methods=["POST"], endpoint="glucemia_eliminar")
 def glucemia_eliminar(id):
     lectura = GlucoseReading.query.get_or_404(id)

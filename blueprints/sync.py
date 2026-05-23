@@ -29,6 +29,7 @@ def _do_libre_sync(email: str, password: str) -> dict:
 
     readings  = resultado["readings"]
     insertadas = 0
+    corregidas = 0
     ultima_ts  = None
 
     for r in readings:
@@ -51,10 +52,37 @@ def _do_libre_sync(email: str, password: str) -> dict:
             insertadas += 1
             if ultima_ts is None or ts > ultima_ts:
                 ultima_ts = ts
+        else:
+            # FIX (corrección retroactiva de Libre):
+            # Si Libre cambió retroactivamente el valor (típico cuando un
+            # artefacto de compresión se "corrige" después de unos minutos),
+            # nuestro sync original IGNORABA el cambio porque solo dedup'eaba
+            # por timestamp. Ahora actualizamos si la diferencia es significativa.
+            diff = abs(existe.value_mgdl - r["value_mgdl"])
+            if diff >= 5 and not existe.is_artifact:
+                # Preservar el valor original para auditoría
+                if existe.original_value_mgdl is None:
+                    existe.original_value_mgdl = existe.value_mgdl
+                existe.value_mgdl   = r["value_mgdl"]
+                existe.corrected_at = datetime.now()
+                # Si era una hipo falsa que ya no lo es, agregar nota
+                if existe.original_value_mgdl < 70 and r["value_mgdl"] >= 80:
+                    existe.notes = (existe.notes or "") + " [hipo-falsa-corregida]"
+                corregidas += 1
 
-    if insertadas:
+    if insertadas or corregidas:
         db.session.commit()
 
+        # Detectar artefactos drop-spike-recover sobre las lecturas recientes
+        # (patrón típico del Libre: caída brusca seguida de recovery inmediato,
+        #  causado por compresión del sensor o scan failure)
+        try:
+            from utils.sensor_quality import flag_drop_spike_artifacts
+            flag_drop_spike_artifacts(window_hours=4)
+        except Exception:
+            pass
+
+    if insertadas:
         # Actualizar filtro de Kalman con las nuevas lecturas (orden cronológico)
         try:
             from utils.kalman import update_with_reading as kalman_update

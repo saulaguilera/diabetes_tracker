@@ -119,7 +119,8 @@ def _load_window_data(now: datetime, hours_back: int = 24) -> dict:
 
     cgm = (GlucoseReading.query
            .filter(GlucoseReading.timestamp >= start,
-                   GlucoseReading.timestamp <= end)
+                   GlucoseReading.timestamp <= end,
+                   GlucoseReading.is_artifact == False)   # excluir artefactos
            .order_by(GlucoseReading.timestamp).all())
 
     meals = (Meal.query

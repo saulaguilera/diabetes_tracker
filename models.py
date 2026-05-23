@@ -15,6 +15,18 @@ class GlucoseReading(db.Model):
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # ── Calidad / corrección de lecturas CGM ────────────────────────────
+    # is_artifact: True si esta lectura es spurious (compresión, scan failure,
+    #   drop-spike-recover artificial). Marcadas como artefacto SE EXCLUYEN
+    #   del hypo predictor, del daily brief, del bench y del PMM update.
+    # original_value_mgdl: si Libre corrigió esta lectura retroactivamente,
+    #   guardamos el valor original para auditoría.
+    # corrected_at: cuándo fue corregida por el re-sync.
+    is_artifact         = db.Column(db.Boolean, default=False, index=True)
+    artifact_reason     = db.Column(db.String(40))   # 'drop_spike' | 'manual' | etc.
+    original_value_mgdl = db.Column(db.Float)        # NULL si no fue corregida
+    corrected_at        = db.Column(db.DateTime)
+
     def __repr__(self):
         return f"<Glucosa {self.value_mgdl} mg/dL @ {self.timestamp}>"
 

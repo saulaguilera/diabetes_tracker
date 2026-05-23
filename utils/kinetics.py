@@ -1201,6 +1201,7 @@ def get_kinetics_snapshot(
     roc_cutoff = now - timedelta(minutes=30)
     cgm_readings = GlucoseReading.query.filter(
         GlucoseReading.timestamp >= roc_cutoff,
+        GlucoseReading.is_artifact == False,   # excluir artefactos del ROC y last_glucose
     ).order_by(GlucoseReading.timestamp).all()
 
     # Meals lookback for fat+protein needs longer window (up to 8h)
