@@ -105,7 +105,13 @@ def build_lineage(root_name: str, max_depth: int = 5) -> dict:
 def _impact_verdict(delta: Optional[dict]) -> str:
     if not delta:
         return "root"
-    dc = delta.get("Δcomposite", 0) or 0
+    # Acepta ambos formatos: "Δcomposite" (tree build) o "score_composite"
+    # (impact_analysis usa key crudo del DB). El bug histórico era que
+    # impact_analysis pasaba "score_composite" pero esta función solo
+    # buscaba "Δcomposite" → siempre devolvía "no_change" aunque Δ>0.05.
+    dc = (delta.get("Δcomposite")
+          or delta.get("score_composite")
+          or 0)
     if dc > 0.05:    return "improvement"
     if dc > 0.01:    return "marginal_gain"
     if dc < -0.05:   return "regression"
@@ -163,10 +169,11 @@ def impact_analysis(parent_name: str, child_name: str) -> dict:
 
 def _summarize_impact(deltas: dict, changes: dict) -> str:
     parts = []
-    if deltas.get("Δcomposite", 0) > 0.02:
-        parts.append(f"composite +{deltas['Δcomposite']:.3f}")
-    elif deltas.get("Δcomposite", 0) < -0.02:
-        parts.append(f"composite {deltas['Δcomposite']:.3f}")
+    _dc = deltas.get("Δcomposite") or deltas.get("score_composite") or 0
+    if _dc > 0.02:
+        parts.append(f"composite +{_dc:.3f}")
+    elif _dc < -0.02:
+        parts.append(f"composite {_dc:.3f}")
     for k in ["Δcalibration", "Δinnovation", "Δclinical", "Δstability", "Δaccuracy"]:
         v = deltas.get(k, 0) or 0
         if abs(v) > 0.05:
@@ -194,7 +201,8 @@ def latest_branch_summary() -> list[dict]:
         if r.parent:
             impact = impact_analysis(r.parent, r.name)
             if impact.get("ok"):
-                delta = impact["deltas"].get("Δcomposite")
+                _deltas = impact.get("deltas") or {}
+                delta = _deltas.get("Δcomposite") or _deltas.get("score_composite")
         out.append({
             "name":         r.name,
             "best_score":   round(r.best or 0, 4),
