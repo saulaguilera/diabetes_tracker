@@ -355,31 +355,9 @@
   </div>
 </div>
 
-{# ── Alertas de patrones inline ───────────────────────────────────────────── #}
-{% if alertas %}
-<div class="patrones-inline mb-3" id="patrones-inline-wrap">
-  {% for a in alertas[:3] %}
-  <button class="patron-chip patron-chip-{{ a.nivel }}"
-          type="button"
-          data-bs-toggle="offcanvas"
-          data-bs-target="#offcanvasAlertas"
-          onclick="const b=document.getElementById('notif-badge'); if(b) b.style.display='none'; localStorage.setItem('dt_notif_read_count', {{ alertas|length }});">
-    <i class="bi {{ a.icono }} patron-chip-icon"></i>
-    <span class="patron-chip-txt">{{ a.titulo }}</span>
-    <i class="bi bi-chevron-right patron-chip-arrow"></i>
-  </button>
-  {% endfor %}
-  {% if alertas|length > 3 %}
-  <button class="patron-chip patron-chip-more"
-          type="button"
-          data-bs-toggle="offcanvas"
-          data-bs-target="#offcanvasAlertas">
-    <i class="bi bi-three-dots"></i>
-    <span class="patron-chip-txt">+{{ alertas|length - 3 }} más</span>
-  </button>
-  {% endif %}
-</div>
-{% endif %}
+{# Nota: chips de alertas de patrones inline removidas (eran duplicado
+   del botón flotante 🔔 + offcanvas de notificaciones).
+   El acceso a las alertas se mantiene via el botón flotante con badge. #}
 
 {# ── Hypo-risk Banner (predicción +15-30min) — se llena via JS ─────────────── #}
 <div id="pmm-hypo-banner" class="pmm-hypo-banner mb-3" style="display:none;">
