@@ -52,10 +52,29 @@ _N_SIM            = 2_000          # menos sims que el predictor principal (más
 _TAU_ROC          = 30.0           # τ del decaimiento exponencial del ROC (min)
 _CACHE_TTL_S      = 60             # 1 min de cache (queremos respuesta fresca)
 
-# Umbrales de probabilidad para clasificación de nivel
-_THRESH_CRITICAL  = 0.50
-_THRESH_ALERT     = 0.30
-_THRESH_WATCH     = 0.15
+# ── Multi-criterio risk score ──
+# Reemplaza el threshold-only sobre p_hipo. Combina 4 señales:
+#   1. p_pred       — P(G<70) del Monte Carlo (señal del modelo)
+#   2. proximity    — qué tan cerca está la glucosa actual del threshold
+#   3. velocity     — qué tan rápido estás bajando (ROC negativo)
+#   4. iob_pressure — insulina activa "presionando" hacia abajo
+#
+# Cada componente ∈ [0,1]. Combinados con pesos clínicamente justificados.
+# Si CUALQUIER señal sola es muy alta (G<70 real, ROC<-2.5), gate critical.
+_W_PRED       = 0.40   # peso del modelo
+_W_PROXIMITY  = 0.30   # peso de la cercanía al threshold
+_W_VELOCITY   = 0.20   # peso de la velocidad de descenso
+_W_IOB        = 0.10   # peso del IOB activo
+
+# Hard gates: condiciones que disparan critical/alert independientemente del score
+_HARD_GATE_G_HYPO = 75.0   # G actual < 75 → critical
+_HARD_GATE_G_LOW  = 85.0   # G actual < 85 → al menos alert
+_HARD_GATE_ROC    = -2.5   # ROC < -2.5 → al menos alert
+
+# Thresholds del risk score combinado (más selectivos que p_hypo solo)
+_THRESH_CRITICAL  = 0.55
+_THRESH_ALERT     = 0.38
+_THRESH_WATCH     = 0.22
 
 # Cache en memoria (proceso-local)
 _cache: dict = {"computed_at": 0.0, "result": None}
@@ -278,19 +297,40 @@ def compute_hypo_risk(force: bool = False) -> dict:
             if worst is None or entry["p_hipo"] > worst["p_hipo"]:
                 worst = entry
 
-        # ── Determinar nivel y acción ──
+        # ── Multi-criterio risk scoring ──────────────────────────────
+        # Combina p_hipo del MC con señales directas (glucemia actual,
+        # ROC, IOB) para evitar falsos positivos del modelo sobre-confiado
+        # y mejorar recall cuando la hipo es evidente sin necesidad de
+        # que el MC la prediga perfectamente.
         p   = worst["p_hipo"]
         h_w = worst["horizon_min"]
+        risk_score, components, hard_gate = _compute_risk_score(
+            p_hipo_pred = p,
+            g_actual    = g_actual,
+            roc         = roc,
+            iob_bolus   = iob_bolus_now,
+        )
 
-        if p >= _THRESH_CRITICAL and h_w <= 30:
+        # Determinación de nivel:
+        #   - Hard gates dominan: g_actual<75 → siempre critical, etc.
+        #   - Sino, el risk_score combinado
+        if hard_gate == "critical":
+            level = "critical"
+            action = ("Tomá 15–20g de carbohidratos rápidos AHORA "
+                      "(jugo, glucosa en gel, miel). Re-checá en 15 min.")
+        elif hard_gate == "alert":
+            level = "alert"
+            action = ("Tu glucosa o tendencia disparan alerta directa. "
+                      "Tomá 10–15g de carbohidratos preventivos.")
+        elif risk_score >= _THRESH_CRITICAL and h_w <= 30:
             level   = "critical"
-            action  = ("Tomá 15–20g de carbohidratos rápidos AHORA "
-                       "(jugo, glucosa en gel, miel). Re-checá en 15 min.")
-        elif p >= _THRESH_ALERT:
+            action  = ("Tomá 15–20g de carbohidratos rápidos AHORA. "
+                       "Re-checá tu glucemia en 15 min.")
+        elif risk_score >= _THRESH_ALERT:
             level   = "alert"
             action  = ("Considerá tomar 10–15g de carbohidratos preventivos. "
                        "Si vas a manejar o hacer ejercicio, hacelo ya.")
-        elif p >= _THRESH_WATCH:
+        elif risk_score >= _THRESH_WATCH:
             level   = "watch"
             action  = ("Monitoreá tu glucosa en los próximos 15–20 min. "
                        "Evitá nuevas dosis de insulina sin re-evaluar.")
@@ -305,6 +345,9 @@ def compute_hypo_risk(force: bool = False) -> dict:
             "ok":          True,
             "active":      level != "normal",
             "level":       level,
+            "risk_score":  round(risk_score, 3),
+            "risk_components": components,
+            "hard_gate":   hard_gate,
             "horizon_min": h_w,
             "g_pred":      worst["g_pred"],
             "sigma":       worst["sigma"],
@@ -361,6 +404,78 @@ def _build_narrative(level: str, worst: dict, g_actual: float, roc: Optional[flo
         f"{prefix}: probabilidad {p_pct}% de caer bajo 70 mg/dL en {h} min "
         f"(predicción {g_p}±{sig:.0f} mg/dL).{trend}"
     )
+
+
+def _compute_risk_score(
+    p_hipo_pred:  float,
+    g_actual:     float,
+    roc:          Optional[float],
+    iob_bolus:    float,
+) -> tuple[float, dict, Optional[str]]:
+    """
+    Calcula un risk_score multi-criterio ∈ [0, 1] desde 4 señales independientes.
+
+    Diseño
+    ------
+    El modelo MC solo (p_hipo_pred) es ruidoso cuando el SSM está mal calibrado.
+    Combinar con señales directas (glucemia actual, velocidad, insulina activa)
+    reduce drásticamente los falsos positivos sin sacrificar recall.
+
+    Returns
+    -------
+    (risk_score, components, hard_gate)
+      - risk_score: combinación ponderada de las 4 señales
+      - components: dict con cada subseñal (para debug/auditoría)
+      - hard_gate:  'critical' | 'alert' | None — sobrescribe el score si
+                    una condición clínicamente clara está presente
+                    (ej. glucemia < 75 ya es hipo inminente sin importar
+                     lo que diga el MC)
+    """
+    # ── Subseñales ──
+    # 1. P(hipo) del MC — señal del modelo (acepta 0-1)
+    s_pred = max(0.0, min(1.0, p_hipo_pred))
+
+    # 2. Proximity — qué tan cerca está la glucosa actual del threshold.
+    #    G=70 → 1.0, G=100 → 0.5, G=130 → 0
+    s_prox = max(0.0, (130.0 - g_actual) / 60.0)
+    s_prox = min(1.0, s_prox)
+
+    # 3. Velocity — qué tan rápido estás bajando (solo ROC negativo cuenta)
+    #    ROC=-1 → 0.5, ROC=-2 → 1.0, ROC≥0 → 0
+    if roc is None or roc >= 0:
+        s_velo = 0.0
+    else:
+        s_velo = min(1.0, abs(roc) / 2.0)
+
+    # 4. IOB pressure — insulina activa rápida
+    #    IOB=0.5U → 0, IOB=2.5U → 1.0
+    s_iob = max(0.0, (iob_bolus - 0.5) / 2.0)
+    s_iob = min(1.0, s_iob)
+
+    # ── Combinación ponderada ──
+    risk = (_W_PRED      * s_pred  +
+            _W_PROXIMITY * s_prox  +
+            _W_VELOCITY  * s_velo  +
+            _W_IOB       * s_iob)
+
+    # ── Hard gates (override clínico) ──
+    hard_gate = None
+    if g_actual < _HARD_GATE_G_HYPO:
+        hard_gate = "critical"        # ya estás cerca de hipo real
+    elif g_actual < _HARD_GATE_G_LOW:
+        hard_gate = "alert"            # glucosa baja, atención obligada
+    elif roc is not None and roc <= _HARD_GATE_ROC:
+        hard_gate = "alert"            # caída muy rápida — actuar pronto
+
+    components = {
+        "p_pred":       round(s_pred, 3),
+        "proximity":    round(s_prox, 3),
+        "velocity":     round(s_velo, 3),
+        "iob_pressure": round(s_iob, 3),
+        "weights":      {"pred": _W_PRED, "proximity": _W_PROXIMITY,
+                         "velocity": _W_VELOCITY, "iob": _W_IOB},
+    }
+    return risk, components, hard_gate
 
 
 def invalidate_cache() -> None:

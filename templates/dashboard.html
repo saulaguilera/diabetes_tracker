@@ -2031,7 +2031,39 @@ a.insight-chip:hover {
 
   // ── PMM Hypo-Risk Banner ─────────────────────────────────────────────────
   // Llama /api/pmm/hypo-risk al cargar y cada 90s mientras la pestaña esté activa.
-  // Muestra/oculta el banner según el nivel detectado.
+  // Muestra/oculta el banner según el nivel detectado, con anti-spam:
+  //   - 'critical' SIEMPRE se muestra (clínicamente crítico)
+  //   - 'alert' o 'watch' respetan cool-down de 20min vs último mismo nivel
+  //     (evita oscilación cuando el predictor está al borde del threshold)
+  //   - Si SUBE el nivel (watch→alert→critical) siempre se muestra
+  const _HYPO_LEVEL_ORDER = {normal: 0, watch: 1, alert: 2, critical: 3};
+  const _HYPO_COOLDOWN_MS = 20 * 60 * 1000;
+
+  function _getHypoAlertState() {
+    try { return JSON.parse(localStorage.getItem('hypoAlertState') || '{}'); }
+    catch { return {}; }
+  }
+  function _setHypoAlertState(level) {
+    try {
+      localStorage.setItem('hypoAlertState',
+        JSON.stringify({level: level, time: Date.now()}));
+    } catch {}
+  }
+  function _shouldShowHypoAlert(newLevel) {
+    if (newLevel === 'normal') return false;
+    if (newLevel === 'critical') return true;          // siempre mostrar critical
+    const state = _getHypoAlertState();
+    const lastLevel = state.level || 'normal';
+    const lastTime  = state.time || 0;
+    const now = Date.now();
+    // Si subió el nivel (más urgente que antes) → mostrar
+    if (_HYPO_LEVEL_ORDER[newLevel] > _HYPO_LEVEL_ORDER[lastLevel]) return true;
+    // Si bajó (menos urgente) → mostrar (informativo)
+    if (_HYPO_LEVEL_ORDER[newLevel] < _HYPO_LEVEL_ORDER[lastLevel]) return true;
+    // Mismo nivel: respetar cool-down
+    return (now - lastTime) > _HYPO_COOLDOWN_MS;
+  }
+
   async function cargarHypoRisk() {
     try {
       const r = await fetch('/api/pmm/hypo-risk');
@@ -2041,8 +2073,20 @@ a.insight-chip:hover {
 
       if (!d.ok || !d.active) {
         banner.style.display = 'none';
+        // Si volvió a normal, resetear el estado (próxima alerta es "nueva")
+        const state = _getHypoAlertState();
+        if (state.level && state.level !== 'normal') {
+          _setHypoAlertState('normal');
+        }
         return;
       }
+
+      // Anti-spam check
+      if (!_shouldShowHypoAlert(d.level)) {
+        banner.style.display = 'none';
+        return;
+      }
+      _setHypoAlertState(d.level);
 
       // Reset clases de nivel
       banner.classList.remove('phb-critical', 'phb-alert', 'phb-watch');
