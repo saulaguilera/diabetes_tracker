@@ -213,17 +213,27 @@ def run_experiment(spec: ExperimentSpec) -> list[ExperimentResult]:
 
         # Persistir con extensiones (lineage + reproducibility + diagnoses + gates)
         try:
-            row_data = res.to_db_row()
-            row_data["parent_name"]   = spec.parent_name
-            row_data["data_checksum"] = ds_chk
-
-            # Reproducibility hash del output
+            # IMPORTANTE: el campo _records_for_checksum contiene PredictionRecord
+            # (no serializables). Lo consumimos para el checksum y lo eliminamos
+            # ANTES de to_db_row() que llama json.dumps(metrics).
+            _replay_chk = None
             try:
                 from bench.tuning.reproducibility import replay_checksum, random_seed_for
                 if res.metrics and "_records_for_checksum" in res.metrics:
-                    row_data["replay_checksum"] = replay_checksum(
-                        res.metrics["_records_for_checksum"])
-                    del res.metrics["_records_for_checksum"]  # no persistir records
+                    _replay_chk = replay_checksum(res.metrics["_records_for_checksum"])
+                    del res.metrics["_records_for_checksum"]
+            except Exception:
+                # Si falla el checksum, igual eliminamos los records para no
+                # romper la serialización JSON downstream
+                if res.metrics and "_records_for_checksum" in res.metrics:
+                    del res.metrics["_records_for_checksum"]
+
+            row_data = res.to_db_row()
+            row_data["parent_name"]    = spec.parent_name
+            row_data["data_checksum"]  = ds_chk
+            row_data["replay_checksum"] = _replay_chk
+            try:
+                from bench.tuning.reproducibility import random_seed_for
                 row_data["random_seed"] = random_seed_for(ph, ds_chk or "")
             except Exception:
                 pass
