@@ -3,30 +3,6 @@
 
 {% block content %}
 
-{# ── Daily Metabolic Brief — card narrativa arriba del fold ────────────── #}
-<div id="daily-brief-card" class="daily-brief-card mb-3" style="display:none;">
-  <div class="daily-brief-header">
-    <div class="daily-brief-title">
-      <i class="bi bi-cup-hot-fill"></i>
-      <span>Daily Brief</span>
-    </div>
-    <div class="daily-brief-meta">
-      <span id="daily-brief-confidence" class="daily-brief-conf"></span>
-      <span id="daily-brief-time" class="daily-brief-time"></span>
-      <button id="daily-brief-refresh" type="button"
-              onclick="refreshDailyBrief()"
-              class="daily-brief-refresh-btn" title="Regenerar brief">
-        <i class="bi bi-arrow-clockwise"></i>
-      </button>
-    </div>
-  </div>
-  <div id="daily-brief-text" class="daily-brief-text"></div>
-  <details id="daily-brief-detail" class="daily-brief-detail">
-    <summary>Ver métricas del día</summary>
-    <div id="daily-brief-metrics" class="daily-brief-metrics"></div>
-  </details>
-</div>
-
 {# ── Área superior: hero + gráfico ────────────────────────────────────────── #}
 <div class="row g-3 mb-3 align-items-stretch">
 
@@ -602,6 +578,29 @@
 
 </div>{# /insights-scroll-row #}
 {% endif %}
+
+{# ── Daily Metabolic Brief — card personal compacta ────────────────────── #}
+<div id="daily-brief-card" class="daily-brief-card mb-3" style="display:none;">
+  <div class="daily-brief-header">
+    <div class="daily-brief-title">
+      <i class="bi bi-cup-hot-fill"></i>
+      <span>Tu día</span>
+    </div>
+    <div class="daily-brief-meta">
+      <span id="daily-brief-confidence" class="daily-brief-conf"></span>
+      <button id="daily-brief-refresh" type="button"
+              onclick="refreshDailyBrief()"
+              class="daily-brief-refresh-btn" title="Regenerar resumen">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+    </div>
+  </div>
+  <div id="daily-brief-text" class="daily-brief-text"></div>
+  <details id="daily-brief-detail" class="daily-brief-detail">
+    <summary>Ver métricas</summary>
+    <div id="daily-brief-metrics" class="daily-brief-metrics"></div>
+  </details>
+</div>
 
 {# ── Feed de actividad reciente ────────────────────────────────────────────── #}
 <div class="af-wrap mb-3">

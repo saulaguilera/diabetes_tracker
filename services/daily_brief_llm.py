@@ -25,9 +25,13 @@ logger = logging.getLogger("daily_brief.llm")
 
 # ── Configuración ──────────────────────────────────────────────────────
 LLM_MODEL          = "claude-sonnet-4-20250514"
-LLM_MAX_TOKENS     = 320           # ~80-140 palabras
-LLM_TEMPERATURE    = 0.4           # baja — narrativas similares en datos similares
+LLM_MAX_TOKENS     = 220           # ~60-100 palabras (más conciso)
+LLM_TEMPERATURE    = 0.5           # un poco más cálido / variado
 CONFIDENCE_MIN_LLM = 0.5           # bajo eso, usamos fallback rule-based
+
+# Nombre por defecto si no hay user_name en settings — el usuario puede
+# cambiarlo con: _set_setting("user_name", "MiNombre") via shell.
+DEFAULT_USER_NAME = "Saúl"
 
 TONE_VARIANTS = {
     "supportive": (
@@ -146,49 +150,54 @@ def generate_brief(
 def _build_prompts(s: DailyMetabolicSummary,
                     tone: str,
                     name: Optional[str]) -> tuple[str, str]:
-    """Construye system + user prompt."""
+    """Construye system + user prompt — versión compacta y personalizada."""
     tone_desc = TONE_VARIANTS.get(tone, TONE_VARIANTS["supportive"])
+    user_name = name or DEFAULT_USER_NAME
 
-    system_prompt = f"""Sos el redactor del "Daily Metabolic Brief" — un resumen diario corto
-del estado glucémico para una persona con diabetes tipo 1.
+    system_prompt = f"""Sos un compañero cercano que le manda a {user_name} un resumen breve
+de su día metabólico. NO sos un médico ni un dashboard frío — sos esa
+amistad que se preocupa, sabe de diabetes tipo 1, y le manda 3 frases
+cariñosas pero útiles cada mañana.
 
 {tone_desc}
 
-REGLAS DE GROUNDEDNESS — son inviolables:
-- USÁ SOLO los datos del JSON estructurado que recibís en el mensaje.
-- NO inventes números, eventos, comidas, bolos, ni patrones que no estén ahí.
-- NO calcules nada. No hagas matemática. Los números ya están calculados.
-- Si un campo es null/None/falta, NO lo menciones. No digas "no tenés datos
-  de X" — simplemente omitilo.
+ESTRUCTURA OBLIGATORIA (3 frases cortas, en 1 párrafo único):
 
-REGLAS DE TONO Y SEGURIDAD:
-- 2 párrafos máximo. Entre 80 y 140 palabras TOTAL.
-- NUNCA des recomendaciones de dosis concretas (ej. "subí 1U la basal").
-- NUNCA digas "tenés que" — usá "podrías", "tal vez", "considerá".
-- NUNCA uses lenguaje alarmista ("peligroso", "crítico", "alerta") incluso
-  con hipos. Usá: "tuviste un episodio bajo a las X" o "tu glucosa cruzó
-  bajo 70 en la madrugada".
-- NUNCA hagas diagnósticos. NO digas "tenés resistencia" / "fenómeno del alba" /
-  "lipodistrofia" / etc. Usá descripciones de patrones: "glucemias matutinas
-  más altas de lo habitual".
-- Si hay hipos: mencionalas con calma. Sugerí revisar con el médico, no des
-  pauta tú mismo.
-- Empezá SIEMPRE con "Buenos días{', ' + name if name else ''}." como saludo.
+  Frase 1 — Saludo + resumen glicemia
+    "Hola {user_name}, buenos días. [cómo estuvo tu glicemia en términos
+    humanos: estable / con vaivenes / con un episodio bajo en la noche / etc]"
 
-ESTRUCTURA DESEADA (suave, no rígida):
-  Párrafo 1: cómo fue el día/noche en términos generales (overnight + TIR).
-  Párrafo 2: observación destacable o patrón + nota positiva o suave."""
+  Frase 2 — Un patrón observado (NO genérico)
+    Mencionar UN solo patrón o dato destacable: "tu noche fue muy estable",
+    "después de la cena tuviste una subida importante", "el ejercicio te
+    ayudó", "hubo un episodio bajo a las X". Usar EL dato más relevante
+    del JSON, no inventar.
+
+  Frase 3 — Un consejo concreto y suave
+    Una sugerencia accionable y amable. Ejemplos: "considerá pre-bolear
+    un poco antes esta noche", "buen momento para repetir lo que hiciste
+    hoy", "tal vez una caminata después del almuerzo te ayudaría",
+    "andá tranquilo, vas bien". SIN dosis concretas, SIN "tenés que".
+
+REGLAS INVIOLABLES:
+- USÁ SOLO los datos del JSON. NO inventes números, eventos, ni patrones.
+- Si un campo es null/None, NO lo menciones. Omitilo y elegí otro.
+- 60–90 palabras TOTAL en el párrafo único. Mejor 70 que 90.
+- Tono cariñoso, cercano, calmado. Como un mejor amigo que sabe de diabetes.
+- NUNCA "peligroso/crítico/alerta", NUNCA dosis concretas, NUNCA diagnósticos
+  ("resistencia", "fenómeno del alba", "lipodistrofia").
+- Si hay hipos: mencionalas con calma, sin alarmar.
+- NO usar bullets, NO títulos, NO emojis. Solo prosa fluida."""
 
     summary_json = summary_to_dict(s)
-    user_prompt = f"""Generá el Daily Brief para el día {s.day}.
-
-Datos estructurados (USÁ SOLO ESTO, no inventes nada):
+    user_prompt = f"""Datos de hoy ({s.day}) — usá SOLO esto:
 
 ```json
 {_compact_summary_for_prompt(summary_json)}
 ```
 
-Recordá: 2 párrafos, 80-140 palabras, empieza con "Buenos días{', ' + name if name else ''}."."""
+Escribí el resumen de 3 frases para {user_name}. Recordá: 1 solo párrafo,
+60-90 palabras, empezando con "Hola {user_name}, buenos días."."""
 
     return system_prompt, user_prompt
 
@@ -242,9 +251,10 @@ def _post_validate(text: str, s: DailyMetabolicSummary) -> str:
         else:
             text = snippet + "."
 
-    # 3. Saludo obligatorio
-    if not text.lower().startswith("buenos días"):
-        text = "Buenos días. " + text
+    # 3. Saludo obligatorio — acepta ambos formatos
+    low = text.lower()
+    if not (low.startswith("hola") or low.startswith("buenos días")):
+        text = f"Hola, buenos días. {text}"
 
     return text
 
@@ -252,87 +262,104 @@ def _post_validate(text: str, s: DailyMetabolicSummary) -> str:
 # ─── Fallbacks rule-based ───────────────────────────────────────────────
 
 def _greeting(name: Optional[str]) -> str:
-    return f"Buenos días{', ' + name if name else ''}."
+    """Saludo cálido: 'Hola Saúl, buenos días.'"""
+    n = name or DEFAULT_USER_NAME
+    return f"Hola {n}, buenos días."
 
 
 def _fallback_insufficient_data(s: DailyMetabolicSummary,
                                   name: Optional[str] = None) -> str:
-    """Cuando no hay data suficiente para sacar conclusiones."""
+    """Cuando no hay data suficiente. Tono cariñoso, no técnico."""
     return (
-        f"{_greeting(name)} No hubo suficientes datos continuos del CGM "
-        f"para generar un resumen detallado hoy ({s.n_readings} lecturas "
-        f"sobre las {s.expected_readings} esperadas). "
-        f"Verificá que el sensor esté sincronizando correctamente. "
-        f"Cuando los datos se acumulen, volveremos a tener un brief completo mañana."
+        f"{_greeting(name)} Hoy no hubo suficientes datos del sensor para "
+        f"darte un resumen detallado — quizás vale la pena chequear que el "
+        f"CGM esté sincronizando bien. Mañana volvemos con todo."
     )
 
 
 def _fallback_partial_data(s: DailyMetabolicSummary,
                             name: Optional[str] = None) -> str:
-    """Confidence intermedio — datos básicos sin interpretación."""
+    """Confidence intermedio — versión compacta."""
     parts = [_greeting(name)]
-    if s.avg_glucose_24h:
-        parts.append(f"Tu glucemia media de las últimas 24h fue {s.avg_glucose_24h:.0f} mg/dL.")
-    if s.tir_24h is not None:
-        parts.append(f"Tiempo en rango: {s.tir_24h:.0f}%.")
+    if s.tir_24h is not None and s.avg_glucose_24h:
+        parts.append(f"Glucemia promedio {s.avg_glucose_24h:.0f} mg/dL, "
+                     f"con {s.tir_24h:.0f}% del tiempo en rango.")
     if s.hypo_events_24h > 0:
-        parts.append(f"Hubo {s.hypo_events_24h} episodio(s) bajo 70 mg/dL.")
-    parts.append(f"La data fue parcial (gap máximo {s.max_gap_minutes}min); "
-                 "para un resumen más completo, asegurate de que el sensor "
-                 "se sincronice bien durante todo el día.")
+        if s.hypo_events_24h == 1:
+            parts.append("Hubo un episodio bajo 70.")
+        else:
+            parts.append(f"Hubo {s.hypo_events_24h} episodios bajo 70.")
+    parts.append("Los datos vinieron parciales hoy — revisá que el sensor "
+                 "esté bien anclado para no perder lecturas.")
     return " ".join(parts)
 
 
 def _fallback_rule_based(s: DailyMetabolicSummary,
                           name: Optional[str] = None) -> str:
     """
-    Narrativa completa sin LLM. Templates por overnight_stability + dominant_pattern.
-    Mismas restricciones de tono.
+    Narrativa compacta sin LLM — 3 frases:
+      1) Saludo + resumen glicemia
+      2) Patrón destacable
+      3) Consejo suave personalizado al patrón
+    Total ~60-90 palabras. Mismas restricciones de tono que el LLM.
     """
-    parts = [_greeting(name)]
-
-    # ── Párrafo 1: overnight + TIR ──
+    # ── Frase 1: saludo + resumen glicemia ──
     ov_map = {
-        "stable":           "La noche fue estable, con baja variabilidad",
-        "mildly_variable":  "La noche tuvo algunos vaivenes pero sin sobresaltos",
-        "unstable":         "La noche estuvo más movida de lo habitual",
-        "no_data":          "No hay datos suficientes de la noche",
+        "stable":           "Tu noche estuvo muy tranquila",
+        "mildly_variable":  "Tu noche tuvo algunos vaivenes pero sin sobresaltos",
+        "unstable":         "Tu noche estuvo movida",
+        "no_data":          "No tengo datos completos de la noche",
     }
-    p1 = ov_map.get(s.overnight_stability, "")
-    if s.overnight_mean_glucose and s.overnight_stability != "no_data":
-        p1 += f" (media {s.overnight_mean_glucose:.0f} mg/dL"
-        if s.overnight_variability_cv:
-            p1 += f", CV {s.overnight_variability_cv:.0f}%"
-        p1 += ")"
-    if s.overnight_hypos > 0:
-        p1 += f". Tuviste {s.overnight_hypos} episodio(s) bajo 70 mg/dL durante la noche"
-    p1 += ". "
-
+    f1_parts = [_greeting(name), ov_map.get(s.overnight_stability, "Tu noche transcurrió") + "."]
     if s.tir_24h is not None:
         if s.tir_24h >= 75:
-            p1 += f"Tu tiempo en rango fue {s.tir_24h:.0f}% — un día sólido."
+            f1_parts.append(f"El día tuvo un buen control ({s.tir_24h:.0f}% en rango).")
         elif s.tir_24h >= 60:
-            p1 += f"Tu tiempo en rango fue {s.tir_24h:.0f}%."
+            f1_parts.append(f"El día estuvo aceptable ({s.tir_24h:.0f}% en rango).")
         else:
-            p1 += f"Tu tiempo en rango fue {s.tir_24h:.0f}% — más bajo que un día típico."
+            f1_parts.append(f"El día estuvo más complicado ({s.tir_24h:.0f}% en rango).")
+    f1 = " ".join(f1_parts)
 
-    parts.append(p1)
-
-    # ── Párrafo 2: observación destacable ──
-    p2_pieces = []
-    if s.notable_observation:
-        p2_pieces.append(s.notable_observation)
-
-    if s.exercise_impact == "positive":
-        p2_pieces.append("El ejercicio te ayudó a mantener glucemias más controladas.")
+    # ── Frase 2: un patrón ──
+    f2 = ""
+    if s.overnight_hypos > 0:
+        if s.overnight_hypos == 1:
+            f2 = "Tuviste un episodio bajo 70 mg/dL durante la noche."
+        else:
+            f2 = f"Tuviste {s.overnight_hypos} episodios bajo 70 mg/dL durante la noche."
     elif s.dominant_pattern == "post_dinner_rise":
-        p2_pieces.append("La cena marcó una subida importante — quizás valga revisar el timing del bolo.")
+        f2 = "La cena marcó una subida importante en las horas siguientes."
+    elif s.dominant_pattern == "recurrent_morning_high":
+        f2 = "Tus glucemias matutinas estuvieron más altas de lo habitual."
+    elif s.dominant_pattern == "late_hypo":
+        f2 = "Hubo un episodio bajo en la madrugada — algo a tener en mente."
+    elif s.dominant_pattern == "exercise_improvement":
+        f2 = "El ejercicio te ayudó a mantener mejor control."
+    elif s.dominant_pattern == "high_variability":
+        f2 = "El día tuvo bastante variabilidad — más vaivenes que un día típico."
     elif s.dominant_pattern == "stable_day":
-        p2_pieces.append("En general fue un día con buen control. Seguir así.")
-
-    if p2_pieces:
-        parts.append(" ".join(p2_pieces))
+        f2 = "Día parejo, sin grandes picos ni caídas."
+    elif s.exercise_impact == "positive":
+        f2 = "El ejercicio del día te ayudó con el control."
+    elif s.notable_observation:
+        f2 = s.notable_observation
     else:
-        parts.append("Sin patrones destacables hoy.")
+        f2 = "Sin patrones particulares para destacar hoy."
 
-    return " ".join(parts)
+    # ── Frase 3: consejo suave ──
+    if s.overnight_hypos > 0 or s.dominant_pattern == "late_hypo":
+        f3 = "Quizás valga la pena revisar la basal con tu médico."
+    elif s.dominant_pattern == "post_dinner_rise":
+        f3 = "Tal vez pre-bolear un poco antes esta noche te ayude."
+    elif s.dominant_pattern == "recurrent_morning_high":
+        f3 = "Algo a comentar en tu próxima consulta médica."
+    elif s.dominant_pattern == "high_variability":
+        f3 = "Andá tranquilo, los días así pasan — mañana es otro día."
+    elif s.dominant_pattern in ("stable_day", "exercise_improvement"):
+        f3 = "Buen momento para repetir lo que estás haciendo."
+    elif s.tir_24h is not None and s.tir_24h >= 70:
+        f3 = "Seguís yendo bien, así que sin cambios necesarios."
+    else:
+        f3 = "Día a día, vamos viendo."
+
+    return f"{f1} {f2} {f3}"
