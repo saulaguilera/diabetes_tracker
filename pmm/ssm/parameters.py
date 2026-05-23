@@ -58,7 +58,9 @@ class SSMParameters:
 
     # ── 3. Physiological dynamics ──
     # Insulin PK
-    K_PI:  float = 0.025         # /min  plasma → interstitial
+    # NOTA: K_PI subido de 0.025 → 0.04 tras tuning bias_fix_v3 (hash d9006eda8a)
+    # sobre 3 días reales. Mejora innovation +231% (autocorrelación residual).
+    K_PI:  float = 0.040         # /min  plasma → interstitial (tuned v3)
     K_IE:  float = 0.018         # /min  interstitial elimination
     K_ACT: float = 1.0/60.0      # /min  insulin action rate constant
     # Carb absorption
@@ -70,7 +72,12 @@ class SSMParameters:
     LAMBDA_SI:  float = 1.0/(5*24*60)   # mean-reversion ~5 días
     S_I_TARGET: float = 45.0            # target del prior populacional
     # Endogenous glucose
-    EGP_BASAL:        float = 0.55      # mg/dL/min
+    # NOTA: EGP_BASAL bajado de 0.55 → 0.20 tras 3 iteraciones de tuning.
+    # En cada experimento el óptimo tocó el borde inferior — el modelo pide
+    # menos producción endógena, probablemente compensando insulina basal
+    # no modelada en SSM v0 (limitación estructural, no de hyperparams).
+    # Mejora composite +125% acumulado vs default original (0.21 → 0.47).
+    EGP_BASAL:        float = 0.20      # mg/dL/min  (tuned v3 — era 0.55)
     K_NIM_BASAL:      float = 0.0035    # /min
     RENAL_THRESHOLD:  float = 180.0
     K_RENAL:          float = 0.012
