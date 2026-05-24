@@ -65,6 +65,80 @@ def glucemia_nueva():
     )
 
 
+@bp.route("/glucemia/marcar-artefacto-hora", methods=["GET", "POST"],
+          endpoint="glucemia_marcar_artefacto_hora")
+def glucemia_marcar_artefacto_hora():
+    """
+    Marca como artefacto la lectura CGM más cercana a un timestamp dado.
+    Útil cuando LibreLinkUp no devuelve la corrección y necesitás invalidar
+    una lectura específica desde el browser.
+
+    Query params (GET) o JSON (POST):
+        hora:    "HH:MM" — hora de hoy (default si no se pasa fecha)
+        fecha:   "YYYY-MM-DD" — opcional, default = hoy
+        reason:  texto opcional (default 'manual')
+
+    Ejemplos de URL (basta con abrir en el browser, autenticado):
+        /glucemia/marcar-artefacto-hora?hora=15:59
+        /glucemia/marcar-artefacto-hora?hora=03:15&fecha=2026-05-22
+        /glucemia/marcar-artefacto-hora?hora=15:59&reason=hipo-falsa-libre
+    """
+    from flask import jsonify, request as _req
+    from utils.sensor_quality import mark_as_artifact
+
+    # Aceptar query params o JSON body
+    data = _req.get_json(silent=True) or {}
+    hora   = (_req.args.get("hora")   or data.get("hora") or "").strip()
+    fecha  = (_req.args.get("fecha")  or data.get("fecha") or "").strip()
+    reason = (_req.args.get("reason") or data.get("reason") or "manual").strip()
+
+    if not hora or ":" not in hora:
+        return jsonify({"ok": False,
+                        "error": "Falta param 'hora' en formato HH:MM. "
+                                 "Ej: /glucemia/marcar-artefacto-hora?hora=15:59"}), 400
+
+    try:
+        hh, mm = [int(x) for x in hora.split(":")]
+    except ValueError:
+        return jsonify({"ok": False, "error": f"hora inválida: {hora}"}), 400
+
+    # Resolver fecha (default hoy)
+    if fecha:
+        try:
+            base_date = datetime.strptime(fecha, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"ok": False, "error": f"fecha inválida: {fecha}"}), 400
+    else:
+        base_date = datetime.now().date()
+
+    target = datetime.combine(base_date, datetime.min.time()).replace(
+        hour=hh, minute=mm)
+
+    # Buscar lectura más cercana (±10 min)
+    row = (GlucoseReading.query
+           .filter(GlucoseReading.timestamp >= target - timedelta(minutes=10),
+                   GlucoseReading.timestamp <= target + timedelta(minutes=10))
+           .order_by(GlucoseReading.timestamp).all())
+    if not row:
+        return jsonify({"ok": False,
+                        "error": f"No se encontró lectura cerca de {target}"})
+
+    # Tomar la más cercana exacta
+    closest = min(row, key=lambda r: abs((r.timestamp - target).total_seconds()))
+    result = mark_as_artifact(closest.id, reason=reason)
+    return jsonify({
+        "ok":           result.get("ok", False),
+        "id":           closest.id,
+        "timestamp":    closest.timestamp.isoformat(),
+        "value_mgdl":   closest.value_mgdl,
+        "is_artifact":  True,
+        "reason":       reason,
+        "mensaje":      f"✓ Lectura {closest.timestamp.strftime('%d/%m %H:%M')} "
+                        f"({closest.value_mgdl} mg/dL) marcada como artefacto. "
+                        f"Recargá el dashboard para ver el chart limpio.",
+    })
+
+
 @bp.route("/glucemia/<int:id>/artefacto", methods=["POST"],
           endpoint="glucemia_marcar_artefacto")
 def glucemia_marcar_artefacto(id):
