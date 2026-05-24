@@ -188,8 +188,10 @@ def api_resumen_dia():
     ayer  = hoy - timedelta(days=1)
 
     # ── Glucemia de hoy ──────────────────────────────────────────────────────
+    # Excluir lecturas marcadas como artefacto (hipos falsas corregidas, etc.)
     lecturas = GlucoseReading.query.filter(
-        GlucoseReading.timestamp >= hoy
+        GlucoseReading.timestamp >= hoy,
+        GlucoseReading.is_artifact == False,
     ).all()
     vals = [r.value_mgdl for r in lecturas]
 
@@ -240,6 +242,7 @@ def api_resumen_dia():
     vals_ayer = [r.value_mgdl for r in GlucoseReading.query.filter(
         GlucoseReading.timestamp >= ayer,
         GlucoseReading.timestamp <  hoy,
+        GlucoseReading.is_artifact == False,
     ).all()]
     tir_ayer = round(len([v for v in vals_ayer if 70 <= v <= 180]) / len(vals_ayer) * 100, 1) \
                if vals_ayer else None
