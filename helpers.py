@@ -118,7 +118,8 @@ def stats_resumen():
     hace_7d = now - timedelta(days=7)
 
     lecturas_24h = GlucoseReading.query.filter(
-        GlucoseReading.timestamp >= hace_24h
+        GlucoseReading.timestamp >= hace_24h,
+        GlucoseReading.is_artifact == False,
     ).all()
 
     valores = [r.value_mgdl for r in lecturas_24h]
@@ -135,7 +136,9 @@ def stats_resumen():
         promedio = minimo = maximo = en_rango = hipo = hiper = None
 
     ultima_lectura = (
-        GlucoseReading.query.order_by(GlucoseReading.timestamp.desc()).first()
+        GlucoseReading.query
+        .filter(GlucoseReading.is_artifact == False)
+        .order_by(GlucoseReading.timestamp.desc()).first()
     )
     ultima_comida = Meal.query.order_by(Meal.timestamp.desc()).first()
     ultima_insulina = InsulinDose.query.order_by(InsulinDose.timestamp.desc()).first()
@@ -166,7 +169,8 @@ def _detectar_patrones(days=30):
     desde = now - timedelta(days=days)
 
     lecturas = (GlucoseReading.query
-                .filter(GlucoseReading.timestamp >= desde)
+                .filter(GlucoseReading.timestamp >= desde,
+                        GlucoseReading.is_artifact == False)
                 .order_by(GlucoseReading.timestamp).all())
 
     if not lecturas:
@@ -845,10 +849,14 @@ def _dashboard_insights():
     hace_7d  = now - timedelta(days=7)
     hace_14d = now - timedelta(days=14)
 
-    r7   = GlucoseReading.query.filter(GlucoseReading.timestamp >= hace_7d).all()
+    r7   = GlucoseReading.query.filter(
+        GlucoseReading.timestamp >= hace_7d,
+        GlucoseReading.is_artifact == False,
+    ).all()
     rprev = GlucoseReading.query.filter(
         GlucoseReading.timestamp >= hace_14d,
         GlucoseReading.timestamp <  hace_7d,
+        GlucoseReading.is_artifact == False,
     ).all()
 
     def _tir(readings):

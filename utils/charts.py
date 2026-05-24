@@ -22,16 +22,21 @@ def _to_json(fig) -> dict:
     return json.loads(plotly.io.to_json(fig))
 
 
-def _get_readings(hours=168):
-    """Obtiene lecturas de glucosa del período dado."""
+def _get_readings(hours=168, include_artifacts=False):
+    """
+    Obtiene lecturas de glucosa del período dado.
+
+    include_artifacts:
+        False (default): excluye lecturas marcadas como is_artifact.
+            Esto hace que el chart no muestre hipos falsas marcadas.
+        True: incluye TODAS las lecturas (útil para audit/debug).
+    """
     from models import GlucoseReading
     desde = datetime.now() - timedelta(hours=hours)
-    return (
-        GlucoseReading.query
-        .filter(GlucoseReading.timestamp >= desde)
-        .order_by(GlucoseReading.timestamp.asc())
-        .all()
-    )
+    q = GlucoseReading.query.filter(GlucoseReading.timestamp >= desde)
+    if not include_artifacts:
+        q = q.filter(GlucoseReading.is_artifact == False)
+    return q.order_by(GlucoseReading.timestamp.asc()).all()
 
 
 def chart_glucose_timeline(hours=24) -> dict:
@@ -267,6 +272,7 @@ def chart_meal_impact(days=30) -> dict:
             .filter(
                 GlucoseReading.timestamp >= comida.timestamp - ventana_pre,
                 GlucoseReading.timestamp <= comida.timestamp,
+                GlucoseReading.is_artifact == False,
             )
             .order_by(GlucoseReading.timestamp.desc())
             .first()
@@ -277,6 +283,7 @@ def chart_meal_impact(days=30) -> dict:
             .filter(
                 GlucoseReading.timestamp > comida.timestamp,
                 GlucoseReading.timestamp <= comida.timestamp + ventana_post,
+                GlucoseReading.is_artifact == False,
             )
             .all()
         )
@@ -480,6 +487,7 @@ def chart_activity_glucose_impact(days=30) -> dict:
             .filter(
                 GlucoseReading.timestamp >= act.timestamp - timedelta(hours=1),
                 GlucoseReading.timestamp <= act.timestamp + timedelta(hours=4),
+                GlucoseReading.is_artifact == False,
             )
             .order_by(GlucoseReading.timestamp)
             .all()
@@ -604,6 +612,7 @@ def chart_glucose_vs_carbs(days=90) -> dict:
             .filter(
                 GlucoseReading.timestamp >= comida.timestamp - timedelta(minutes=30),
                 GlucoseReading.timestamp <= comida.timestamp,
+                GlucoseReading.is_artifact == False,
             )
             .order_by(GlucoseReading.timestamp.desc())
             .first()
@@ -613,6 +622,7 @@ def chart_glucose_vs_carbs(days=90) -> dict:
             .filter(
                 GlucoseReading.timestamp > comida.timestamp,
                 GlucoseReading.timestamp <= comida.timestamp + timedelta(hours=2),
+                GlucoseReading.is_artifact == False,
             )
             .all()
         )
@@ -705,7 +715,8 @@ def chart_agp(days=14) -> dict:
     desde = now - timedelta(days=days)
 
     lecturas = (GlucoseReading.query
-                .filter(GlucoseReading.timestamp >= desde)
+                .filter(GlucoseReading.timestamp >= desde,
+                        GlucoseReading.is_artifact == False)
                 .order_by(GlucoseReading.timestamp).all())
 
     if len(lecturas) < 12:
