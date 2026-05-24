@@ -58,17 +58,27 @@ def _do_libre_sync(email: str, password: str) -> dict:
             # artefacto de compresión se "corrige" después de unos minutos),
             # nuestro sync original IGNORABA el cambio porque solo dedup'eaba
             # por timestamp. Ahora actualizamos si la diferencia es significativa.
+            #
+            # Threshold bajado a 3 mg/dL (de 5) para capturar correcciones
+            # finas que el Libre hace después del scan inicial.
             diff = abs(existe.value_mgdl - r["value_mgdl"])
-            if diff >= 5 and not existe.is_artifact:
+            if diff >= 3 and not existe.is_artifact:
                 # Preservar el valor original para auditoría
                 if existe.original_value_mgdl is None:
                     existe.original_value_mgdl = existe.value_mgdl
+                old_val = existe.value_mgdl
                 existe.value_mgdl   = r["value_mgdl"]
                 existe.corrected_at = datetime.now()
                 # Si era una hipo falsa que ya no lo es, agregar nota
                 if existe.original_value_mgdl < 70 and r["value_mgdl"] >= 80:
                     existe.notes = (existe.notes or "") + " [hipo-falsa-corregida]"
                 corregidas += 1
+                # Log visible para debugging (aparece en Railway logs)
+                import logging
+                logging.getLogger("sync.libre").warning(
+                    f"📝 Corrección detectada: {ts.strftime('%H:%M')} "
+                    f"{old_val:.0f} → {r['value_mgdl']:.0f} mg/dL"
+                )
 
     if insertadas or corregidas:
         db.session.commit()
@@ -141,6 +151,7 @@ def _do_libre_sync(email: str, password: str) -> dict:
 
     return {
         "insertadas": insertadas,
+        "corregidas": corregidas,
         "total":      len(readings),
         "error":      None,
         "ultima":     ultima_ts,
@@ -259,6 +270,81 @@ def api_resumen_dia():
         "carbs_g":   carbs_hoy,
         "n_comidas": n_comidas,
     })
+
+
+@bp.route("/api/sync/libre/recheck", methods=["POST"], endpoint="api_sync_libre_recheck")
+def api_sync_libre_recheck():
+    """
+    Re-sincronización agresiva: fuerza fetch de LibreLinkUp y aplica TODAS
+    las correcciones (incluso cambios mínimos de >=1 mg/dL).
+
+    Caso de uso: el usuario ve que Libre corrigió una hipo en su app oficial
+    pero acá sigue apareciendo. Este endpoint hace re-fetch y compara todas
+    las lecturas de la ventana (~8h) contra lo que hay en DB.
+
+    Retorna detalle de las correcciones aplicadas para visibilidad.
+    """
+    if not session.get("logged_in"):
+        return jsonify({"error": "No autorizado"}), 401
+
+    try:
+        from utils.libre_linkup import sync_glucose_with_state
+        from models import GlucoseReading
+
+        resultado = sync_glucose_with_state(
+            get_setting_fn=_get_setting,
+            set_setting_fn=_set_setting,
+        )
+        if resultado.get("error"):
+            return jsonify({"ok": False, "error": resultado["error"]})
+
+        # Re-fetch y aplicar correcciones con threshold mínimo (1 mg/dL)
+        # — más agresivo que el sync normal (que usa 3 mg/dL)
+        readings    = resultado["readings"]
+        correcciones = []
+        for r in readings:
+            if not r["value_mgdl"] or r["value_mgdl"] < 20:
+                continue
+            ts = r["timestamp"]
+            existe = GlucoseReading.query.filter(
+                GlucoseReading.timestamp >= ts - timedelta(minutes=6),
+                GlucoseReading.timestamp <= ts + timedelta(minutes=6),
+            ).first()
+            if not existe:
+                continue   # ya se procesó en el sync normal
+            diff = abs(existe.value_mgdl - r["value_mgdl"])
+            if diff >= 1 and not existe.is_artifact:
+                old_val = existe.value_mgdl
+                if existe.original_value_mgdl is None:
+                    existe.original_value_mgdl = existe.value_mgdl
+                existe.value_mgdl   = r["value_mgdl"]
+                existe.corrected_at = datetime.now()
+                if existe.original_value_mgdl < 70 and r["value_mgdl"] >= 80:
+                    existe.notes = (existe.notes or "") + " [hipo-falsa-corregida]"
+                correcciones.append({
+                    "ts":   ts.strftime("%H:%M"),
+                    "old":  round(old_val, 1),
+                    "new":  round(r["value_mgdl"], 1),
+                    "diff": round(diff, 1),
+                })
+
+        if correcciones:
+            db.session.commit()
+
+        return jsonify({
+            "ok":           True,
+            "n_lecturas":   len(readings),
+            "n_correcciones": len(correcciones),
+            "correcciones": correcciones,
+            "mensaje": (
+                f"✓ Se aplicaron {len(correcciones)} correcciones."
+                if correcciones
+                else "Sin correcciones — todas las lecturas coinciden con Libre."
+            ),
+        })
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 
 @bp.route("/api/sync/libre/reset", endpoint="api_sync_libre_reset")

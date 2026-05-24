@@ -20,6 +20,11 @@
                   class="btn-sync-mini" title="Sincronizar Libre">
             <i class="bi bi-arrow-repeat"></i>
           </button>
+          <button id="btn-recheck" onclick="rechequearCorrecciones()"
+                  class="btn-sync-mini" title="Re-check correcciones de Libre"
+                  style="color:#8b5cf6;">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
         </div>
         {% endif %}
       </div>
@@ -1839,6 +1844,36 @@ a.insight-chip:hover {
     } finally {
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
+    }
+  }
+
+  // Re-check agresivo de correcciones de Libre (útil cuando Libre corrige
+  // una hipo falsa y queremos que se refleje YA en nuestra app)
+  async function rechequearCorrecciones() {
+    const btn = document.getElementById('btn-recheck');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:.75rem;height:.75rem;"></span>';
+    try {
+      const r = await fetch('/api/sync/libre/recheck', {method: 'POST'});
+      const d = await r.json();
+      if (!d.ok) {
+        alert(`Error: ${d.error}`);
+        return;
+      }
+      if (d.n_correcciones > 0) {
+        const detalle = d.correcciones
+          .map(c => `  ${c.ts}: ${c.old} → ${c.new} (Δ${c.diff})`)
+          .join('\n');
+        alert(`✓ ${d.mensaje}\n\nDetalle:\n${detalle}\n\nLa página se recargará.`);
+        location.reload();
+      } else {
+        alert(d.mensaje || 'Sin correcciones detectadas.');
+      }
+    } catch(e) {
+      alert(`Error de red: ${e.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
     }
   }
 
