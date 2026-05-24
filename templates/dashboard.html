@@ -17,13 +17,8 @@
             class="sync-dot {% if ultima_sync %}sync-ok{% endif %}"
             title="{{ ultima_sync or 'Sin sync' }}"></span>
           <button id="btn-sync" onclick="sincronizarLibre()"
-                  class="btn-sync-mini" title="Sincronizar Libre">
+                  class="btn-sync-mini" title="Sincronizar Libre (+ detectar correcciones retroactivas)">
             <i class="bi bi-arrow-repeat"></i>
-          </button>
-          <button id="btn-recheck" onclick="rechequearCorrecciones()"
-                  class="btn-sync-mini" title="Re-check correcciones de Libre"
-                  style="color:#8b5cf6;">
-            <i class="bi bi-arrow-clockwise"></i>
           </button>
         </div>
         {% endif %}
@@ -1814,66 +1809,68 @@ a.insight-chip:hover {
     const status = document.getElementById('sync-status');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:.75rem;height:.75rem;"></span>';
+
+    let nuevasLecturas = 0;
+    let correcciones   = [];
+
     try {
+      // ── Paso 1: sync normal (trae lecturas nuevas) ──
       const r = await fetch('/api/sync/libre?force=1');
       const d = await r.json();
 
       if (d.rate_limited) {
-        // 429: Abbott limitó — mostrar countdown
         dot.className = 'sync-dot sync-warn';
         const mins = Math.ceil(d.wait_seconds / 60);
         if (status) status.textContent = `429 · esperá ${mins} min`;
         btn.title = `Abbott rate-limit activo. Esperá ${mins} minuto(s) antes de intentar de nuevo.`;
-      } else if (d.cooldown) {
-        // Cooldown local — ya está al día, no es un error
-        dot.className = 'sync-dot sync-ok';
-        if (status) status.textContent = 'Al día';
-      } else if (d.error) {
+        return;
+      }
+      if (d.error) {
         dot.className = 'sync-dot sync-err';
         if (status) status.textContent = d.error.length > 40 ? d.error.slice(0, 40) + '…' : d.error;
         btn.title = d.error;
-      } else {
-        dot.className = 'sync-dot sync-ok';
-        if (status) status.textContent = d.insertadas > 0 ? `+${d.insertadas} lecturas` : 'Al día';
-        btn.title = 'Sincronizar Libre';
-        if (d.insertadas > 0) setTimeout(() => location.reload(), 1200);
+        return;
       }
+      nuevasLecturas = d.insertadas || 0;
+
+      // ── Paso 2: recheck silencioso de correcciones retroactivas ──
+      // (Libre a veces corrige lecturas viejas — esto las detecta)
+      try {
+        const rr = await fetch('/api/sync/libre/recheck', {method: 'POST'});
+        const dd = await rr.json();
+        if (dd.ok && dd.n_correcciones > 0) {
+          correcciones = dd.correcciones;
+        }
+      } catch (_e) { /* recheck es best-effort, no rompe el sync */ }
+
+      // ── Feedback al usuario ──
+      dot.className = 'sync-dot sync-ok';
+      btn.title = 'Sincronizar Libre';
+      const parts = [];
+      if (nuevasLecturas > 0)    parts.push(`+${nuevasLecturas} lecturas`);
+      if (correcciones.length > 0) parts.push(`${correcciones.length} corregida(s)`);
+      if (status) status.textContent = parts.length ? parts.join(' · ') : 'Al día';
+
+      // Si hubo correcciones, mostramos popup con detalle (es info importante)
+      if (correcciones.length > 0) {
+        const detalle = correcciones
+          .map(c => `  ${c.ts}: ${c.old} → ${c.new} mg/dL`)
+          .join('\n');
+        setTimeout(() => {
+          alert(`📝 Libre corrigió ${correcciones.length} lectura(s) retroactivamente:\n\n${detalle}\n\nEl chart se actualizará.`);
+          location.reload();
+        }, 300);
+        return;
+      }
+      // Sin correcciones pero con lecturas nuevas → recargar normal
+      if (nuevasLecturas > 0) setTimeout(() => location.reload(), 1200);
+
     } catch(e) {
       dot.className = 'sync-dot sync-err';
       if (status) status.textContent = 'Sin conexión';
     } finally {
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
-    }
-  }
-
-  // Re-check agresivo de correcciones de Libre (útil cuando Libre corrige
-  // una hipo falsa y queremos que se refleje YA en nuestra app)
-  async function rechequearCorrecciones() {
-    const btn = document.getElementById('btn-recheck');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:.75rem;height:.75rem;"></span>';
-    try {
-      const r = await fetch('/api/sync/libre/recheck', {method: 'POST'});
-      const d = await r.json();
-      if (!d.ok) {
-        alert(`Error: ${d.error}`);
-        return;
-      }
-      if (d.n_correcciones > 0) {
-        const detalle = d.correcciones
-          .map(c => `  ${c.ts}: ${c.old} → ${c.new} (Δ${c.diff})`)
-          .join('\n');
-        alert(`✓ ${d.mensaje}\n\nDetalle:\n${detalle}\n\nLa página se recargará.`);
-        location.reload();
-      } else {
-        alert(d.mensaje || 'Sin correcciones detectadas.');
-      }
-    } catch(e) {
-      alert(`Error de red: ${e.message}`);
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
     }
   }
 
