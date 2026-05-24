@@ -288,10 +288,18 @@ def api_sync_libre_recheck():
         return jsonify({"error": "No autorizado"}), 401
 
     try:
-        from utils.libre_linkup import sync_glucose_with_state
         from models import GlucoseReading
 
-        resultado = sync_glucose_with_state(
+        email    = _LIBRE_EMAIL
+        password = _LIBRE_PASSWORD
+        if not email or not password:
+            return jsonify({
+                "ok": False,
+                "error": "Configurá LIBRE_EMAIL y LIBRE_PASSWORD en Railway."
+            })
+
+        resultado = libre_sync_all(
+            email, password,
             get_setting_fn=_get_setting,
             set_setting_fn=_set_setting,
         )
