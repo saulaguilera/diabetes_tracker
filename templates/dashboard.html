@@ -558,7 +558,7 @@
 {% endif %}
 
 {# ── Daily Metabolic Brief — card personal compacta ────────────────────── #}
-<div id="daily-brief-card" class="daily-brief-card mb-3" style="display:none;">
+<div id="daily-brief-card" class="daily-brief-card mb-3">
   <div class="daily-brief-header">
     <div class="daily-brief-title">
       <i class="bi bi-cup-hot-fill"></i>
@@ -573,8 +573,10 @@
       </button>
     </div>
   </div>
-  <div id="daily-brief-text" class="daily-brief-text"></div>
-  <details id="daily-brief-detail" class="daily-brief-detail">
+  <div id="daily-brief-text" class="daily-brief-text">
+    <span class="daily-brief-loading"><i class="bi bi-hourglass-split me-1"></i>Cargando resumen del día…</span>
+  </div>
+  <details id="daily-brief-detail" class="daily-brief-detail" style="display:none;">
     <summary>Ver métricas</summary>
     <div id="daily-brief-metrics" class="daily-brief-metrics"></div>
   </details>
@@ -1554,6 +1556,11 @@ a.insight-chip:hover {
 }
 
 /* ── Daily Metabolic Brief Card ───────────────────────────────────────────── */
+.daily-brief-loading {
+  color: var(--text-muted);
+  font-size: .85rem;
+  font-style: italic;
+}
 .daily-brief-card {
   background: linear-gradient(135deg, rgba(99, 102, 241, .06), rgba(139, 92, 246, .04));
   border: 1px solid rgba(99, 102, 241, .25);
@@ -1970,10 +1977,27 @@ a.insight-chip:hover {
     if (!card) return;
     try {
       const r = await fetch('/api/daily-brief');
+      if (!r.ok) {
+        console.error('[DailyBrief] HTTP', r.status, r.statusText);
+        _briefError(`Error ${r.status} al cargar resumen.`);
+        return;
+      }
       const d = await r.json();
-      if (!d.ok || !d.narrative) return;
+      if (!d.ok || !d.narrative) {
+        console.error('[DailyBrief] API error:', d.error || 'sin narrativa', d);
+        _briefError(d.error || 'No se pudo generar el resumen de hoy.');
+        return;
+      }
       renderDailyBrief(d);
-    } catch (e) { /* silencioso, no romper dashboard */ }
+    } catch (e) {
+      console.error('[DailyBrief] fetch falló:', e);
+      _briefError('No se pudo conectar con el servidor.');
+    }
+  }
+
+  function _briefError(msg) {
+    const el = document.getElementById('daily-brief-text');
+    if (el) el.innerHTML = `<span style="color:var(--text-muted);font-size:.85rem;"><i class="bi bi-exclamation-circle me-1"></i>${msg}</span>`;
   }
 
   function renderDailyBrief(d) {
@@ -2016,7 +2040,9 @@ a.insight-chip:hover {
       ).join('');
     }
 
-    card.style.display = '';
+    // Mostrar details (métricas) solo cuando hay data
+    const det = document.getElementById('daily-brief-detail');
+    if (det) det.style.display = '';
   }
 
   async function refreshDailyBrief() {

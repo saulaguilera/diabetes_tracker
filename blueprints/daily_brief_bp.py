@@ -130,6 +130,17 @@ def api_daily_brief_get():
     err = _require_login()
     if err: return err
     try:
+        # Asegurar que la tabla existe (guard para primer deploy)
+        try:
+            from models import db
+            from sqlalchemy import inspect as sa_inspect
+            insp = sa_inspect(db.engine)
+            if "daily_briefs" not in insp.get_table_names():
+                db.create_all()
+                logger.warning("daily_briefs table creada on-demand")
+        except Exception as tbl_exc:
+            logger.warning("no se pudo verificar tabla daily_briefs: %s", tbl_exc)
+
         tone  = request.args.get("tone", "supportive")
         force = request.args.get("force", "0") in ("1", "true", "yes")
         data  = _generate_and_persist(force=force, tone=tone)
