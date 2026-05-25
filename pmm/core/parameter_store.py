@@ -21,6 +21,24 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
+# ── Forgetting factor TEMPORAL ────────────────────────────────────────────────
+# σ se infla proporcionalmente al tiempo desde la última observación.
+# Modela la realidad: el metabolismo deriva con el tiempo y la incertidumbre
+# crece cuanto más tiempo pasa sin confirmación.
+#
+# Fórmula: σ_eff = min(σ_prior, σ_stored × 2^(días_transcurridos / HALF_LIFE))
+#
+# Con HALF_LIFE=21 días:
+#   - 3 días sin obs  → σ × 1.10  (inflación leve, casi imperceptible)
+#   - 7 días sin obs  → σ × 1.26  (+26%)
+#   - 14 días sin obs → σ × 1.59  (+59%)
+#   - 21 días sin obs → σ × 2.00  (σ se duplica)
+#   - 42 días sin obs → σ × 4.00  → capped por prior σ
+#
+# El cap al prior asegura que nunca podemos ser MÁS inciertos que si no
+# tuviéramos ningún dato — el conocimiento aprendido no desaparece del todo.
+_TIME_DECAY_HALF_LIFE_DAYS = 21.0
+
 # ── Priors por defecto (amplios, no informados) ────────────────────────────────
 # Se usan cuando no hay ningún dato del usuario.
 _PRIORS = {
@@ -170,9 +188,49 @@ def _obs_sigma_for_quality(param_name: str, quality: float) -> float:
     return max(base / 3.0, obs_sigma)
 
 
+def _apply_time_decay(
+    state: ParameterState,
+    last_updated: Optional[datetime],
+    param_name: str,
+) -> ParameterState:
+    """
+    Infla σ proporcionalmente al tiempo desde la última actualización.
+
+    Si el parámetro no se ha actualizado en mucho tiempo, la incertidumbre
+    crece — el modelo reconoce que "hace rato que no confirmamos esto".
+
+    Solo infla si han pasado más de 2 días (evita ruido en runs normales).
+    Cap al σ del prior: el conocimiento aprendido no desaparece del todo.
+    """
+    if last_updated is None or state.n_obs == 0:
+        return state  # sin historial, ya usamos prior con σ amplio
+
+    days_elapsed = (datetime.utcnow() - last_updated).total_seconds() / 86400.0
+    if days_elapsed < 2.0:
+        return state  # reciente → sin cambios
+
+    # σ_eff = σ_stored × 2^(días / half_life)
+    inflation    = 2.0 ** (days_elapsed / _TIME_DECAY_HALF_LIFE_DAYS)
+    sigma_inflated = state.sigma * inflation
+
+    # Cap: no superar el prior (máxima incertidumbre posible = "no sé nada")
+    prior_sigma  = _PRIORS.get(param_name, {"sigma": 20.0})["sigma"]
+    sigma_capped = min(prior_sigma, sigma_inflated)
+
+    if sigma_capped <= state.sigma + 0.01:
+        return state  # inflación despreciable
+
+    return ParameterState(
+        mu=state.mu,
+        sigma=round(sigma_capped, 3),
+        n_obs=state.n_obs,
+    )
+
+
 def load_parameter(param_name: str, context_block: int = -1) -> ParameterState:
     """
     Carga el parámetro desde la DB.
+    Aplica forgetting factor temporal: σ crece si el parámetro es stale.
     Si no existe, devuelve el prior por defecto.
     """
     from models import PMMParameter
@@ -183,7 +241,10 @@ def load_parameter(param_name: str, context_block: int = -1) -> ParameterState:
     ).first()
 
     if row:
-        return ParameterState(mu=row.mu, sigma=row.sigma, n_obs=row.n_obs)
+        state = ParameterState(mu=row.mu, sigma=row.sigma, n_obs=row.n_obs)
+        # Inflar σ si hace mucho que no se actualiza (metabolismo deriva)
+        state = _apply_time_decay(state, row.last_updated, param_name)
+        return state
 
     # Prior no informado
     prior = _PRIORS.get(param_name, {"mu": 50.0, "sigma": 20.0})
