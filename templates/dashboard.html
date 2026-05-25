@@ -565,6 +565,7 @@
       <span>Tu día</span>
     </div>
     <div class="daily-brief-meta">
+      <span id="daily-brief-time" class="daily-brief-time"></span>
       <span id="daily-brief-confidence" class="daily-brief-conf"></span>
       <button id="daily-brief-refresh" type="button"
               onclick="refreshDailyBrief()"
@@ -2003,23 +2004,27 @@ a.insight-chip:hover {
   function renderDailyBrief(d) {
     const card = document.getElementById('daily-brief-card');
     if (!card) return;
-    document.getElementById('daily-brief-text').textContent = d.narrative;
+    const textEl = document.getElementById('daily-brief-text');
+    if (textEl) textEl.textContent = d.narrative;
 
     // Timestamp legible
-    if (d.generated_at) {
+    const timeEl = document.getElementById('daily-brief-time');
+    if (timeEl && d.generated_at) {
       const ts = new Date(d.generated_at);
-      document.getElementById('daily-brief-time').textContent =
+      timeEl.textContent =
         `generado ${ts.toLocaleString('es', {day:'2-digit', month:'short',
                                               hour:'2-digit', minute:'2-digit'})}`;
     }
 
     // Confidence badge
     const confEl = document.getElementById('daily-brief-confidence');
-    const c = d.confidence || 0;
-    confEl.classList.remove('conf-low', 'conf-mid');
-    if (c < 0.5)       { confEl.classList.add('conf-low'); confEl.textContent = `conf ${(c*100).toFixed(0)}%`; }
-    else if (c < 0.8)  { confEl.classList.add('conf-mid'); confEl.textContent = `conf ${(c*100).toFixed(0)}%`; }
-    else               { confEl.textContent = `conf ${(c*100).toFixed(0)}%`; }
+    if (confEl) {
+      const c = d.confidence || 0;
+      confEl.classList.remove('conf-low', 'conf-mid');
+      if (c < 0.5)       { confEl.classList.add('conf-low'); confEl.textContent = `conf ${(c*100).toFixed(0)}%`; }
+      else if (c < 0.8)  { confEl.classList.add('conf-mid'); confEl.textContent = `conf ${(c*100).toFixed(0)}%`; }
+      else               { confEl.textContent = `conf ${(c*100).toFixed(0)}%`; }
+    }
 
     // Métricas detalladas (collapsible)
     const sm = d.summary || {};
