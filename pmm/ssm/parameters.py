@@ -45,7 +45,12 @@ class SSMParameters:
     """
 
     # ── 1. Process noise diagonal (Q per state per minute) ──
-    Q_G:       float = 4.0       # mg/dL²·min⁻¹  — process noise glucose
+    # NOTA: Q_G bajado de 4.0 → 2.0 tras bias_fix_v4 (8 combos, 14d replay).
+    # v3 había sobredisperso (var_z=0.38, target [0.8,1.2]). Q_G=2.0 da
+    # var_z=1.055 ✓, IC50=0.517 ✓, IC90=0.873 ✓, composite=0.501.
+    # Tradeoff: mean_z en replay = -0.475 (vs -0.162 en producción v3).
+    # Se monitorea producción 48h; si mean_z se mantiene < |0.25| → keeper.
+    Q_G:       float = 2.0       # mg/dL²·min⁻¹  — process noise glucose (tuned v4)
     Q_IOB:     float = 0.001     # U²·min⁻¹
     Q_IOB_EFF: float = 0.001
     Q_COB1:    float = 0.1       # g²·min⁻¹
