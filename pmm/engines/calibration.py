@@ -29,8 +29,11 @@ from typing import Optional
 
 logger = logging.getLogger("pmm.calibration")
 
-# Ventana de búsqueda de nuevos episodios (para runs incrementales)
-INCREMENTAL_WINDOW_HOURS = 4
+# Ventana de búsqueda de nuevos episodios (para runs incrementales).
+# Usamos días enteros porque las queries downstream truncan con int().
+# Con 7 días tenemos margen ante caídas del scheduler (multi-día) y la
+# deduplicación por source_id asegura que no se reprocesa nada.
+INCREMENTAL_WINDOW_DAYS = 7
 
 # Días de historia para bootstrap inicial
 BOOTSTRAP_DAYS = 180
@@ -107,7 +110,7 @@ def run_calibration(force_bootstrap: bool = False) -> dict:
             stats["reset_params"] = n_params
             stats["reset_obs"]    = n_obs
 
-        days = BOOTSTRAP_DAYS if is_bootstrap else INCREMENTAL_WINDOW_HOURS / 24 * 2
+        days = BOOTSTRAP_DAYS if is_bootstrap else INCREMENTAL_WINDOW_DAYS
 
         # ── ISF: episodios de corrección ───────────────────────────────────────
         logger.info(f"PMM calibration: {'bootstrap' if is_bootstrap else 'incremental'}, "
