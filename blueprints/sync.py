@@ -1376,7 +1376,7 @@ def api_predict_glucose():
                     g_pred_60     = float(ssm_preds[60].g_pred),
                     sigma_30      = float(ssm_preds[30].sigma),
                     sigma_60      = float(ssm_preds[60].sigma),
-                    model_version = "ssm_v0_ukf6_tuned2",
+                    model_version = "ssm_v0_ukf6_basal",
                     iob           = iob_now,
                     cob           = cob_now,
                     roc           = roc,
@@ -1415,7 +1415,7 @@ def api_predict_glucose():
                     # Innovations granulares para whiteness tests
                     if ssm_result.innovations:
                         log_filter_innovations(
-                            model_version = "ssm_v0_ukf6_tuned2",
+                            model_version = "ssm_v0_ukf6_basal",
                             run_at        = now,
                             innovations   = ssm_result.innovations,
                         )

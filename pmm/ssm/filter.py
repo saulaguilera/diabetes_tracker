@@ -37,6 +37,7 @@ from pmm.ssm.state       import (
     CGM_MARD_PCT, CGM_NOISE_FLOOR,
 )
 from pmm.ssm.dynamics    import step, StepInputs, k_a_for_meal_category
+from pmm.ssm.basal_input import load_basal_doses, compute_basal_eff
 from pmm.ssm.observation import h_cgm, R_cgm, gating_outlier
 from pmm.ssm.ukf         import UKF
 
@@ -190,6 +191,11 @@ def run_filter(
     events = _load_events(now, hours=hours)
     cgm_events = [e for e in events if e.kind == "cgm"]
 
+    # Hito 7: cargar historial de dosis basales (Toujeo) para computar
+    # I_basal_eff(t) determinísticamente en cada step. Lookback amplio
+    # (~5 days) cubre el efecto residual de cualquier dosis pasada.
+    basal_doses = load_basal_doses(now)
+
     if not cgm_events:
         return FilterResult(
             x=np.zeros(DIM_X), P=np.eye(DIM_X),
@@ -246,13 +252,21 @@ def run_filter(
             # Gap grande — interpolar con un step largo pero inflar Q
             dt_min = min(dt_min, 60.0)
 
-        # Inputs durante el step (no incluyen impulses todavía)
+        # Inputs durante el step (no incluyen impulses todavía).
+        # i_basal_eff computado al INICIO del step (t_prev) — cuasi-constante
+        # durante el step (depot half-life ~20h ≫ dt típico ≤ 5min).
+        i_basal_eff = compute_basal_eff(
+            t_prev, basal_doses,
+            K_depot=p.K_DEPOT_BASAL, K_pi=p.K_PI, K_ie=p.K_IE,
+            F_bio=p.F_BIO_BASAL,
+        )
         u = StepInputs(
             bolus_U=0.0, meal_g=0.0,
             k_a=k_a_for_meal_category(None,
                 pmm_speed=(pmm_speed_factors or {}).get("MED", 1.0)),
             icr=icr_for_meals,
             s_i_target=s_i_target,
+            i_basal_eff=i_basal_eff,
             drift_factor=drift_factor,
         )
 
@@ -316,9 +330,15 @@ def run_filter(
     # Avanzar el filter hasta `now` si quedó atrás
     dt_final = (now - t_prev).total_seconds() / 60.0
     if dt_final > 0.1:
+        i_basal_eff_final = compute_basal_eff(
+            t_prev, basal_doses,
+            K_depot=p.K_DEPOT_BASAL, K_pi=p.K_PI, K_ie=p.K_IE,
+            F_bio=p.F_BIO_BASAL,
+        )
         u_final = StepInputs(
             bolus_U=0.0, meal_g=0.0, k_a=k_a_for_meal_category(None),
             icr=icr_for_meals, s_i_target=s_i_target,
+            i_basal_eff=i_basal_eff_final,
             drift_factor=drift_factor,
         )
         dt_cap = min(dt_final, 60.0)
@@ -441,8 +461,13 @@ def forward_predict(
     ukf.x = result.x.copy()
     ukf.P = result.P.copy()
 
+    # Hito 7: cargar dosis basales para forward — la basal sigue actuando
+    # durante el horizonte (peak ~12h post-dosis), su efecto NO es desprecible
+    # en horizontes de 30-60 min.
+    basal_doses = load_basal_doses(result.last_ts)
+
     # Inputs del horizonte (sin nuevos boluses/meals — predicción "as is")
-    u = StepInputs(
+    u_template = StepInputs(
         bolus_U=0.0, meal_g=0.0,
         k_a=k_a_for_meal_category(None),
         icr=icr_for_meals,
@@ -464,6 +489,14 @@ def forward_predict(
             h_now = targets.pop(0)
             preds[h_now] = _snapshot_prediction(ukf, h_now)
             continue
+        # Recomputar I_basal_eff en cada step (varía suavemente con t_sim)
+        t_step = result.last_ts + timedelta(minutes=t_sim)
+        i_basal = compute_basal_eff(
+            t_step, basal_doses,
+            K_depot=p.K_DEPOT_BASAL, K_pi=p.K_PI, K_ie=p.K_IE,
+            F_bio=p.F_BIO_BASAL,
+        )
+        u = StepInputs(**{**u_template.__dict__, "i_basal_eff": i_basal})
         ukf.predict(fx=lambda x: step(x, u, dt, params=p), Q=_Q_for_dt(dt, params=p))
         t_sim += dt
         if abs(t_sim - targets[0]) < 1e-6:

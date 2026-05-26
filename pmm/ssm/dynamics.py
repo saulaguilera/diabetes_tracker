@@ -69,6 +69,13 @@ class StepInputs:
     exercise_drop_rate: float = 0.0  # mg/dL/min de drop por ejercicio
     ex_sensitivity_mult: float = 1.0  # multiplicador del efecto insulínico
 
+    # Insulina basal efectiva intersticial (U activas) — input determinístico
+    # computado por basal_input.compute_basal_eff() desde el historial de
+    # dosis Toujeo. Se suma a IOB_eff en la ecuación de acción insulínica.
+    # Cuasi-constante durante un step típico (Δt ≤ 5min) porque K_DEPOT_BASAL
+    # es muy chico (half-life depot ~20h).
+    i_basal_eff:   float = 0.0     # U activas en intersticial
+
     # Para predicción forward: nuestro multiplicador del SSM mismo
     drift_factor:  float = 1.0     # acoplado al CUSUM (resistance/sensitivity)
 
@@ -110,7 +117,10 @@ def _flow(x: np.ndarray, u: StepInputs, params=None) -> np.ndarray:
     dCOB2    =  u.k_a * COB1 - kg * COB2
 
     # ── Glucose dynamics ──
-    insulin_effect = S_I * IOB_eff * kact * u.ex_sensitivity_mult / max(0.1, u.drift_factor)
+    # Hito 7: basal Toujeo modelada como I_basal_eff (input determinístico).
+    # Se suma a IOB_eff porque biológicamente actúan idéntico en intersticial.
+    total_insulin_active = IOB_eff + u.i_basal_eff
+    insulin_effect = S_I * total_insulin_active * kact * u.ex_sensitivity_mult / max(0.1, u.drift_factor)
     carb_effect    = (kg * COB2) * (S_I / max(1.0, u.icr))
 
     nim_uptake = knim * max(0.0, G - 80.0)
@@ -161,7 +171,8 @@ def step(
     n_sub = max(1, int(np.ceil(dt_min / substep_min)))
     h = dt_min / n_sub
 
-    # Inputs durante los substeps NO incluyen los impulses (ya aplicados)
+    # Inputs durante los substeps NO incluyen los impulses (ya aplicados).
+    # i_basal_eff sí se propaga — es cuasi-constante en el step.
     u_cont = StepInputs(
         bolus_U=0.0, meal_g=0.0,
         k_a=u.k_a, icr=u.icr,
@@ -169,6 +180,7 @@ def step(
         dawn_rate=u.dawn_rate,
         exercise_drop_rate=u.exercise_drop_rate,
         ex_sensitivity_mult=u.ex_sensitivity_mult,
+        i_basal_eff=u.i_basal_eff,
         drift_factor=u.drift_factor,
     )
 

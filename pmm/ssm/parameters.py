@@ -77,15 +77,29 @@ class SSMParameters:
     LAMBDA_SI:  float = 1.0/(5*24*60)   # mean-reversion ~5 días
     S_I_TARGET: float = 45.0            # target del prior populacional
     # Endogenous glucose
-    # NOTA: EGP_BASAL bajado de 0.55 → 0.20 tras 3 iteraciones de tuning.
-    # En cada experimento el óptimo tocó el borde inferior — el modelo pide
-    # menos producción endógena, probablemente compensando insulina basal
-    # no modelada en SSM v0 (limitación estructural, no de hyperparams).
-    # Mejora composite +125% acumulado vs default original (0.21 → 0.47).
-    EGP_BASAL:        float = 0.20      # mg/dL/min  (tuned v3 — era 0.55)
+    # NOTA Hito 7: EGP_BASAL subido 0.20 → 0.40 al modelar la basal Toujeo
+    # explícitamente. El 0.20 anterior estaba compensando la basal no modelada
+    # (Mejora composite +125% acumulado vs default original 0.55 → 0.20 venía
+    # de aquí). Ahora que I_basal_eff aporta su acción explícita, EGP vuelve
+    # hacia el rango fisiológico. 0.40 elegido por balance: en steady-state
+    # con 10U/día Toujeo, I_basal_eff ≈ 0.37 U → insulin_effect ≈ 0.185
+    # mg/dL/min. Para preservar dG/dt comparable al modelo previo en fasting,
+    # EGP_BASAL_new ≈ 0.20 + 0.185 = 0.385 ≈ 0.40. No subir a 0.55 (textbook)
+    # hasta validar con datos reales del nuevo modelo.
+    EGP_BASAL:        float = 0.40      # mg/dL/min  (v5 — basal explícita)
     K_NIM_BASAL:      float = 0.0035    # /min
     RENAL_THRESHOLD:  float = 180.0
     K_RENAL:          float = 0.012
+
+    # ── 3b. Basal insulin pharmacokinetics (Toujeo U-300) ──
+    # Half-life del depot subcutáneo glargine U-300: ~20h literatura clínica.
+    # K_DEPOT_BASAL = ln(2) / (20h × 60min) ≈ 0.000578 /min
+    # Modelado como INPUT DETERMINÍSTICO (no estado del UKF): se computa con
+    # kernel cerrado 3-exponencial (depot→plasma→intersticial) sobre el
+    # historial de dosis. Reusa K_PI y K_IE del rapid (misma biología).
+    # F_BIO_BASAL: bioavailability sistémica ~95% glargine U-300.
+    K_DEPOT_BASAL: float = 0.000578     # /min — depot release rate
+    F_BIO_BASAL:   float = 0.95         # fraction (0–1)
 
     # ── 4. Covariance regularization ──
     PSD_JITTER:    float = 1e-6    # Cholesky stabilization
