@@ -1445,12 +1445,29 @@ def api_predict_glucose():
         # ── Accuracy del modelo (últimas N predicciones resueltas) ────────
         accuracy = get_model_accuracy(n=20)
 
-        # Confianza: baja si sin ROC, sin ISF personal, o con pocos datos
+        # ── Confianza legacy (backward compat) ───────────────────────────
         confianza_baja = []
         if roc is None:                 confianza_baja.append("sin tendencia CGM")
         if n_isf < 5:                   confianza_baja.append(f"ISF con solo {n_isf} muestras")
         if icr is None:                 confianza_baja.append("sin ICR")
         if not activities:              confianza_baja.append("ejercicio desconocido")
+
+        # ── Unified Confidence Report (Fase 2) ────────────────────────────────
+        # Pasa sigma_G del SSM si está disponible para sharpness más preciso
+        _confidence_report_data = None
+        try:
+            from safety.confidence import compute_confidence
+            _cr_kwargs = {}
+            if _ssm_pred:
+                # sigma del SSM shadow ya computado
+                _s30 = (_ssm_pred.get("+30min") or {}).get("sigma")
+                if _s30:
+                    _cr_kwargs["sigma_g"] = float(_s30)
+                _cr_kwargs["n_cgm_used"] = (_ssm_pred.get("filter") or {}).get("n_cgm")
+            _cr = compute_confidence(now=now, **_cr_kwargs)
+            _confidence_report_data = _cr.to_dict()
+        except Exception:
+            pass
 
         return jsonify({
             "ok":             True,
@@ -1467,6 +1484,7 @@ def api_predict_glucose():
             "predictions":    predictions,
             "ssm_shadow":     _ssm_pred,    # SSM v0 corriendo en shadow (informativo)
             "confianza_baja": confianza_baja,
+            "confidence":     _confidence_report_data,   # unified confidence layer
             "bias":           bias,
             "accuracy":       accuracy,
             "dawn": {

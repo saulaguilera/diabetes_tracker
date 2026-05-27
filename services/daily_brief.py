@@ -429,6 +429,19 @@ def compute_daily_summary(now: Optional[datetime] = None) -> DailyMetabolicSumma
     max_gap = _max_gap(data["cgm"])
     conf, completeness = _compute_confidence(n, max_gap)
 
+    # Unified confidence (Fase 2 — enriquece el brief sin romper la lógica existente)
+    _unified_conf = None
+    try:
+        from safety.confidence import compute_confidence
+        _ucr = compute_confidence(
+            now=now,
+            n_readings_6h=min(n, 24),   # proxy: 6h ~ 1/4 de las 24h
+            max_gap_min=max_gap,
+        )
+        _unified_conf = _ucr.to_dict()
+    except Exception:
+        pass
+
     stats_24h = _glucose_stats(data["cgm"])
     stats_ov  = _glucose_stats(data["cgm_overnight"])
     tir       = _tir_breakdown(data["cgm"])
@@ -460,6 +473,7 @@ def compute_daily_summary(now: Optional[datetime] = None) -> DailyMetabolicSumma
         "confidence":          conf,
         "data_completeness":   completeness,
         "max_gap_minutes":     max_gap,
+        "unified_confidence":  _unified_conf,   # unified safety layer (Fase 2)
         "overnight_n":               stats_ov["n"],
         "overnight_mean_glucose":    stats_ov["mean"],
         "overnight_min_glucose":     stats_ov["min"],

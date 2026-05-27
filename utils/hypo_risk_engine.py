@@ -3,34 +3,28 @@ utils/hypo_risk_engine.py
 ──────────────────────────
 Hito 8 — Motor probabilístico de riesgo de hipoglucemia nocturna.
 
-Convierte el conocimiento del SSM en una alerta preventiva clara,
-calmada y accionable. No reemplaza al médico: da contexto cuantitativo
-para que el usuario tome decisiones informadas.
+Ahora integrado con el Unified Confidence System (safety/confidence.py)
+y la capa de narrativa humana (safety/narrative.py).
 
-Diseño
-──────
-- Usa SSM forward_predict() con horizontes 30/60/120/240/480 min.
-- Construye un perfil de glucemia proyectada a partir del estado del UKF.
-- Calcula P(G<70) y P(G<55) por horizonte sumando distribuciones normales.
-- Score compuesto: 0.45·p70 + 0.25·p55 + 0.15·depth + 0.10·roc + 0.05·overlap
-- Severidades: low (<0.15), moderate (0.15-0.30), high (0.30-0.50), critical (>0.50)
-- Logging en HypoRiskAudit (audit trail para revisión clínica post-evento).
+El motor:
+  1. Computa confianza unificada antes de evaluar riesgo
+  2. Aplica degradación elegante (silent/observe_only/conservative/full)
+  3. Ajusta thresholds de alerta según hora del día y confianza
+  4. Genera factores en lenguaje humano (no técnico)
+  5. Suprime alertas si no tiene suficiente certeza
 
-Integración
-───────────
-    from utils.hypo_risk_engine import assess_nocturnal_hypo_risk
+Thresholds circadianos
+──────────────────────
+  nocturno (22:00-06:00): p_hypo_70 > 0.30 → alerta
+  diurno  (06:00-22:00): p_hypo_70 > 0.50 → alerta
+  + boost si confianza baja: +0.15 adicional al threshold
 
-    risk = assess_nocturnal_hypo_risk(
-        current_glucose=176,
-        roc=-0.5,
-        proposed_bolus=2.0,
-        current_iob=0.3,
-        current_basal_effect=0.41,
-        carbs_on_board=0.0,
-    )
-    if risk.p_hypo_70 > 0.30:
-        # mostrar modal preventivo
-        ...
+Degradation flow
+────────────────
+  confidence.silent        → no alertar, devolver "datos insuficientes"
+  confidence.observe_only  → no alertar, solo estado
+  confidence.conservative  → threshold +0.15
+  confidence.full          → threshold base circadiano
 """
 from __future__ import annotations
 
@@ -68,6 +62,12 @@ SEV_HIGH     = 0.50
 class HypoRiskAssessment:
     """
     Resultado completo del análisis de riesgo de hipoglucemia.
+
+    Campos nuevos (Fase 2/3):
+      confidence_report  : ConfidenceReport unificado
+      narrative          : HypoWarningText con lenguaje humano
+      alert_suppressed   : True si el sistema decidió no alertar
+      alert_threshold    : threshold efectivo usado (circadiano + confianza)
     """
     # ── Core probabilístico ───────────────────────────────────────────────────
     risk_score:             float           # 0-1 compuesto
@@ -79,14 +79,13 @@ class HypoRiskAssessment:
     risk_window_start:      Optional[datetime] = None
     risk_window_end:        Optional[datetime] = None
 
-    # ── Factores contribuyentes ────────────────────────────────────────────────
+    # ── Factores contribuyentes (lenguaje técnico, para logs/debug) ───────────
     contributing_factors:   list[str] = field(default_factory=list)
     confidence:             float = 0.5         # 0-1 confianza en el modelo
     severity:               str   = "low"       # low/moderate/high/critical
 
     # ── Detalle por horizonte ─────────────────────────────────────────────────
     horizon_detail:         dict = field(default_factory=dict)
-    # {30: {g_pred, sigma, p70, p55}, 60: ..., ...}
 
     # ── Metadata ─────────────────────────────────────────────────────────────
     assessed_at:            Optional[datetime] = None
@@ -94,8 +93,14 @@ class HypoRiskAssessment:
     ssm_available:          bool = False
     fallback_used:          bool = False
 
+    # ── Confianza unificada + narrativa humana (Fase 2/3) ─────────────────────
+    confidence_report:      Optional[object] = None   # ConfidenceReport
+    narrative:              Optional[object] = None   # HypoWarningText
+    alert_suppressed:       bool = False
+    alert_threshold:        float = 0.30
+
     def to_dict(self) -> dict:
-        return {
+        base = {
             "risk_score":            round(self.risk_score, 3),
             "p_hypo_70":             round(self.p_hypo_70, 3),
             "p_hypo_55":             round(self.p_hypo_55, 3),
@@ -112,7 +117,16 @@ class HypoRiskAssessment:
             "proposed_bolus":        round(self.proposed_bolus, 2),
             "ssm_available":         self.ssm_available,
             "fallback_used":         self.fallback_used,
+            "alert_suppressed":      self.alert_suppressed,
+            "alert_threshold":       round(self.alert_threshold, 2),
         }
+        # Incluir ConfidenceReport si está disponible
+        if self.confidence_report is not None:
+            base["confidence_report"] = self.confidence_report.to_dict()
+        # Incluir narrativa humana si está disponible
+        if self.narrative is not None and not self.alert_suppressed:
+            base["narrative"] = self.narrative.to_dict()
+        return base
 
 
 # ── Motor principal ────────────────────────────────────────────────────────────
@@ -153,7 +167,46 @@ def assess_nocturnal_hypo_risk(
     """
     now = timestamp or datetime.utcnow()
 
-    # ── 1. Obtener posterior del SSM ──────────────────────────────────────────
+    # ── 1. Confianza unificada (Fase 2) ───────────────────────────────────────
+    # Cargar ConfidenceReport antes de cualquier predicción para poder
+    # degradar elegantemente si los datos son insuficientes.
+    confidence_report = _compute_confidence_report(
+        filter_result=_filter_result,
+        now=now,
+    )
+
+    # ── 2. Threshold circadiano + ajuste por confianza ────────────────────────
+    is_nocturnal = (now.hour >= 22 or now.hour < 6)
+    alert_threshold_base = 0.30 if is_nocturnal else 0.50
+    alert_threshold = alert_threshold_base + confidence_report.alert_threshold_boost()
+
+    # Si el sistema debe silenciarse, devolver assessment vacío inmediatamente
+    if confidence_report.suppress_alerts():
+        from safety.narrative import render_hypo_warning
+        suppressed_narrative = render_hypo_warning(
+            _empty_assessment(now, proposed_bolus),
+            confidence_report, now,
+        )
+        suppressed = HypoRiskAssessment(
+            risk_score=0.0, p_hypo_70=0.0, p_hypo_55=0.0,
+            min_predicted_glucose=current_glucose,
+            min_glucose_eta_min=0,
+            contributing_factors=[confidence_report.explanation],
+            confidence=round(confidence_report.score, 2),
+            severity="low",
+            assessed_at=now,
+            proposed_bolus=proposed_bolus,
+            ssm_available=False,
+            fallback_used=True,
+            confidence_report=confidence_report,
+            narrative=suppressed_narrative,
+            alert_suppressed=True,
+            alert_threshold=alert_threshold,
+        )
+        _log_audit(suppressed, current_glucose, roc, now)
+        return suppressed
+
+    # ── 3. Obtener posterior del SSM ──────────────────────────────────────────
     filter_result = _filter_result
     ssm_available = False
     fallback_used = False
@@ -183,11 +236,10 @@ def assess_nocturnal_hypo_risk(
         except Exception as exc:
             logger.warning("hypo_risk: SSM unavailable, using fallback — %s", exc)
             filter_result = None
-
     else:
         ssm_available = True
 
-    # ── 2. Forward predict con bolus propuesto ────────────────────────────────
+    # ── 4. Forward predict con bolus propuesto ────────────────────────────────
     horizon_detail: dict[int, dict] = {}
 
     if ssm_available and filter_result is not None:
@@ -207,34 +259,21 @@ def assess_nocturnal_hypo_risk(
             fallback_used = True
 
     if not ssm_available or not horizon_detail:
-        # Fallback: modelo lineal simple con incertidumbre creciente
         fallback_used = True
         horizon_detail = _fallback_linear_profile(
-            current_glucose=current_glucose,
-            roc=roc,
-            proposed_bolus=proposed_bolus,
-            current_iob=current_iob,
+            current_glucose=current_glucose, roc=roc,
+            proposed_bolus=proposed_bolus, current_iob=current_iob,
             current_basal_effect=current_basal_effect,
             carbs_on_board=carbs_on_board,
-            isf=isf,
-            icr=icr,
-            horizons_min=horizons_min,
-            now=now,
+            isf=isf, icr=icr, horizons_min=horizons_min, now=now,
         )
 
-    # ── 3. Extraer métricas clave ─────────────────────────────────────────────
+    # ── 5. Extraer métricas clave ─────────────────────────────────────────────
     p_hypo_70, p_hypo_55, g_min, eta_min = _extract_peak_risk(horizon_detail)
 
-    # ── 4. Score compuesto ────────────────────────────────────────────────────
-    # Componente de profundidad: cuánto baja el trough por debajo de 70 mg/dL
-    depth_component = max(0.0, (TROUGH_DEPTH_REF - g_min) / TROUGH_DEPTH_REF)
-    depth_component = min(1.0, depth_component)
-
-    # Componente ROC: tendencia bajista activa es señal de riesgo adicional
-    roc_component = max(0.0, -roc / 3.0)   # -3 mg/dL/min → 1.0
-    roc_component = min(1.0, roc_component)
-
-    # Overlap con ventana nocturna (22:00 - 06:00) si aplica
+    # ── 6. Score compuesto ────────────────────────────────────────────────────
+    depth_component   = min(1.0, max(0.0, (TROUGH_DEPTH_REF - g_min) / TROUGH_DEPTH_REF))
+    roc_component     = min(1.0, max(0.0, -roc / 3.0))
     overlap_component = _nocturnal_overlap(now, eta_min)
 
     risk_score = (
@@ -246,21 +285,15 @@ def assess_nocturnal_hypo_risk(
     )
     risk_score = min(1.0, max(0.0, risk_score))
 
-    # ── 5. Factores contribuyentes (texto legible) ────────────────────────────
+    # ── 7. Factores técnicos (para logs/audit) ────────────────────────────────
     factors = _explain_factors(
-        p_hypo_70=p_hypo_70,
-        p_hypo_55=p_hypo_55,
-        g_min=g_min,
-        roc=roc,
-        proposed_bolus=proposed_bolus,
-        current_iob=current_iob,
-        current_basal_effect=current_basal_effect,
-        carbs_on_board=carbs_on_board,
-        eta_min=eta_min,
-        overlap=overlap_component,
+        p_hypo_70=p_hypo_70, p_hypo_55=p_hypo_55, g_min=g_min, roc=roc,
+        proposed_bolus=proposed_bolus, current_iob=current_iob,
+        current_basal_effect=current_basal_effect, carbs_on_board=carbs_on_board,
+        eta_min=eta_min, overlap=overlap_component,
     )
 
-    # ── 6. Severidad ──────────────────────────────────────────────────────────
+    # ── 8. Severidad ──────────────────────────────────────────────────────────
     if risk_score >= SEV_HIGH:
         severity = "critical"
     elif risk_score >= SEV_MODERATE:
@@ -270,21 +303,38 @@ def assess_nocturnal_hypo_risk(
     else:
         severity = "low"
 
-    # ── 7. Ventana temporal de riesgo ─────────────────────────────────────────
-    trough_time = now + timedelta(minutes=eta_min) if eta_min > 0 else None
+    # ── 9. Temporal ───────────────────────────────────────────────────────────
+    trough_time       = now + timedelta(minutes=eta_min) if eta_min > 0 else None
     risk_window_start = now + timedelta(minutes=30)
     risk_window_end   = now + timedelta(minutes=max(480, eta_min + 60))
 
-    # ── 8. Confianza (baja con fallback, sube con más observaciones SSM) ──────
-    confidence = 0.75 if ssm_available else 0.45
+    # ── 10. Confianza legacy (backward compat) ────────────────────────────────
+    confidence_scalar = confidence_report.score
     if ssm_available and filter_result:
         n_used = getattr(filter_result, "n_cgm_used", 0)
-        if n_used >= 6:
-            confidence = 0.85
-        elif n_used >= 3:
-            confidence = 0.75
-        else:
-            confidence = 0.60
+        ssm_boost = min(0.10, n_used / 80.0)   # pequeño boost por historia
+        confidence_scalar = min(1.0, confidence_report.score + ssm_boost)
+
+    # ── 11. Narrativa humana (Fase 3) ─────────────────────────────────────────
+    # Construir assessment parcial para que render_hypo_warning() pueda
+    # acceder a los campos necesarios (bolus, factors, etc.)
+    _partial = _PartialAssessment(
+        proposed_bolus=proposed_bolus,
+        contributing_factors=factors,
+        p_hypo_70=round(p_hypo_70, 3),
+        p_hypo_55=round(p_hypo_55, 3),
+        min_predicted_glucose=round(g_min, 1),
+        projected_trough_time=trough_time,
+        min_glucose_eta_min=eta_min,
+        severity=severity,
+        ssm_available=ssm_available,
+    )
+    try:
+        from safety.narrative import render_hypo_warning
+        narrative = render_hypo_warning(_partial, confidence_report, now)
+    except Exception as exc:
+        logger.debug("hypo_risk: narrative generation failed — %s", exc)
+        narrative = None
 
     assessment = HypoRiskAssessment(
         risk_score=round(risk_score, 3),
@@ -296,19 +346,76 @@ def assess_nocturnal_hypo_risk(
         risk_window_start=risk_window_start,
         risk_window_end=risk_window_end,
         contributing_factors=factors,
-        confidence=round(confidence, 2),
+        confidence=round(confidence_scalar, 2),
         severity=severity,
         horizon_detail=horizon_detail,
         assessed_at=now,
         proposed_bolus=proposed_bolus,
         ssm_available=ssm_available,
         fallback_used=fallback_used,
+        confidence_report=confidence_report,
+        narrative=narrative,
+        alert_suppressed=False,
+        alert_threshold=round(alert_threshold, 2),
     )
 
-    # ── 9. Audit log ──────────────────────────────────────────────────────────
+    # ── 12. Audit log ─────────────────────────────────────────────────────────
     _log_audit(assessment, current_glucose, roc, now)
 
     return assessment
+
+
+# ── Helper: confidence report desde FilterResult ─────────────────────────────
+
+def _compute_confidence_report(filter_result, now: datetime):
+    """
+    Construye el ConfidenceReport pasando las señales del SSM cuando están
+    disponibles, y dejando que el sistema cargue el resto desde DB.
+    """
+    from safety.confidence import compute_confidence
+
+    kwargs: dict = {}
+
+    if filter_result is not None and not getattr(filter_result, "error", True):
+        import numpy as np
+        P = getattr(filter_result, "P", None)
+        if P is not None:
+            try:
+                from pmm.ssm.state import state_index
+                idx_g = state_index("G")
+                kwargs["sigma_g"]   = float(math.sqrt(max(0.0, float(P[idx_g, idx_g]))))
+                kwargs["cov_trace"] = float(np.trace(P))
+            except Exception:
+                pass
+        kwargs["n_cgm_used"] = getattr(filter_result, "n_cgm_used", None)
+
+    return compute_confidence(now=now, **kwargs)
+
+
+@dataclass
+class _PartialAssessment:
+    """
+    Subset de HypoRiskAssessment suficiente para render_hypo_warning().
+    Evita circularidad de importaciones.
+    """
+    proposed_bolus:        float
+    contributing_factors:  list
+    p_hypo_70:             float
+    p_hypo_55:             float
+    min_predicted_glucose: float
+    projected_trough_time: Optional[datetime]
+    min_glucose_eta_min:   int
+    severity:              str
+    ssm_available:         bool
+
+
+def _empty_assessment(now: datetime, proposed_bolus: float) -> "_PartialAssessment":
+    return _PartialAssessment(
+        proposed_bolus=proposed_bolus, contributing_factors=[],
+        p_hypo_70=0.0, p_hypo_55=0.0, min_predicted_glucose=0.0,
+        projected_trough_time=None, min_glucose_eta_min=0,
+        severity="low", ssm_available=False,
+    )
 
 
 # ── Forward predict con bolus ──────────────────────────────────────────────────
@@ -597,62 +704,74 @@ def _log_audit(
 # ── Helpers para el scheduler y para el modal UI ──────────────────────────────
 
 def should_alert(assessment: HypoRiskAssessment) -> bool:
-    """True si el assessment justifica mostrar una alerta al usuario."""
-    return assessment.p_hypo_70 > 0.30 or assessment.severity in ("high", "critical")
+    """
+    True si el assessment justifica mostrar una alerta al usuario.
+    Usa el threshold contextual (circadiano + confianza) calculado
+    durante el assessment, en lugar de un valor fijo.
+    """
+    if assessment.alert_suppressed:
+        return False
+    threshold = getattr(assessment, "alert_threshold", 0.30)
+    return assessment.p_hypo_70 > threshold or assessment.severity in ("high", "critical")
 
 
 def format_alert_message(assessment: HypoRiskAssessment, *, compact: bool = False) -> str:
     """
-    Genera el mensaje de alerta en tono calmado y accionable.
+    Genera el mensaje de alerta usando la narrativa humana cuando está disponible,
+    o el formato técnico como fallback.
     compact=True → una sola línea para notificaciones push.
     """
-    p_pct = round(assessment.p_hypo_70 * 100)
-    g_min = round(assessment.min_predicted_glucose)
-    eta   = assessment.min_glucose_eta_min
+    # ── Usar narrativa humana si está disponible ──────────────────────────────
+    narrative = getattr(assessment, "narrative", None)
 
     if compact:
+        if narrative and not getattr(narrative, "suppress", False):
+            prob = narrative.probability_phrase
+            trough = narrative.trough_phrase
+            # Truncar para notificación push
+            return f"{narrative.title}. {prob} {trough}"[:200]
+        # Fallback compacto técnico
+        p_pct = round(assessment.p_hypo_70 * 100)
+        g_min = round(assessment.min_predicted_glucose)
+        eta   = assessment.min_glucose_eta_min
         return (
             f"Riesgo de baja glucemia: {p_pct}% de probabilidad de llegar a "
             f"<70 mg/dL en ~{eta} min (mín proyectado: {g_min} mg/dL)"
         )
 
+    # ── Full message con narrativa humana ─────────────────────────────────────
+    if narrative and not getattr(narrative, "suppress", False):
+        lines = [f"**{narrative.title}**", ""]
+        if narrative.probability_phrase:
+            lines.append(narrative.probability_phrase)
+        if narrative.trough_phrase:
+            lines.append(narrative.trough_phrase)
+        lines.append("")
+        if narrative.factors:
+            lines.append("Por qué:")
+            for f in narrative.factors:
+                lines.append(f"  • {f}")
+            lines.append("")
+        if narrative.suggestion:
+            lines.append(narrative.suggestion)
+        if narrative.confidence_note:
+            lines.append(f"\n_{narrative.confidence_note}_")
+        return "\n".join(lines)
+
+    # ── Fallback técnico (sin narrativa) ──────────────────────────────────────
+    p_pct = round(assessment.p_hypo_70 * 100)
+    g_min = round(assessment.min_predicted_glucose)
     sev_label = {
-        "low":      "Riesgo bajo",
-        "moderate": "Riesgo moderado",
-        "high":     "Riesgo elevado",
-        "critical": "Riesgo crítico",
+        "low": "Riesgo bajo", "moderate": "Riesgo moderado",
+        "high": "Riesgo elevado", "critical": "Riesgo crítico",
     }.get(assessment.severity, "Riesgo")
 
-    lines = [
-        f"**{sev_label} de hipoglucemia nocturna**",
-        "",
-        f"El modelo proyecta una probabilidad del **{p_pct}%** de que la glucemia "
-        f"llegue a menos de 70 mg/dL en las próximas horas.",
-        f"Mínimo proyectado: **{g_min} mg/dL** hacia las "
-        f"{assessment.projected_trough_time.strftime('%H:%M') if assessment.projected_trough_time else '?'}",
-        "",
-    ]
+    lines = [f"**{sev_label} de hipoglucemia nocturna**", "",
+             f"Probabilidad estimada: {p_pct}% de llegar a <70 mg/dL.",
+             f"Mínimo proyectado: {g_min} mg/dL.", ""]
 
     if assessment.contributing_factors:
-        lines.append("Factores que contribuyen:")
-        for f in assessment.contributing_factors[:4]:
+        for f in assessment.contributing_factors[:3]:
             lines.append(f"  • {f}")
-        lines.append("")
-
-    if assessment.severity == "critical":
-        lines.append(
-            "Considerá reducir el bolo, agregar una colación antes de dormir "
-            "o revisar la dosis de basal con tu médico."
-        )
-    elif assessment.severity == "high":
-        lines.append(
-            "Considerá tomar una colación pequeña (10-15g de carbohidratos) "
-            "o reducir el bolo propuesto."
-        )
-    else:
-        lines.append(
-            "Mantené una colación disponible y seteá una alarma de CGM "
-            "en 70 mg/dL por si acaso."
-        )
 
     return "\n".join(lines)
