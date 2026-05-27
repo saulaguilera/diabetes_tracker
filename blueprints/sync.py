@@ -134,6 +134,23 @@ def _do_libre_sync(email: str, password: str) -> dict:
         except Exception:
             pass
 
+        # ── Background predictor: corre el SSM y guarda predicción 30/60min
+        #    en CADA sync (cada ~5 min). Antes sólo se generaban predicciones
+        #    al entrar a /calcular → el bench tenía cobertura mínima y daba
+        #    HYPO_RECALL=0 sin que el modelo hubiera sido evaluado.
+        #    NO toca el SSM ni sus ecuaciones — sólo lo invoca más seguido.
+        try:
+            from services.background_predictor import run_and_save_ssm_prediction
+            _bg = run_and_save_ssm_prediction()
+            if _bg.get("saved"):
+                import logging as _log
+                _log.getLogger("background_predictor").info(
+                    "SSM pred guardada: g30=%s g60=%s",
+                    _bg.get("g_pred_30"), _bg.get("g_pred_60"),
+                )
+        except Exception:
+            pass
+
         # Reajustar modelo AR si no se ha entrenado en las últimas 6h
         # (lazy: solo cuando llegan datos nuevos, máx 1 vez cada 6h)
         try:
