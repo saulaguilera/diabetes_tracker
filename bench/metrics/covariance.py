@@ -25,7 +25,7 @@ from typing import Optional
 # ─── Loader ──────────────────────────────────────────────────────────────
 
 def load_audits_with_cov(days: int = 14,
-                          model_version: str = "ssm_v0_ukf6") -> list:
+                          model_version: str = "ssm_v0_ukf6_basal") -> list:
     """Carga audits del SSM con datos de covarianza (skip si NULL)."""
     from models import PredictionAudit
     cutoff = datetime.now() - timedelta(days=days)

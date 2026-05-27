@@ -159,7 +159,7 @@ def evaluate_gates(metrics: dict) -> dict:
 
 def compute_gate_metrics(
     days:           int = 7,
-    model_version:  str = "ssm_v0_ukf6",
+    model_version:  str = "ssm_v0_ukf6_basal",
 ) -> dict:
     """
     Computa las 8 métricas necesarias para los gates desde la DB.
@@ -225,7 +225,7 @@ def compute_gate_metrics(
 def gates_rolling_history(
     days:           int = 14,
     window_days:    int = 7,
-    model_version:  str = "ssm_v0_ukf6",
+    model_version:  str = "ssm_v0_ukf6_basal",
 ) -> list[dict]:
     """
     Para cada día en la ventana, evalúa los gates sobre una rolling window

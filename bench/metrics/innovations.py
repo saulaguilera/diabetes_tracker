@@ -43,7 +43,7 @@ from typing import Optional
 
 def load_innovations(
     days:           int = 14,
-    model_version:  Optional[str] = "ssm_v0_ukf6",
+    model_version:  Optional[str] = "ssm_v0_ukf6_basal",
     exclude_rejected: bool = True,
 ) -> list[dict]:
     """

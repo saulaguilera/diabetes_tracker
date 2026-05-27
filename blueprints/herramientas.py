@@ -260,33 +260,6 @@ def api_calculadora_correccion():
         # es 0 cuando G < objetivo por la lógica de arriba.
         bolo_comida_exacto *= safety_factor
 
-    # ── Hito 8: riesgo de hipoglucemia nocturna ──────────────────────────────
-    # Se evalúa ANTES de confirmar el bolo — si el riesgo es alto, el UI
-    # muestra un modal preventivo calmado (no bloquea, informa).
-    hypo_risk_data = None
-    try:
-        from utils.hypo_risk_engine import (
-            assess_nocturnal_hypo_risk, should_alert
-        )
-        from pmm.ssm.basal_input import load_basal_doses, compute_basal_eff
-        _basal_doses = load_basal_doses(datetime.now())
-        _basal_eff   = compute_basal_eff(datetime.now(), _basal_doses)
-
-        hypo_risk = assess_nocturnal_hypo_risk(
-            current_glucose      = glucemia,
-            roc                  = roc_mgdl_min or 0.0,
-            proposed_bolus       = total_redondeado,
-            current_iob          = iob_actual,
-            current_basal_effect = _basal_eff,
-            carbs_on_board       = cob_actual,
-            icr                  = icr or 12.0,
-            isf                  = isf or 40.0,
-        )
-        hypo_risk_data = hypo_risk.to_dict()
-        hypo_risk_data["show_alert"] = should_alert(hypo_risk)
-    except Exception:
-        pass
-
     # ── Fat + protein split-bolus recommendation ─────────────────────────────
     split_rec = None
     if (fat or 0) > 0 or (protein or 0) > 0:
@@ -385,6 +358,33 @@ def api_calculadora_correccion():
     total_redondeado  = round(total_neto_exacto * 2) / 2  # redondear a 0.5U
 
     resultado_esperado = round(glucemia_proyectada - correccion_exacta * isf, 0)
+
+    # ── Hito 8: riesgo de hipoglucemia nocturna ──────────────────────────────
+    # Posición correcta: DESPUÉS de calcular total_redondeado, iob_actual,
+    # cob_actual y roc_mgdl_min. Antes aquí se usaban variables no definidas.
+    hypo_risk_data = None
+    try:
+        from utils.hypo_risk_engine import (
+            assess_nocturnal_hypo_risk, should_alert
+        )
+        from pmm.ssm.basal_input import load_basal_doses, compute_basal_eff
+        _basal_doses = load_basal_doses(datetime.now())
+        _basal_eff   = compute_basal_eff(datetime.now(), _basal_doses)
+
+        hypo_risk = assess_nocturnal_hypo_risk(
+            current_glucose      = glucemia,
+            roc                  = roc_mgdl_min or 0.0,
+            proposed_bolus       = total_redondeado,
+            current_iob          = iob_actual,
+            current_basal_effect = _basal_eff,
+            carbs_on_board       = cob_actual,
+            icr                  = icr or 12.0,
+            isf                  = isf or 40.0,
+        )
+        hypo_risk_data = hypo_risk.to_dict()
+        hypo_risk_data["show_alert"] = should_alert(hypo_risk)
+    except Exception:
+        pass
 
     # ── PMM Dose Range via IC 95% ─────────────────────────────────────────────
     # Using PMM uncertainty to compute the plausible dose interval.

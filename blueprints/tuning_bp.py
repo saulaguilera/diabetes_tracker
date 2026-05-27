@@ -112,7 +112,7 @@ def api_tuning_gates():
     try:
         days    = min(int(request.args.get("days", 7)), 90)
         rolling = min(int(request.args.get("rolling", 14)), 90)
-        model   = request.args.get("model", "ssm_v0_ukf6")
+        model   = request.args.get("model", "ssm_v0_ukf6_basal")
         from bench.tuning.promotion_gates import (
             compute_gate_metrics, evaluate_gates,
             gates_rolling_history, stability_summary,
@@ -199,7 +199,7 @@ def api_tuning_regimes():
     try:
         days    = min(int(request.args.get("days", 14)), 90)
         horizon = int(request.args.get("horizon", 30))
-        model   = request.args.get("model", "ssm_v0_ukf6")
+        model   = request.args.get("model", "ssm_v0_ukf6_basal")
         from bench.tuning.regimes import evaluate_regimes, regime_specific_diagnoses
         ev = evaluate_regimes(days=days, model_version=model, horizon_min=horizon)
         diags = regime_specific_diagnoses(ev)
@@ -247,7 +247,7 @@ def api_tuning_diagnostics():
     if err: return err
     try:
         days  = min(int(request.args.get("days", 14)), 90)
-        model = request.args.get("model", "ssm_v0_ukf6")
+        model = request.args.get("model", "ssm_v0_ukf6_basal")
         from bench.metrics.innovations    import load_innovations
         from bench.tuning.deep_diagnostics import deep_innovation_analysis
         inns = load_innovations(days=days, model_version=model)

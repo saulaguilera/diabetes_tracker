@@ -572,7 +572,7 @@ def main() -> int:
 
     sp = sub.add_parser("diagnostics", help="Deep innovation diagnostics")
     sp.add_argument("--days",  type=int, default=14)
-    sp.add_argument("--model", default="ssm_v0_ukf6")
+    sp.add_argument("--model", default="ssm_v0_ukf6_basal")
     sp.add_argument("--json",  action="store_true")
     sp.set_defaults(func=cmd_diagnostics)
 
@@ -585,7 +585,7 @@ def main() -> int:
     sp.add_argument("--days",    type=int, default=7)
     sp.add_argument("--rolling", type=int, default=0,
                     help="evaluar también rolling N días")
-    sp.add_argument("--model",   default="ssm_v0_ukf6")
+    sp.add_argument("--model",   default="ssm_v0_ukf6_basal")
     sp.add_argument("--json",    action="store_true")
     sp.set_defaults(func=cmd_gates)
 
@@ -603,7 +603,7 @@ def main() -> int:
     sp = sub.add_parser("regimes", help="Regime-specific failure analysis")
     sp.add_argument("--days",    type=int, default=14)
     sp.add_argument("--horizon", type=int, default=30)
-    sp.add_argument("--model",   default="ssm_v0_ukf6")
+    sp.add_argument("--model",   default="ssm_v0_ukf6_basal")
     sp.add_argument("--json",    action="store_true")
     sp.set_defaults(func=cmd_regimes)
 

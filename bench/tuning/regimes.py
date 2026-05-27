@@ -143,7 +143,7 @@ def _regime_verdict(mean_z, var_z, ic50, ic90) -> str:
 
 def evaluate_regimes(
     days:           int = 14,
-    model_version:  str = "ssm_v0_ukf6",
+    model_version:  str = "ssm_v0_ukf6_basal",
     horizon_min:    int = 30,
 ) -> dict:
     """

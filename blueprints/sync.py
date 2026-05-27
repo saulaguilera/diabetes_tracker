@@ -1410,7 +1410,7 @@ def api_predict_glucose():
                         log_prediction_audit(
                             predicted_at     = now,
                             horizon_min      = h_min,
-                            model_version    = "ssm_v0_ukf6",
+                            model_version    = "ssm_v0_ukf6_basal",  # consistente con save_prediction
                             mu               = float(pp.g_pred),
                             sigma            = float(pp.sigma),
                             p_hypo           = float(pp.p_hypo),
