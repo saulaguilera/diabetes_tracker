@@ -121,6 +121,19 @@ def _do_libre_sync(email: str, password: str) -> dict:
         except Exception:
             pass
 
+        # Resolver outcomes de alertas de hipoglucemia nocturna
+        # (comparar predicciones pasadas con lecturas CGM reales que acaban de llegar)
+        try:
+            from services.hypo_outcome_tracker import resolve_pending_hypo_audits
+            _ot = resolve_pending_hypo_audits()
+            if _ot["resolved"] > 0:
+                import logging as _log
+                _log.getLogger("hypo_outcome").info(
+                    "Resueltos %d audits: %s", _ot["resolved"], _ot["outcomes"]
+                )
+        except Exception:
+            pass
+
         # Reajustar modelo AR si no se ha entrenado en las últimas 6h
         # (lazy: solo cuando llegan datos nuevos, máx 1 vez cada 6h)
         try:
@@ -1975,6 +1988,66 @@ def api_analizar_foto():
 
 
 # ── Capa 2: Detección de patrones fisiológicos ────────────────────────────────
+@bp.route("/api/hypo-risk/performance", endpoint="api_hypo_risk_performance")
+def api_hypo_risk_performance():
+    """
+    Métricas de performance del motor de riesgo de hipoglucemia.
+
+    Query param: days (int, default 14) — ventana de tiempo a analizar.
+
+    Retorna:
+        {
+          ok, days, n_resolved, n_unresolved,
+          alerts_triggered, real_hypos_detected, missed_hypos, false_positives,
+          precision, recall, false_positive_rate, false_negative_rate,
+          mean_warning_lead_time_min, mean_confidence,
+          summary (texto narrativo), fatigue, computed_at
+        }
+    """
+    days = request.args.get("days", 14, type=int)
+    days = max(1, min(days, 90))
+
+    try:
+        from services.hypo_metrics import compute_hypo_performance
+        from services.hypo_outcome_tracker import get_alert_fatigue_score
+        from safety.narrative import render_hypo_performance_summary
+
+        metrics = compute_hypo_performance(days=days)
+        summary = render_hypo_performance_summary(metrics)
+        fatigue = get_alert_fatigue_score(days=days)
+
+        return jsonify({
+            "ok":      True,
+            **metrics,
+            "summary": summary,
+            "fatigue": fatigue,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/hypo-risk/dismiss", methods=["POST"], endpoint="api_hypo_risk_dismiss")
+def api_hypo_risk_dismiss():
+    """
+    Marca un HypoRiskAudit como ignorado por el usuario (alert fatigue tracking).
+
+    Body JSON: { "audit_id": int }
+
+    Retorna: { ok: bool }
+    """
+    data = request.get_json(silent=True) or {}
+    audit_id = data.get("audit_id")
+    if not audit_id:
+        return jsonify({"ok": False, "error": "audit_id requerido"}), 400
+
+    try:
+        from services.hypo_outcome_tracker import mark_alert_dismissed
+        ok = mark_alert_dismissed(int(audit_id))
+        return jsonify({"ok": ok})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @bp.route("/api/patrones/analisis", endpoint="api_patrones_analisis")
 def api_patrones_analisis():
     """

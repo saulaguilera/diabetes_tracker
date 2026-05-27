@@ -193,6 +193,30 @@ with app.app_context():
         # Hito 8: audit trail de alertas de hipoglucemia nocturna
         if "hypo_risk_audit" not in existing_tables:
             db.create_all()
+        else:
+            # Migración incremental: campos de outcome tracking + alert fatigue
+            hra_cols = [c["name"] for c in inspector.get_columns("hypo_risk_audit")]
+            for col_name, ddl in [
+                ("projected_trough_time", "ALTER TABLE hypo_risk_audit ADD COLUMN projected_trough_time DATETIME"),
+                ("alert_triggered",       "ALTER TABLE hypo_risk_audit ADD COLUMN alert_triggered BOOLEAN DEFAULT 0"),
+                ("resolved_confidence",   "ALTER TABLE hypo_risk_audit ADD COLUMN resolved_confidence REAL"),
+                ("resolved_at",           "ALTER TABLE hypo_risk_audit ADD COLUMN resolved_at DATETIME"),
+                ("outcome_class",         "ALTER TABLE hypo_risk_audit ADD COLUMN outcome_class VARCHAR(2)"),
+                ("true_positive",         "ALTER TABLE hypo_risk_audit ADD COLUMN true_positive BOOLEAN"),
+                ("false_positive",        "ALTER TABLE hypo_risk_audit ADD COLUMN false_positive BOOLEAN"),
+                ("false_negative",        "ALTER TABLE hypo_risk_audit ADD COLUMN false_negative BOOLEAN"),
+                ("true_negative",         "ALTER TABLE hypo_risk_audit ADD COLUMN true_negative BOOLEAN"),
+                ("actual_nadir",          "ALTER TABLE hypo_risk_audit ADD COLUMN actual_nadir REAL"),
+                ("actual_hypo_time",      "ALTER TABLE hypo_risk_audit ADD COLUMN actual_hypo_time DATETIME"),
+                ("prediction_error",      "ALTER TABLE hypo_risk_audit ADD COLUMN prediction_error REAL"),
+                ("warning_lead_time_min", "ALTER TABLE hypo_risk_audit ADD COLUMN warning_lead_time_min INTEGER"),
+                ("alert_fatigue_ignored", "ALTER TABLE hypo_risk_audit ADD COLUMN alert_fatigue_ignored BOOLEAN DEFAULT 0"),
+                ("dismissed_at",          "ALTER TABLE hypo_risk_audit ADD COLUMN dismissed_at DATETIME"),
+            ]:
+                if col_name not in hra_cols:
+                    conn.execute(text(ddl))
+                    conn.commit()
+
         if "daily_briefs" not in existing_tables:
             db.create_all()
         else:

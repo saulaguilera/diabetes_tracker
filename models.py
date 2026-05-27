@@ -585,6 +585,14 @@ class HypoRiskAudit(db.Model):
 
     Cada fila = un assessment completo generado por hypo_risk_engine.py.
     Permite revisión post-evento: comparar riesgo proyectado vs. real.
+
+    Ciclo de vida de una fila
+    ─────────────────────────
+      1. INSERT en assess_nocturnal_hypo_risk() → campos prediction_* poblados.
+      2. resolve_pending_hypo_audits() corre después del sync LibreLinkUp:
+         busca lecturas CGM reales en la ventana [trough±90 min] y rellena
+         los campos outcome_*.
+      3. compute_hypo_performance() agrega las filas resueltas para métricas.
     """
     __tablename__ = "hypo_risk_audit"
 
@@ -609,9 +617,72 @@ class HypoRiskAudit(db.Model):
     # Factores contribuyentes serializados
     contributing_factors_json = db.Column(db.Text)
 
+    # ── Campos de predicción extendidos (Outcome Tracking) ────────────────────
+    # Guardados en el momento del assessment para poder resolver después.
+    projected_trough_time     = db.Column(db.DateTime)             # assessed_at + eta_min
+    alert_triggered           = db.Column(db.Boolean, default=False)  # ¿se disparó alerta?
+    resolved_confidence       = db.Column(db.Float)                # confidence.score en assess time
+
+    # ── Outcome (rellenados por resolve_pending_hypo_audits) ──────────────────
+    resolved_at               = db.Column(db.DateTime, index=True) # NULL = aún sin resolver
+    outcome_class             = db.Column(db.String(2))            # TP | FP | FN | TN
+    true_positive             = db.Column(db.Boolean)
+    false_positive            = db.Column(db.Boolean)
+    false_negative            = db.Column(db.Boolean)
+    true_negative             = db.Column(db.Boolean)
+
+    # Valores reales del CGM en la ventana de observación
+    actual_nadir              = db.Column(db.Float)    # mínimo real (mg/dL)
+    actual_hypo_time          = db.Column(db.DateTime) # primera lectura < 70 en la ventana
+    prediction_error          = db.Column(db.Float)    # min_predicted_glucose - actual_nadir
+    warning_lead_time_min     = db.Column(db.Integer)  # minutos entre alerta y hipo real
+
+    # ── Alert fatigue tracking (Fase 8) ───────────────────────────────────────
+    # True si el usuario desestimó la alerta manualmente (vía /api/hypo-risk/dismiss)
+    alert_fatigue_ignored     = db.Column(db.Boolean, default=False)
+    dismissed_at              = db.Column(db.DateTime)
+
     created_at                = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # ── Propiedades computadas ────────────────────────────────────────────────
+
+    @property
+    def is_resolved(self) -> bool:
+        return self.resolved_at is not None
+
+    @property
+    def had_real_hypo(self) -> bool:
+        """True si la ventana de observación tuvo una glucemia < 70."""
+        return self.actual_nadir is not None and self.actual_nadir < 70.0
+
+    def to_dict(self) -> dict:
+        return {
+            "id":                     self.id,
+            "assessed_at":            self.assessed_at.isoformat() if self.assessed_at else None,
+            "current_glucose":        self.current_glucose,
+            "risk_score":             self.risk_score,
+            "p_hypo_70":              self.p_hypo_70,
+            "p_hypo_55":              self.p_hypo_55,
+            "min_predicted_glucose":  self.min_predicted_glucose,
+            "min_glucose_eta_min":    self.min_glucose_eta_min,
+            "severity":               self.severity,
+            "alert_triggered":        self.alert_triggered,
+            "projected_trough_time":  self.projected_trough_time.isoformat() if self.projected_trough_time else None,
+            "resolved_confidence":    self.resolved_confidence,
+            # Outcome
+            "is_resolved":            self.is_resolved,
+            "resolved_at":            self.resolved_at.isoformat() if self.resolved_at else None,
+            "outcome_class":          self.outcome_class,
+            "actual_nadir":           self.actual_nadir,
+            "actual_hypo_time":       self.actual_hypo_time.isoformat() if self.actual_hypo_time else None,
+            "prediction_error":       self.prediction_error,
+            "warning_lead_time_min":  self.warning_lead_time_min,
+            # Fatigue
+            "alert_fatigue_ignored":  self.alert_fatigue_ignored,
+        }
+
     def __repr__(self):
+        outcome = f" [{self.outcome_class}]" if self.outcome_class else " [unresolved]"
         return (f"<HypoRiskAudit {self.assessed_at} "
                 f"risk={self.risk_score:.2f} sev={self.severity} "
-                f"G={self.current_glucose} bolus={self.proposed_bolus}U>")
+                f"G={self.current_glucose} bolus={self.proposed_bolus}U{outcome}>")

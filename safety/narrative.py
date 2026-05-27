@@ -426,3 +426,80 @@ def _basal_time_descriptor(hour_now: int) -> str:
         return "de la mañana"
     else:
         return "de hoy"
+
+
+# ── Fase 7: Resumen de performance del motor ─────────────────────────────────
+
+def render_hypo_performance_summary(metrics: dict) -> str:
+    """
+    Genera un resumen en lenguaje natural de las métricas de performance
+    del motor de riesgo de hipoglucemia. Completamente determinístico.
+
+    Principios:
+      - Lenguaje humano, no técnico
+      - Máximo 3 frases
+      - No usar "precision", "recall", "FPR", "TN"
+      - Sí usar "detectó", "alertó de más", "anticipación", "perdió"
+
+    Args:
+        metrics: dict retornado por compute_hypo_performance()
+
+    Returns:
+        str con el resumen narrativo (puede ser vacío si no hay datos)
+    """
+    n        = metrics.get("n_resolved", 0)
+    tp       = metrics.get("real_hypos_detected", 0)
+    fn       = metrics.get("missed_hypos", 0)
+    fp       = metrics.get("false_positives", 0)
+    alerts   = metrics.get("alerts_triggered", 0)
+    lead     = metrics.get("mean_warning_lead_time_min")
+    recall   = metrics.get("recall")
+    prec     = metrics.get("precision")
+    days     = metrics.get("days", 14)
+
+    if n == 0:
+        return f"Sin alertas resueltas en los últimos {days} días. Se necesitan más datos para evaluar el sistema."
+
+    parts: list[str] = []
+
+    # ── Frase 1: detección de hipos reales ───────────────────────────────────
+    real_hypos = tp + fn
+    if real_hypos == 0:
+        parts.append(f"En los últimos {days} días no hubo hipoglucemias reales en la ventana de seguimiento.")
+    elif tp == 0 and fn > 0:
+        parts.append(f"El sistema no detectó las {fn} hipoglucemia{'s' if fn > 1 else ''} real{'es' if fn > 1 else ''} que ocurrió{'eron' if fn > 1 else ''}.")
+    elif fn == 0:
+        hypos_str = f"{tp} hipoglucemia{'s' if tp > 1 else ''}"
+        parts.append(f"Las alertas nocturnas detectaron {hypos_str} esta{'s' if tp > 1 else ''} semana{'s' if tp > 1 else ''}.")
+    else:
+        parts.append(
+            f"De {real_hypos} hipoglucemias reales, el sistema detectó {tp} "
+            f"y perdió {fn}."
+        )
+
+    # ── Frase 2: sobre-alertas o precisión ───────────────────────────────────
+    if alerts > 0 and fp > 0:
+        fp_pct = round(fp / alerts * 100)
+        if fp_pct >= 60:
+            parts.append(
+                f"El sistema está alertando de más: {fp} de {alerts} alertas "
+                f"no terminaron en hipoglucemia real."
+            )
+        elif fp_pct >= 30:
+            parts.append(
+                f"Hay margen de mejora: {fp} alerta{'s' if fp > 1 else ''} "
+                f"{'fueron' if fp > 1 else 'fue'} falso{'s' if fp > 1 else ''} positivo{'s' if fp > 1 else ''}."
+            )
+        elif prec is not None and prec >= 0.80:
+            parts.append("La precisión de las alertas es buena — pocas falsas alarmas.")
+
+    # ── Frase 3: lead time ────────────────────────────────────────────────────
+    if lead is not None and tp > 0:
+        if lead >= 60:
+            parts.append(f"El tiempo promedio de anticipación fue de {int(lead)} minutos — suficiente para actuar.")
+        elif lead >= 20:
+            parts.append(f"El tiempo promedio de anticipación fue de {int(lead)} minutos.")
+        else:
+            parts.append(f"Las alertas llegaron con solo {int(lead)} minutos de anticipación — el sistema podría necesitar alertar antes.")
+
+    return " ".join(parts)

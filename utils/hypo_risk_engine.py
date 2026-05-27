@@ -672,11 +672,29 @@ def _log_audit(
 ) -> None:
     """
     Persiste el assessment en hypo_risk_audit para revisión clínica.
+    Ahora incluye projected_trough_time, alert_triggered y resolved_confidence
+    para que resolve_pending_hypo_audits() pueda cerrar el loop.
     Silencia errores — el log nunca debe bloquear al usuario.
     """
     try:
         from models import db, HypoRiskAudit
         import json
+
+        # Determinar si la alerta se disparará (replicar lógica de should_alert)
+        _threshold = getattr(assessment, "alert_threshold", 0.30)
+        _triggered = (
+            not getattr(assessment, "alert_suppressed", False)
+            and (
+                assessment.p_hypo_70 > _threshold
+                or assessment.severity in ("high", "critical")
+            )
+        )
+
+        # Confidence score en el momento del assessment
+        _conf_score = None
+        _cr = getattr(assessment, "confidence_report", None)
+        if _cr is not None:
+            _conf_score = getattr(_cr, "score", None)
 
         record = HypoRiskAudit(
             assessed_at=now,
@@ -694,6 +712,10 @@ def _log_audit(
             contributing_factors_json=json.dumps(
                 assessment.contributing_factors, ensure_ascii=False
             ),
+            # Campos para outcome tracking
+            projected_trough_time=assessment.projected_trough_time,
+            alert_triggered=_triggered,
+            resolved_confidence=round(_conf_score, 4) if _conf_score is not None else None,
         )
         db.session.add(record)
         db.session.commit()
