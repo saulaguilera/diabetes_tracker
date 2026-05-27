@@ -887,6 +887,82 @@
       return;   // bolo NO se muestra
     }
 
+    // ── Hito 8: alerta preventiva de hipoglucemia nocturna ───────────────────
+    // Tono calmado, no alarmista. Aparece debajo de cualquier alerta de
+    // glucemia actual y encima del resultado — informa, no bloquea.
+    let hypoRiskHtml = '';
+    const hr = d.hypo_risk;
+    if (hr && hr.show_alert) {
+      const p_pct   = Math.round((hr.p_hypo_70 || 0) * 100);
+      const p55_pct = Math.round((hr.p_hypo_55 || 0) * 100);
+      const g_min   = Math.round(hr.min_predicted_glucose || 0);
+      const eta_h   = hr.min_glucose_eta_min ? Math.round(hr.min_glucose_eta_min / 60 * 10) / 10 : '?';
+
+      // Tiempo del trough en hora local
+      let troughTimeStr = '';
+      if (hr.projected_trough_time) {
+        const troughDt = new Date(hr.projected_trough_time);
+        troughTimeStr = troughDt.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+      }
+
+      // Factores contribuyentes (máximo 2)
+      const factors = (hr.contributing_factors || []).slice(0, 2);
+      const factorsHtml = factors.length
+        ? `<ul style="margin:.4rem 0 0 0;padding-left:1.1rem;font-size:.77rem;color:#92400e;">
+             ${factors.map(f => `<li>${f}</li>`).join('')}
+           </ul>` : '';
+
+      // Severidad → color de borde / fondo
+      const sevColor = hr.severity === 'critical' ? '#dc2626'
+                     : hr.severity === 'high'     ? '#d97706'
+                                                  : '#d97706';  // moderate usa amber
+      const sevBg    = hr.severity === 'critical' ? 'rgba(220,38,38,.06)'
+                                                  : 'rgba(245,158,11,.07)';
+
+      // Sugerencia según severidad
+      const suggestion = hr.severity === 'critical'
+        ? 'Considerá reducir el bolo, agregar una colación o hablar con tu médico.'
+        : hr.severity === 'high'
+        ? 'Considerá tomar una colación pequeña (10–15g CH) o reducir el bolo propuesto.'
+        : 'Tené una colación disponible y activá la alarma del CGM en 70 mg/dL.';
+
+      hypoRiskHtml = `
+        <div class="hypo-risk-card mb-3"
+             style="border:1px solid ${sevColor};border-radius:10px;
+                    background:${sevBg};padding:.75rem 1rem;">
+          <div class="d-flex align-items-start gap-2">
+            <span style="font-size:1.25rem;flex-shrink:0;line-height:1.2;">🌙</span>
+            <div style="flex:1;min-width:0;">
+              <div class="d-flex align-items-center justify-content-between flex-wrap gap-1 mb-1">
+                <strong style="font-size:.88rem;color:${sevColor};">
+                  Riesgo de baja glucemia nocturna
+                </strong>
+                <span class="badge" style="font-size:.72rem;background:${sevColor};color:#fff;
+                                           padding:2px 8px;border-radius:20px;">
+                  ${p_pct}% probabilidad &lt;70 mg/dL
+                </span>
+              </div>
+              <div style="font-size:.80rem;color:#78350f;line-height:1.4;">
+                Mínimo proyectado: <strong>${g_min} mg/dL</strong>
+                ${troughTimeStr ? `hacia las <strong>${troughTimeStr}</strong>` : `en ~${eta_h}h`}
+                ${p55_pct > 5 ? `<span style="margin-left:.4rem;font-size:.74rem;
+                                              color:#b91c1c;">(${p55_pct}% riesgo &lt;55)</span>` : ''}
+              </div>
+              ${factorsHtml}
+              <div style="margin-top:.5rem;font-size:.78rem;color:#92400e;
+                          padding:.35rem .6rem;border-radius:6px;
+                          background:rgba(255,255,255,.5);">
+                💡 ${suggestion}
+              </div>
+              <div style="margin-top:.35rem;font-size:.68rem;color:#a16207;text-align:right;">
+                Análisis del modelo · ${hr.ssm_available ? 'SSM' : 'estimación'} ·
+                confianza ${Math.round((hr.confidence||0)*100)}%
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }
+
     let safetyAlert = '';
     if (d.low_glucose_alert === 'near_hypo' || d.low_glucose_alert === 'caution') {
       const cls = d.low_glucose_alert === 'near_hypo' ? 'safety-near-hypo' : 'safety-caution';
@@ -1072,6 +1148,7 @@
 
     box.innerHTML = `
       ${safetyAlert}
+      ${hypoRiskHtml}
       <!-- Total -->
       <div class="text-center mb-3">
         <div class="text-muted mb-1" style="font-size:.85rem;">${totalLabel}</div>
