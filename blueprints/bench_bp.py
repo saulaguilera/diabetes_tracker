@@ -11,6 +11,26 @@ from flask import Blueprint, jsonify, request, render_template, session
 
 bp = Blueprint("bench", __name__)
 
+# Orden de preferencia para elegir qué modelo mostrar en el verdict
+# cuando el usuario no pidió uno específico.
+_MODEL_PREFERENCE = [
+    "ssm_v0_ukf6_basal",
+    "ssm_v0_ukf6",
+]
+
+
+def _preferred_model(report: dict) -> str | None:
+    """
+    Devuelve el modelo preferido para el verdict.
+    Prioriza el SSM activo sobre modelos anteriores.
+    Si no hay ninguno de los preferidos, devuelve el primero disponible.
+    """
+    available = list(report.get("by_model", {}).keys())
+    for pref in _MODEL_PREFERENCE:
+        if pref in available:
+            return pref
+    return available[0] if available else None
+
 
 def _require_login():
     if not session.get("logged_in"):
@@ -41,11 +61,15 @@ def api_bench_run():
         return err
     try:
         days  = min(int(request.args.get("days", 30)), 365)
-        model = request.args.get("model") or None
+        # Default: modelo SSM activo. Pasar "all" para ver todos los modelos.
+        model_param = request.args.get("model") or None
+        model = model_param if model_param != "all" else None
 
         from bench.runner import run_backtest, verdict
         report          = run_backtest(days=days, model_version=model)
-        report["verdict"] = verdict(report, model=model)
+        # Para el verdict usar el SSM activo si no se pidió un modelo específico
+        verdict_model = model or _preferred_model(report)
+        report["verdict"] = verdict(report, model=verdict_model)
         return jsonify({"ok": True, "report": report})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
@@ -59,9 +83,11 @@ def api_bench_verdict():
         return err
     try:
         days  = min(int(request.args.get("days", 30)), 365)
-        model = request.args.get("model") or None
+        model_param = request.args.get("model") or None
+        model = model_param if model_param != "all" else None
         from bench.runner import run_backtest, verdict
         report = run_backtest(days=days, model_version=model)
-        return jsonify({"ok": True, "verdict": verdict(report, model=model)})
+        verdict_model = model or _preferred_model(report)
+        return jsonify({"ok": True, "verdict": verdict(report, model=verdict_model)})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500

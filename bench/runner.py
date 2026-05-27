@@ -147,14 +147,21 @@ _TARGETS = {
 }
 
 
+_SSM_MODEL_PREFERENCE = ["ssm_v0_ukf6_basal", "ssm_v0_ukf6"]
+
+
 def verdict(report: dict, model: Optional[str] = None) -> dict:
     """
     Compara el reporte contra los thresholds del blueprint y devuelve
     pass/warn/fail por métrica.
+    Cuando no se especifica modelo, prioriza el SSM activo sobre modelos legados.
     """
     if model is None:
         models = list(report["by_model"].keys())
-        model  = models[0] if models else None
+        # Preferir SSM sobre modelos anteriores (mc_ar_gp_pmm_v1, etc.)
+        model = next((m for m in _SSM_MODEL_PREFERENCE if m in models), None)
+        if model is None:
+            model = models[0] if models else None
     if not model or model not in report["by_model"]:
         return {"ok": False, "error": "no hay modelo para evaluar"}
 
