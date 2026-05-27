@@ -577,3 +577,41 @@ class PMMDriftState(db.Model):
         return (f"<PMMDriftState {state} "
                 f"C+={self.cusum_pos:.1f} C-={self.cusum_neg:.1f} "
                 f"σ={self.sigma_ref:.1f}>")
+
+
+class HypoRiskAudit(db.Model):
+    """
+    Audit trail de evaluaciones de riesgo de hipoglucemia nocturna.
+
+    Cada fila = un assessment completo generado por hypo_risk_engine.py.
+    Permite revisión post-evento: comparar riesgo proyectado vs. real.
+    """
+    __tablename__ = "hypo_risk_audit"
+
+    id                        = db.Column(db.Integer, primary_key=True)
+    assessed_at               = db.Column(db.DateTime, nullable=False, index=True)
+    current_glucose           = db.Column(db.Float, nullable=False)
+    roc                       = db.Column(db.Float)                # mg/dL/min
+    proposed_bolus            = db.Column(db.Float, default=0.0)
+
+    # Core probabilístico
+    risk_score                = db.Column(db.Float, nullable=False)
+    p_hypo_70                 = db.Column(db.Float, nullable=False)
+    p_hypo_55                 = db.Column(db.Float)
+    min_predicted_glucose     = db.Column(db.Float)
+    min_glucose_eta_min       = db.Column(db.Integer)
+    severity                  = db.Column(db.String(20))           # low/moderate/high/critical
+
+    # Metadata del modelo
+    ssm_available             = db.Column(db.Boolean, default=False)
+    fallback_used             = db.Column(db.Boolean, default=False)
+
+    # Factores contribuyentes serializados
+    contributing_factors_json = db.Column(db.Text)
+
+    created_at                = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return (f"<HypoRiskAudit {self.assessed_at} "
+                f"risk={self.risk_score:.2f} sev={self.severity} "
+                f"G={self.current_glucose} bolus={self.proposed_bolus}U>")

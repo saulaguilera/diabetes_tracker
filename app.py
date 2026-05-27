@@ -190,6 +190,9 @@ with app.app_context():
             db.create_all()
         if "tuning_experiments" not in existing_tables:
             db.create_all()
+        # Hito 8: audit trail de alertas de hipoglucemia nocturna
+        if "hypo_risk_audit" not in existing_tables:
+            db.create_all()
         if "daily_briefs" not in existing_tables:
             db.create_all()
         else:
@@ -358,6 +361,82 @@ def _iniciar_scheduler():
                 minute=30,
                 id="daily_brief",
             )
+
+            # ── Hito 8: chequeos nocturnos de riesgo de hipoglucemia ────────
+            # Se ejecutan a las 22:00, 00:00 y 02:00. Si el riesgo es alto
+            # (p_hypo_70 > 0.30), envía notificación push / email.
+            def _hypo_risk_check_job():
+                with app.app_context():
+                    try:
+                        from utils.hypo_risk_engine import (
+                            assess_nocturnal_hypo_risk, should_alert,
+                            format_alert_message,
+                        )
+                        from utils.kinetics import get_kinetics_snapshot
+                        from pmm.ssm.basal_input import load_basal_doses, compute_basal_eff
+                        from models import GlucoseReading
+                        from datetime import datetime, timedelta
+
+                        now = datetime.utcnow()
+
+                        # Lectura CGM más reciente (últimos 15 min)
+                        cutoff = now - timedelta(minutes=15)
+                        last_cgm = (
+                            GlucoseReading.query
+                            .filter(GlucoseReading.timestamp >= cutoff)
+                            .order_by(GlucoseReading.timestamp.desc())
+                            .first()
+                        )
+                        if not last_cgm:
+                            return   # sin CGM reciente — skip silencioso
+
+                        snap = get_kinetics_snapshot(hours_lookback=4)
+                        iob   = snap.get("iob_bolus", 0.0)
+                        cob   = snap.get("cob", 0.0)
+                        roc   = snap.get("roc") or 0.0
+
+                        basal_doses = load_basal_doses(now)
+                        basal_eff   = compute_basal_eff(now, basal_doses)
+
+                        risk = assess_nocturnal_hypo_risk(
+                            current_glucose      = float(last_cgm.value),
+                            roc                  = roc,
+                            proposed_bolus       = 0.0,   # sin bolus propuesto
+                            current_iob          = iob,
+                            current_basal_effect = basal_eff,
+                            carbs_on_board       = cob,
+                            timestamp            = now,
+                        )
+
+                        if should_alert(risk):
+                            msg = format_alert_message(risk, compact=True)
+                            import logging
+                            logging.getLogger("hypo_risk.scheduler").warning(
+                                f"ALERTA NOCTURNA: {msg} | score={risk.risk_score:.2f}"
+                            )
+                            # Intentar email si está disponible
+                            try:
+                                from utils.email_notifier import send_hypo_alert
+                                send_hypo_alert(risk, format_alert_message(risk))
+                            except Exception:
+                                pass   # email es opcional
+                    except Exception as _e:
+                        import logging
+                        logging.getLogger("hypo_risk.scheduler").debug(
+                            f"hypo_risk_check_job falló silenciosamente: {_e}"
+                        )
+
+            for _h, _m, _jid in [(22, 0, "hypo_risk_2200"),
+                                  (0,  0, "hypo_risk_0000"),
+                                  (2,  0, "hypo_risk_0200")]:
+                scheduler.add_job(
+                    _hypo_risk_check_job,
+                    "cron",
+                    hour=_h,
+                    minute=_m,
+                    id=_jid,
+                )
+
             scheduler.start()
             # Sync inicial al arrancar
             _sync_job()

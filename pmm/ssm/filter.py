@@ -434,6 +434,7 @@ def forward_predict(
     dawn_rate: float = 0.0,
     ex_sensitivity_mult: float = 1.0,
     params = None,
+    i_basal_eff_override: Optional[float] = None,
 ) -> dict[int, SSMPrediction]:
     """
     Forward-sample el SSM desde el posterior actual hasta cada horizonte.
@@ -464,6 +465,8 @@ def forward_predict(
     # Hito 7: cargar dosis basales para forward — la basal sigue actuando
     # durante el horizonte (peak ~12h post-dosis), su efecto NO es desprecible
     # en horizontes de 30-60 min.
+    # i_basal_eff_override: valor constante inyectado externamente (útil en tests
+    # o cuando load_basal_doses no tiene contexto de DB). None → cargar desde DB.
     basal_doses = load_basal_doses(result.last_ts)
 
     # Inputs del horizonte (sin nuevos boluses/meals — predicción "as is")
@@ -490,12 +493,15 @@ def forward_predict(
             preds[h_now] = _snapshot_prediction(ukf, h_now)
             continue
         # Recomputar I_basal_eff en cada step (varía suavemente con t_sim)
-        t_step = result.last_ts + timedelta(minutes=t_sim)
-        i_basal = compute_basal_eff(
-            t_step, basal_doses,
-            K_depot=p.K_DEPOT_BASAL, K_pi=p.K_PI, K_ie=p.K_IE,
-            F_bio=p.F_BIO_BASAL,
-        )
+        if i_basal_eff_override is not None:
+            i_basal = i_basal_eff_override
+        else:
+            t_step = result.last_ts + timedelta(minutes=t_sim)
+            i_basal = compute_basal_eff(
+                t_step, basal_doses,
+                K_depot=p.K_DEPOT_BASAL, K_pi=p.K_PI, K_ie=p.K_IE,
+                F_bio=p.F_BIO_BASAL,
+            )
         u = StepInputs(**{**u_template.__dict__, "i_basal_eff": i_basal})
         ukf.predict(fx=lambda x: step(x, u, dt, params=p), Q=_Q_for_dt(dt, params=p))
         t_sim += dt
