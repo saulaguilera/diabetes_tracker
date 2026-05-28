@@ -19,6 +19,24 @@ _MODEL_PREFERENCE = [
 ]
 
 
+def _json_safe(obj):
+    """
+    Reemplaza NaN/Infinity/-Infinity por None recursivamente.
+    JSON estricto (browser) rechaza esos valores; Python los serializa
+    como texto literal y rompe el parser del cliente.
+    """
+    import math
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    return obj
+
+
 def _preferred_model(report: dict) -> str | None:
     """
     Devuelve el modelo preferido para el verdict.
@@ -70,7 +88,7 @@ def api_bench_run():
         # Para el verdict usar el SSM activo si no se pidió un modelo específico
         verdict_model = model or _preferred_model(report)
         report["verdict"] = verdict(report, model=verdict_model)
-        return jsonify({"ok": True, "report": report})
+        return jsonify(_json_safe({"ok": True, "report": report}))
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
 
@@ -230,6 +248,6 @@ def api_bench_verdict():
         from bench.runner import run_backtest, verdict
         report = run_backtest(days=days, model_version=model)
         verdict_model = model or _preferred_model(report)
-        return jsonify({"ok": True, "verdict": verdict(report, model=verdict_model)})
+        return jsonify(_json_safe({"ok": True, "verdict": verdict(report, model=verdict_model)}))
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
