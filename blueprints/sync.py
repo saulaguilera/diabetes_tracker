@@ -134,6 +134,14 @@ def _do_libre_sync(email: str, password: str) -> dict:
         except Exception:
             pass
 
+        # ── Guardrails de observabilidad: emite warnings al log si el pipeline
+        #    de predicción/audit tiene problemas. NO bloquea al usuario.
+        try:
+            from services.model_health import log_health_warnings
+            log_health_warnings()
+        except Exception:
+            pass
+
         # ── Background predictor: corre el SSM y guarda predicción 30/60min
         #    en CADA sync (cada ~5 min). Antes sólo se generaban predicciones
         #    al entrar a /calcular → el bench tenía cobertura mínima y daba

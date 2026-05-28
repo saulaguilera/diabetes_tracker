@@ -491,10 +491,12 @@ from blueprints.pmm_bp       import bp as pmm_bp
 from blueprints.bench_bp     import bp as bench_bp
 from blueprints.tuning_bp    import bp as tuning_bp
 from blueprints.daily_brief_bp import bp as daily_brief_bp
+from blueprints.health_bp     import bp as health_bp
 
 for _bp in [auth_bp, glucemia_bp, insulina_bp, actividad_bp, alimentos_bp,
             backup_bp, sync_bp, comidas_bp, herramientas_bp, reportes_bp,
-            patrones_bp, pmm_bp, bench_bp, tuning_bp, daily_brief_bp]:
+            patrones_bp, pmm_bp, bench_bp, tuning_bp, daily_brief_bp,
+            health_bp]:
     app.register_blueprint(_bp)
 
 # PMM blueprint exento de CSRF (API JSON)
@@ -502,6 +504,7 @@ csrf.exempt(pmm_bp)
 csrf.exempt(bench_bp)
 csrf.exempt(tuning_bp)
 csrf.exempt(daily_brief_bp)
+csrf.exempt(health_bp)
 
 # sync blueprint: exento de CSRF (cron externo + APIs JSON)
 csrf.exempt(sync_bp)
