@@ -242,9 +242,15 @@ def resolve_audits(readings: Iterable) -> int:
         if not readings:
             return 0
 
-        # Cargar TODOS los audits pendientes (típicamente < 50)
+        # Audits pendientes. Limitar a las últimas 2h: el horizonte máximo
+        # es 60min + tolerance, así que audits más viejos no son resolubles
+        # con CGM nuevos. Sin el filtro la query escala mal ahora que el
+        # background_predictor genera 2 audits por sync (~288/día).
+        from datetime import datetime as _dt
+        cutoff = _dt.now() - timedelta(hours=2)
         pendientes = (PredictionAudit.query
                       .filter(PredictionAudit.resolved == False)
+                      .filter(PredictionAudit.predicted_at >= cutoff)
                       .all())
         if not pendientes:
             return 0
@@ -315,7 +321,9 @@ def covariance_diagnostics(P) -> dict:
             "trace":     float(np.trace(P_sym)),
             "min_eig":   e_min,
             "max_eig":   e_max,
-            "condition": float(e_max / e_min) if e_min > 0 else float("inf"),
+            # condition number infinito (e_min <= 0) → None: el PSD-OK ya lo
+            # señala. Devolver inf rompe el JSON del bench downstream.
+            "condition": float(e_max / e_min) if e_min > 0 else None,
             "psd_ok":    bool(e_min > -1e-8),     # tolerancia numérica
         }
     except Exception:

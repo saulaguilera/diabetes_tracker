@@ -214,8 +214,14 @@ def resolve_predictions(readings: list) -> int:
     if not readings:
         return 0
 
-    # Predicciones aún no resueltas completamente
+    # Predicciones aún no resueltas. Limitar a las últimas 2h: los horizontes
+    # son 30/60 min con ventana de tolerancia de ~_WINDOW_60 min. Cualquier
+    # predicción más vieja que 2h ya no se puede resolver con los CGM nuevos.
+    # Sin este filtro la query escala O(predicciones_totales) por sync — con
+    # el background_predictor activo serían cientos a miles por consulta.
+    cutoff = datetime.now() - timedelta(hours=2)
     pendientes = GlucosePrediction.query.filter(
+        GlucosePrediction.predicted_at >= cutoff,
         db.or_(
             GlucosePrediction.resolved_30 == False,
             GlucosePrediction.resolved_60 == False,

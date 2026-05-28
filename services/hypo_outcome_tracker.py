@@ -55,7 +55,7 @@ def resolve_pending_hypo_audits() -> dict:
     """
     from models import db, HypoRiskAudit, GlucoseReading
 
-    now = datetime.utcnow()
+    now = datetime.now()
     cutoff_old = now - timedelta(hours=MAX_LOOKBACK_HOURS)
 
     # Audits sin resolver, con trough ya pasado, dentro de la ventana de 12h
@@ -198,7 +198,7 @@ def mark_alert_dismissed(audit_id: int) -> bool:
         return False
 
     audit.alert_fatigue_ignored = True
-    audit.dismissed_at = datetime.utcnow()
+    audit.dismissed_at = datetime.now()
     try:
         db.session.commit()
         return True
@@ -223,7 +223,7 @@ def get_alert_fatigue_score(days: int = 14) -> dict:
     """
     from models import HypoRiskAudit
 
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now() - timedelta(days=days)
     alerts = (
         HypoRiskAudit.query
         .filter(

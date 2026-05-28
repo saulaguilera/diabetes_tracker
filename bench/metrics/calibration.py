@@ -117,7 +117,7 @@ def ece(records: list[PredictionRecord], n_bins: int = 10) -> float:
     """
     diag = reliability_diagram(records, n_bins)
     if diag["n_used"] == 0:
-        return float("nan")
+        return None
     diffs = [
         abs(obs - pred)
         for obs, pred in zip(diag["observed_freqs"], diag["quantiles"])
@@ -134,7 +134,7 @@ def crps(records: list[PredictionRecord]) -> float:
     """
     usable = [r for r in records if r.sigma and r.sigma > 0]
     if not usable:
-        return float("nan")
+        return None
     vals = [_crps_gaussian(r.g_real, r.g_pred, r.sigma) for r in usable]
     return sum(vals) / len(vals)
 
@@ -148,7 +148,7 @@ def sharpness(records: list[PredictionRecord]) -> float:
     """
     sigmas = [r.sigma for r in records if r.sigma and r.sigma > 0]
     if not sigmas:
-        return float("nan")
+        return None
     return sum(sigmas) / len(sigmas)
 
 
@@ -196,12 +196,14 @@ def calibration_summary(records: list[PredictionRecord]) -> dict:
                     "Esto debería resolverse en ~7 días a medida que se acumulen "
                     "predicciones del nuevo schema con sigma_30/sigma_60.",
         }
+    def _r(v, ndigits):
+        return round(v, ndigits) if v is not None else None
     return {
         "n_with_sigma": len(usable),
         "n_total":      len(records),
-        "crps":         round(crps(usable), 2),
-        "ece":          round(ece(usable),  4),
-        "sharpness":    round(sharpness(usable), 2),
+        "crps":         _r(crps(usable), 2),
+        "ece":          _r(ece(usable),  4),
+        "sharpness":    _r(sharpness(usable), 2),
         "reliability":  reliability_diagram(usable),
         "pit":          pit_histogram(usable),
     }

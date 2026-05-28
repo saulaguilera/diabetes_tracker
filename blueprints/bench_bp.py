@@ -120,7 +120,8 @@ def api_bench_hypo_post_mortem():
         model    = request.args.get("model", "ssm_v0_ukf6_basal")
         tol_min  = int(request.args.get("tol_min", 8))    # ± minutos de tolerancia
 
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        # TZ local (CGM Libre y predicciones se guardan en hora local del servidor)
+        cutoff = datetime.now() - timedelta(days=days)
         # Hipos reales (CGM < 70) en la ventana, excluyendo artefactos
         hypos = (db.session.query(GlucoseReading)
                  .filter(GlucoseReading.timestamp >= cutoff)

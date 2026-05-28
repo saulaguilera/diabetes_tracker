@@ -51,7 +51,7 @@ def compute_hypo_performance(days: int = 14) -> dict:
     """
     from models import HypoRiskAudit
 
-    now    = datetime.utcnow()
+    now    = datetime.now()
     cutoff = now - timedelta(days=days)
 
     all_in_window = (
@@ -132,7 +132,7 @@ def get_performance_trend(weeks: int = 4) -> list[dict]:
     Retorna lista de dicts, una entrada por semana (más reciente primero).
     """
     results = []
-    now = datetime.utcnow()
+    now = datetime.now()
 
     for week_idx in range(weeks):
         week_end   = now - timedelta(weeks=week_idx)

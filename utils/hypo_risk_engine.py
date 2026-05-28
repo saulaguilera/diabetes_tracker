@@ -155,7 +155,8 @@ def assess_nocturnal_hypo_risk(
     current_iob          : IOB activo de boluses anteriores (U)
     current_basal_effect : I_basal_eff actual de la basal lenta (U)
     carbs_on_board       : carbohidratos pendientes de absorción (g)
-    timestamp            : ahora (default: datetime.utcnow())
+    timestamp            : ahora (default: datetime.now() — TZ del servidor,
+                            que coincide con la TZ del CGM Libre)
     icr                  : ratio insulina:carbohidratos (g/U)
     isf                  : factor de sensibilidad (mg/dL/U)
     horizons_min         : horizontes de evaluación en minutos
@@ -165,7 +166,11 @@ def assess_nocturnal_hypo_risk(
     -------
     HypoRiskAssessment con todo el perfil de riesgo.
     """
-    now = timestamp or datetime.utcnow()
+    # IMPORTANTE: usar datetime.now() (TZ local del servidor, configurada en
+    # app.py como America/Santiago) para que `is_nocturnal = hour ∈ [22, 6)`
+    # corresponda a la hora local del usuario. datetime.utcnow() rompía la
+    # ventana nocturna en 3-4 horas.
+    now = timestamp or datetime.now()
 
     # ── 1. Confianza unificada (Fase 2) ───────────────────────────────────────
     # Cargar ConfidenceReport antes de cualquier predicción para poder

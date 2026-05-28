@@ -38,7 +38,7 @@ def mae(records: Iterable[PredictionRecord]) -> float:
     """Mean Absolute Error (mg/dL)."""
     errors = [r.abs_error for r in records]
     if not errors:
-        return float("nan")
+        return None
     return sum(errors) / len(errors)
 
 
@@ -46,7 +46,7 @@ def rmse(records: Iterable[PredictionRecord]) -> float:
     """Root Mean Squared Error (mg/dL). Penaliza más los outliers."""
     sq = [r.abs_error ** 2 for r in records]
     if not sq:
-        return float("nan")
+        return None
     return math.sqrt(sum(sq) / len(sq))
 
 
@@ -57,7 +57,7 @@ def mard(records: Iterable[PredictionRecord]) -> float:
     """
     rel = [r.relative_error_pct for r in records]
     if not rel:
-        return float("nan")
+        return None
     return sum(rel) / len(rel)
 
 
@@ -69,7 +69,7 @@ def bias(records: Iterable[PredictionRecord]) -> float:
     """
     errors = [r.error for r in records]
     if not errors:
-        return float("nan")
+        return None
     return sum(errors) / len(errors)
 
 
@@ -85,12 +85,14 @@ def accuracy_summary(records: list[PredictionRecord]) -> dict:
     rel_errs = [r.relative_error_pct for r in records]
     signed   = [r.error for r in records]
 
+    def _r(v, ndigits):
+        return round(v, ndigits) if v is not None else None
     return {
         "n":              len(records),
-        "mae":            round(mae(records),  2),
-        "rmse":           round(rmse(records), 2),
-        "mard":           round(mard(records), 2),
-        "bias":           round(bias(records), 2),
+        "mae":            _r(mae(records),  2),
+        "rmse":           _r(rmse(records), 2),
+        "mard":           _r(mard(records), 2),
+        "bias":           _r(bias(records), 2),
         "abs_error_dist": _stats(abs_errs),
         "rel_error_dist": _stats(rel_errs),
         "signed_error_dist": _stats(signed),

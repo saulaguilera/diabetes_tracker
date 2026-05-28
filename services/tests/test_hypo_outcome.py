@@ -132,7 +132,7 @@ def test_resolve_true_positive():
         from models import HypoRiskAudit
 
         # Audit con trough hace 30 minutos (ya pasó)
-        assessed = datetime.utcnow() - timedelta(hours=2)
+        assessed = datetime.now() - timedelta(hours=2)
         audit    = _make_audit(assessed, alert_triggered=True, eta_min=60)
         trough   = assessed + timedelta(minutes=60)
 
@@ -161,7 +161,7 @@ def test_resolve_false_positive():
         from services.hypo_outcome_tracker import resolve_pending_hypo_audits
         from models import HypoRiskAudit
 
-        assessed = datetime.utcnow() - timedelta(hours=2)
+        assessed = datetime.now() - timedelta(hours=2)
         audit    = _make_audit(assessed, alert_triggered=True, eta_min=60)
         trough   = assessed + timedelta(minutes=60)
 
@@ -185,7 +185,7 @@ def test_resolve_false_negative():
         from services.hypo_outcome_tracker import resolve_pending_hypo_audits
         from models import HypoRiskAudit
 
-        assessed = datetime.utcnow() - timedelta(hours=2)
+        assessed = datetime.now() - timedelta(hours=2)
         audit    = _make_audit(assessed, alert_triggered=False, eta_min=60)
         trough   = assessed + timedelta(minutes=60)
 
@@ -206,7 +206,7 @@ def test_resolve_true_negative():
         from services.hypo_outcome_tracker import resolve_pending_hypo_audits
         from models import HypoRiskAudit
 
-        assessed = datetime.utcnow() - timedelta(hours=2)
+        assessed = datetime.now() - timedelta(hours=2)
         audit    = _make_audit(assessed, alert_triggered=False, eta_min=60)
         trough   = assessed + timedelta(minutes=60)
 
@@ -227,7 +227,7 @@ def test_skip_future_trough():
         from models import HypoRiskAudit
 
         # assessed hace 10 min, trough en 110 min = futuro
-        assessed = datetime.utcnow() - timedelta(minutes=10)
+        assessed = datetime.now() - timedelta(minutes=10)
         audit    = _make_audit(assessed, alert_triggered=True, eta_min=120)
 
         result = resolve_pending_hypo_audits()
@@ -244,7 +244,7 @@ def test_prediction_error_computed():
         from services.hypo_outcome_tracker import resolve_pending_hypo_audits
         from models import HypoRiskAudit
 
-        assessed = datetime.utcnow() - timedelta(hours=2)
+        assessed = datetime.now() - timedelta(hours=2)
         # predicted=60, real=65 → error=-5
         audit  = _make_audit(assessed, alert_triggered=True, eta_min=60,
                              min_predicted_glucose=60.0)
@@ -268,7 +268,7 @@ def test_performance_metrics_precision_recall():
         from services.hypo_metrics import compute_hypo_performance
         from models import db, HypoRiskAudit
 
-        now = datetime.utcnow()
+        now = datetime.now()
 
         def _resolved(outcome, days_ago=1):
             tp = outcome == "TP"
@@ -384,7 +384,7 @@ def test_mark_alert_dismissed():
         from services.hypo_outcome_tracker import mark_alert_dismissed
         from models import HypoRiskAudit
 
-        assessed = datetime.utcnow() - timedelta(hours=1)
+        assessed = datetime.now() - timedelta(hours=1)
         audit    = _make_audit(assessed, alert_triggered=True)
 
         ok = mark_alert_dismissed(audit.id)

@@ -143,7 +143,9 @@ def brier_score(audits: list, kind: str = "hypo", threshold: float = 70.0) -> di
     if bs_baseline > 0:
         skill = 1.0 - bs / bs_baseline
     else:
-        skill = 0.0 if bs == 0 else float("-inf")
+        # base_rate degenerado (0 o 1) → no se puede comparar contra baseline.
+        # Devolver None (no es JSON-safe -inf y semánticamente es "no aplica").
+        skill = None
 
     return {
         "n":            len(valid),
@@ -152,7 +154,7 @@ def brier_score(audits: list, kind: str = "hypo", threshold: float = 70.0) -> di
         "brier_score":  round(bs, 4),
         "base_rate":    round(base_rate, 4),
         "bs_baseline":  round(bs_baseline, 4),
-        "skill_score":  round(skill, 3),
+        "skill_score":  round(skill, 3) if skill is not None else None,
     }
 
 
