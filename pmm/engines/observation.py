@@ -367,7 +367,9 @@ def load_correction_episodes(days: int = 180) -> list[dict]:
     from datetime import datetime
     from models import InsulinDose, GlucoseReading, Meal
 
-    since = datetime.utcnow() - timedelta(days=days)
+    # TZ local: las timestamps de eventos (InsulinDose, GlucoseReading, Meal)
+    # están guardadas en hora local. Usar utcnow() recortaba la ventana 3-4h.
+    since = datetime.now() - timedelta(days=days)
 
     bolus_list = (
         InsulinDose.query
@@ -416,7 +418,9 @@ def load_meal_episodes(days: int = 180, isf_mu: float = 45.0) -> list[dict]:
     from models import InsulinDose, GlucoseReading, Meal
     from helpers import _get_setting
 
-    since = datetime.utcnow() - timedelta(days=days)
+    # TZ local: las timestamps de eventos (InsulinDose, GlucoseReading, Meal)
+    # están guardadas en hora local. Usar utcnow() recortaba la ventana 3-4h.
+    since = datetime.now() - timedelta(days=days)
     target = float(_get_setting("objetivo", 100))
 
     meals = (

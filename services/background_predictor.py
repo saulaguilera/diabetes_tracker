@@ -181,11 +181,14 @@ def run_and_save_ssm_prediction(now: Optional[datetime] = None) -> dict:
         )
 
         # 9. Audit científico (PredictionAudit + SSMInnovation)
+        #    NOTA: usar la firma exacta de log_prediction_audit (cov_trace,
+        #    cov_condition, etc.) — no `state_post` / `P_post` / `cov_diag`,
+        #    que no son parámetros válidos y disparaban TypeError silenciado.
         try:
             from utils.audit_logger import (
                 log_prediction_audit, log_filter_innovations,
+                covariance_diagnostics,
             )
-            from pmm.ssm.diagnostics import covariance_diagnostics
             cov_diag = covariance_diagnostics(ssm_result.P)
             for h_min in (30, 60):
                 pp = ssm_preds[h_min]
@@ -196,9 +199,12 @@ def run_and_save_ssm_prediction(now: Optional[datetime] = None) -> dict:
                     mu               = float(pp.g_pred),
                     sigma            = float(pp.sigma),
                     p_hypo           = float(pp.p_hypo),
-                    state_post       = ssm_result.x.tolist(),
-                    P_post           = ssm_result.P.tolist(),
-                    cov_diag         = cov_diag,
+                    p_hyper          = float(pp.p_hyper),
+                    cov_trace        = cov_diag.get("trace"),
+                    cov_condition    = cov_diag.get("condition"),
+                    cov_min_eig      = cov_diag.get("min_eig"),
+                    cov_max_eig      = cov_diag.get("max_eig"),
+                    psd_ok           = cov_diag.get("psd_ok"),
                     log_evidence     = float(ssm_result.log_evidence),
                     last_innov       = ssm_result.last_innov,
                     last_innov_z     = ssm_result.last_innov_z,
@@ -207,7 +213,7 @@ def run_and_save_ssm_prediction(now: Optional[datetime] = None) -> dict:
             if ssm_result.innovations:
                 log_filter_innovations(
                     model_version = "ssm_v0_ukf6_basal",
-                    predicted_at  = now,
+                    run_at        = now,
                     innovations   = ssm_result.innovations,
                 )
         except Exception as exc:
