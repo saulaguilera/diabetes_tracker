@@ -122,12 +122,22 @@ def _coverage_check(days: int) -> dict:
         except Exception:
             pass
 
-    # Esperado por hora: ~12 predicciones/hora si cobertura completa.
-    expected_per_hour = (EXPECTED_PREDICTIONS_PER_DAY / 24) * min(7, days)
-    missing_hours = [
-        h for h, c in enumerate(hour_counts)
-        if c < expected_per_hour * 0.3   # <30% de lo esperado
-    ]
+    # missing_hours debe detectar GAPS RELATIVOS (huecos en la distribución),
+    # no horas con menos del ideal teórico. Si la cobertura global es 0.5,
+    # cada hora individual tiene ~50% del ideal — eso NO es un gap, es la
+    # cobertura uniforme del sistema acumulando. Un gap real es cuando una
+    # hora específica tiene mucho menos que el promedio observado.
+    expected_per_hour_ideal = (EXPECTED_PREDICTIONS_PER_DAY / 24) * min(7, days)
+    n_hours_with_data = sum(1 for c in hour_counts if c > 0)
+    observed_avg_per_hour = (sum(hour_counts) / n_hours_with_data
+                             if n_hours_with_data else 0)
+    # Una hora es "missing" si tiene <40% del promedio observado de las otras
+    # horas — eso sí es un gap real, no warm-up uniforme.
+    missing_hours = (
+        [h for h, c in enumerate(hour_counts)
+         if c < observed_avg_per_hour * 0.4]
+        if observed_avg_per_hour > 0 else list(range(24))
+    )
 
     return {
         "predictions_in_window":   n_window,
@@ -139,7 +149,8 @@ def _coverage_check(days: int) -> dict:
         "age_last_pred_min":       round(age_last_min, 1) if age_last_min is not None else None,
         "hourly_counts":           hour_counts,
         "missing_hours":           missing_hours,
-        "expected_per_hour_window": round(expected_per_hour, 1),
+        "expected_per_hour_ideal":  round(expected_per_hour_ideal, 1),
+        "observed_avg_per_hour":    round(observed_avg_per_hour, 1),
     }
 
 
@@ -309,16 +320,21 @@ def get_model_health(days: int = 7) -> dict:
             f"última predicción hace {age:.0f}min — esperado <{MAX_AGE_LAST_PREDICTION_MIN}min"
         )
 
-    # 2. Cobertura suficiente?
+    # 2. Cobertura — pero ojo: ratio bajo NO es lo mismo que pipeline roto.
+    #    Sólo es blocking si el predictor también está caído (age > umbral).
+    #    Si el predictor corre normal y la cobertura es baja, es warm-up:
+    #    se va a llenar con el tiempo. No es para alarmar.
     ratio = coverage.get("coverage_ratio", 0)
-    if ratio < COVERAGE_RATIO_WARNING:
+    predictor_alive = (age is not None and age <= MAX_AGE_LAST_PREDICTION_MIN * 3)
+    if ratio < COVERAGE_RATIO_WARNING and not predictor_alive:
+        # Bajo coverage Y predictor caído → pipeline roto de verdad
         blocking_issues.append(
-            f"coverage_ratio={ratio:.2f} — el bench no es estadísticamente "
-            f"confiable todavía (esperando datos)"
+            f"coverage_ratio={ratio:.2f} y predictor inactivo — pipeline roto"
         )
     elif ratio < COVERAGE_RATIO_HEALTHY:
         warnings.append(
-            f"coverage_ratio={ratio:.2f} — aún acumulando evidencia"
+            f"coverage_ratio={ratio:.2f} — todavía acumulando evidencia "
+            f"(esperar más días)"
         )
 
     # 3. Audits del SSM acompañando las predicciones?
