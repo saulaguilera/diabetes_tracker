@@ -405,7 +405,12 @@ def _warm_start_cob(t: datetime, pmm_speed: Optional[dict]) -> tuple[float, floa
         ).all()
         detail = current_cob_detailed(meals, at_time=t,
                                        pmm_speed_factors=pmm_speed)
-        cob_total = detail.get("cob", 0.0) if isinstance(detail, dict) else 0.0
+        # current_cob_detailed() NO devuelve la clave "cob"; expone carbs_cob /
+        # total_cob / fat_cob / etc. El resto del sistema (get_kinetics_snapshot)
+        # define "cob" := carbs_cob, así que usamos esa misma clave para mantener
+        # la semántica de carbohidratos en el warm-start del SSM. Antes leía "cob"
+        # (inexistente) → warm-start SIEMPRE 0 → modelo ciego a carbos al iniciar.
+        cob_total = detail.get("carbs_cob", 0.0) if isinstance(detail, dict) else 0.0
         # Distribución 60/40 entre los dos compartimentos (heurística inicial)
         return float(cob_total * 0.55), float(cob_total * 0.45)
     except Exception:

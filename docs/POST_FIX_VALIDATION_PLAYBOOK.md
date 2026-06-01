@@ -48,6 +48,14 @@ Durante semanas el bench evaluó al modelo bajo condiciones donde:
 | 11 | `utils/audit_logger.py:resolve_audits` | Mismo problema | 🟠 |
 | 12 | `bench/runner.py` | Verdict elegía modelo viejo | 🟢 |
 | 13 | `blueprints/bench_bp.py` | Misma familia (verdict) | 🟢 |
+| 14 | `pmm/ssm/filter.py:_warm_start_cob` | Leía clave `cob` inexistente → COB inicial SIEMPRE 0, SSM ciego a carbos al arrancar | 🔴 |
+| 15 | `app.py` alerta nocturna | `last_cgm.value` (no existe; es `value_mgdl`) dentro de `except` silencioso → alerta muerta; + `utcnow` | 🔴 |
+
+> **Bugs #14/#15 detectados en review externo (2026-05-31).** El #14 contaminaba
+> toda la evidencia post-comida que se venía juntando (el warm-start del COB del
+> SSM caía a 0 sin importar lo comido). Por eso **el reloj de evidencia limpia
+> para métricas post-comida se reinicia desde esta fecha**; cobertura general y
+> nocturna no se ven afectadas. Guard de regresión: `utils/tests/test_cob_contract.py`.
 
 ---
 

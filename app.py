@@ -401,7 +401,10 @@ def _iniciar_scheduler():
                         from models import GlucoseReading
                         from datetime import datetime, timedelta
 
-                        now = datetime.utcnow()
+                        # Hora LOCAL (no utcnow): assess_nocturnal_hypo_risk usa
+                        # timestamp.hour para is_nocturnal y el resto del sistema
+                        # trabaja en hora local (TZ=America/Santiago).
+                        now = datetime.now()
 
                         # Lectura CGM más reciente (últimos 15 min)
                         cutoff = now - timedelta(minutes=15)
@@ -423,7 +426,7 @@ def _iniciar_scheduler():
                         basal_eff   = compute_basal_eff(now, basal_doses)
 
                         risk = assess_nocturnal_hypo_risk(
-                            current_glucose      = float(last_cgm.value),
+                            current_glucose      = float(last_cgm.value_mgdl),
                             roc                  = roc,
                             proposed_bolus       = 0.0,   # sin bolus propuesto
                             current_iob          = iob,
