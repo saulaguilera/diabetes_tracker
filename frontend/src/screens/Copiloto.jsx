@@ -7,6 +7,16 @@ import NebulaGuide from '../components/NebulaGuide.jsx'
 
 const GREETING = 'Hola 👋 Soy tu copiloto. Puedo explicarte tus datos y acompañarte. Para dosis o decisiones médicas, siempre tu equipo de salud. ¿Qué querés saber?'
 
+// Preguntas sugeridas (estilo del diseño) — SOLO explicativas/de acompañamiento.
+// Se evitan a propósito las que piden juicio o recomendación ("¿está bien?",
+// "ideas para mi comida"), por el candado del copiloto.
+const SUGGESTIONS = [
+  '¿Por qué subí anoche?',
+  '¿Cómo estuvo mi semana?',
+  '¿Cómo viene mi día?',
+  'Explicame mi tiempo en rango',
+]
+
 export default function Copiloto({ theme }) {
   const [messages, setMessages] = useState([{ role: 'assistant', content: GREETING }])
   const [input, setInput] = useState('')
@@ -17,8 +27,8 @@ export default function Copiloto({ theme }) {
     if (messages.length > 1 || sending) endRef.current && endRef.current.scrollIntoView({ behavior: 'smooth' })
   }, [messages, sending])
 
-  const send = async () => {
-    const text = input.trim()
+  const send = async (textArg) => {
+    const text = (typeof textArg === 'string' ? textArg : input).trim()
     if (!text || sending) return
     const history = messages.map(m => ({ role: m.role, content: m.content }))
     setMessages(m => [...m, { role: 'user', content: text }])
@@ -48,6 +58,19 @@ export default function Copiloto({ theme }) {
         )}
         <div ref={endRef}/>
       </div>
+
+      {/* preguntas sugeridas (al empezar) */}
+      {messages.length === 1 && !sending && (
+        <div style={{ flexShrink: 0, display: 'flex', gap: 8, overflowX: 'auto', padding: '4px 16px 2px' }}>
+          {SUGGESTIONS.map((s, i) => (
+            <button key={i} onClick={() => send(s)} style={{
+              flexShrink: 0, padding: '9px 14px', borderRadius: 100, cursor: 'pointer', fontFamily: SANS, fontSize: 13,
+              background: theme.surface, color: theme.inkSoft, border: `0.5px solid ${theme.border}`, whiteSpace: 'nowrap' }}>
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* barra de entrada (sobre la nav) */}
       <div style={{ flexShrink: 0, padding: '10px 16px', marginBottom: 92, display: 'flex', alignItems: 'flex-end', gap: 10 }}>

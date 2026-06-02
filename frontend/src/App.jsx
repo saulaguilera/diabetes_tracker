@@ -96,7 +96,7 @@ function TopBar({ theme }) {
 }
 
 export default function App() {
-  // dark fijo por ahora; el toggle de tema se agrega cuando portemos Perfil.
+  // tema oscuro/claro, persistido en localStorage (toggle en Perfil)
   const [dark, setDark] = useState(() => {
     try { return localStorage.getItem('orbit_theme') !== 'light' } catch (e) { return true }
   })
