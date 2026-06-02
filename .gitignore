@@ -26,6 +26,7 @@ uploads/
 
 # Frontend (Orbit Copilot)
 node_modules/
-# Build compilado de React: NO se commitea (se genera con `npm run build`).
-# Cuando se despliegue /copilot, se configura el build en Railway.
-static/copilot/
+# NOTA: static/copilot/ (el build de React) SÍ se versiona, porque Railway
+# sirve Python puro (sin paso de build de Node). Se regenera con `npm run build`
+# en frontend/ y se commitea. Si algún día se agrega build automático en Railway,
+# volver a ignorarlo.
