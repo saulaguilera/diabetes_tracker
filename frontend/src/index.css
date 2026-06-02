@@ -27,6 +27,8 @@ body::after {
 .breathe-fast { animation: breathe-fast 5s ease-in-out infinite; transform-origin: center; }
 
 @keyframes twinkle  { 0%,100%{opacity:0.18; transform:scale(1)} 50%{opacity:0.9; transform:scale(1.35)} }
+/* deriva lenta de cada destello (translate suave de ida y vuelta) */
+@keyframes starDrift { 0%,100%{ transform: translate(0,0); } 50%{ transform: translate(var(--dx,0), var(--dy,0)); } }
 @keyframes haloPulse{ 0%,100%{opacity:0.5} 50%{opacity:0.85} }
 .halo-pulse { animation: haloPulse 5.5s ease-in-out infinite; }
 

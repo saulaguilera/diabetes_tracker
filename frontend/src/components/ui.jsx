@@ -1,4 +1,6 @@
-// ui.jsx — primitivos visuales compartidos (tarjeta, eyebrow, medidor).
+// ui.jsx — primitivos visuales compartidos.
+import { SANS } from '../theme.js'
+
 export function Eyebrow({ theme, children, style }) {
   return (
     <div style={{ fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase',
@@ -22,5 +24,73 @@ export function Meter({ pct, color, track }) {
       <div style={{ width: `${p}%`, height: '100%', background: color, borderRadius: 100,
         transition: 'width 0.6s ease' }}/>
     </div>
+  )
+}
+
+// ── controles de formulario ───────────────────────────────────────────────────
+export function Stepper({ theme, value, setValue, step = 1, min = 0, max = 999, unit, color, big }) {
+  const clamp = v => Math.max(min, Math.min(max, +(v).toFixed(2)))
+  const Btn = ({ d }) => (
+    <button onClick={() => setValue(clamp(value + d * step))}
+      style={{ width: big ? 44 : 36, height: big ? 44 : 36, borderRadius: '50%', flexShrink: 0,
+        border: `0.5px solid ${theme.borderStrong}`, background: theme.surface, color: theme.ink,
+        fontSize: big ? 22 : 18, fontWeight: 300, cursor: 'pointer', display: 'grid', placeItems: 'center', lineHeight: 1 }}>
+      {d < 0 ? '−' : '+'}
+    </button>
+  )
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: big ? 20 : 14 }}>
+      <Btn d={-1}/>
+      <div style={{ minWidth: big ? 96 : 64, textAlign: 'center', display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 4 }}>
+        <span style={{ fontSize: big ? 46 : 24, fontWeight: 300, color: color || theme.ink,
+          letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{value}</span>
+        {unit && <span style={{ fontSize: big ? 16 : 12, color: theme.inkSoft }}>{unit}</span>}
+      </div>
+      <Btn d={1}/>
+    </div>
+  )
+}
+
+export function Segmented({ theme, options, value, onChange, color }) {
+  return (
+    <div style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 14,
+      background: theme.dark ? 'rgba(0,0,0,0.22)' : 'rgba(0,0,0,0.05)', border: `0.5px solid ${theme.border}` }}>
+      {options.map(o => {
+        const on = value === o.id
+        return (
+          <button key={o.id} onClick={() => onChange(o.id)} style={{
+            flex: 1, padding: '9px 6px', borderRadius: 11, border: 'none', cursor: 'pointer',
+            background: on ? (color || theme.accent) : 'transparent', color: on ? '#0A0C1E' : theme.inkSoft,
+            fontSize: 13, fontWeight: on ? 600 : 400, fontFamily: SANS, transition: 'all 0.2s' }}>
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+export function Chips({ theme, options, value, onChange, color }) {
+  const c = color || theme.accent
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      {options.map(o => {
+        const on = value === o
+        return (
+          <button key={o} onClick={() => onChange(o)} style={{
+            padding: '8px 14px', borderRadius: 100, cursor: 'pointer', fontFamily: SANS, fontSize: 13,
+            background: on ? `${c}22` : theme.surface, color: on ? c : theme.inkSoft,
+            border: `0.5px solid ${on ? c + '88' : theme.border}`, transition: 'all 0.2s' }}>{o}</button>
+        )
+      })}
+    </div>
+  )
+}
+
+export function Field({ theme, value, onChange, placeholder }) {
+  return (
+    <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+      style={{ width: '100%', padding: '12px 14px', borderRadius: 14, fontSize: 15, fontFamily: SANS,
+        background: theme.surface, border: `0.5px solid ${theme.border}`, color: theme.ink, outline: 'none' }}/>
   )
 }

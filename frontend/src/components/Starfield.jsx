@@ -1,4 +1,5 @@
-// Starfield.jsx — puntos de luz a la deriva (portado de cm-core.jsx)
+// Starfield.jsx — destellos a la deriva: cada uno titila y además se mueve lento
+// (wrapper externo = drift translate, interno = twinkle). Da dinámica al fondo.
 import { useMemo } from 'react'
 
 export default function Starfield({ count = 40, opacity = 1, seed = 1, color = '255,255,255' }) {
@@ -8,6 +9,8 @@ export default function Starfield({ count = 40, opacity = 1, seed = 1, color = '
     return Array.from({ length: count }, () => ({
       x: rnd() * 100, y: rnd() * 100,
       r: 0.4 + rnd() * 1.3, d: rnd() * 6, dur: 3 + rnd() * 5,
+      dx: (rnd() - 0.5) * 26, dy: (rnd() - 0.5) * 26,
+      driftDur: 16 + rnd() * 24, driftDelay: rnd() * 8,
     }))
   }, [count, seed])
 
@@ -16,11 +19,15 @@ export default function Starfield({ count = 40, opacity = 1, seed = 1, color = '
       {stars.map((st, i) => (
         <div key={i} style={{
           position: 'absolute', left: `${st.x}%`, top: `${st.y}%`,
-          width: st.r * 2, height: st.r * 2, borderRadius: '50%',
-          background: `rgba(${color},0.9)`,
-          boxShadow: `0 0 ${st.r * 3}px rgba(${color},0.7)`,
-          animation: `twinkle ${st.dur}s ease-in-out ${st.d}s infinite`,
-        }}/>
+          animation: `starDrift ${st.driftDur.toFixed(1)}s ease-in-out ${st.driftDelay.toFixed(1)}s infinite`,
+          '--dx': `${st.dx.toFixed(1)}px`, '--dy': `${st.dy.toFixed(1)}px`,
+        }}>
+          <div style={{
+            width: st.r * 2, height: st.r * 2, borderRadius: '50%',
+            background: `rgba(${color},0.9)`, boxShadow: `0 0 ${st.r * 3}px rgba(${color},0.7)`,
+            animation: `twinkle ${st.dur}s ease-in-out ${st.d}s infinite`,
+          }}/>
+        </div>
       ))}
     </div>
   )

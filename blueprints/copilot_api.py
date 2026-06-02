@@ -11,7 +11,7 @@ nada. Reusa los cálculos que ya existen (get_kinetics_snapshot).
                             actividad reciente.
 """
 from datetime import datetime, timedelta
-from flask import Blueprint, jsonify, session
+from flask import Blueprint, jsonify, session, request
 
 bp = Blueprint("copilot_api", __name__)
 
@@ -118,3 +118,60 @@ def copilot_home():
         "recent": recent,
         "updated_at": datetime.now().isoformat(),
     })
+
+
+@bp.route("/api/copilot/log", methods=["POST"], endpoint="copilot_log")
+def copilot_log():
+    """Registrar comida / insulina / ejercicio. Escribe a las mismas tablas que
+    los formularios actuales (una sola fuente de verdad). Hora local. Estos datos
+    alimentan también el research (el SSM los lee como contexto)."""
+    err = _require_login()
+    if err:
+        return err
+
+    from models import db, Meal, InsulinDose, Activity
+
+    data = request.get_json(silent=True) or {}
+    cat = data.get("cat")
+    now = datetime.now()
+
+    def _f(key, default=0.0):
+        try:
+            return float(data.get(key) or default)
+        except (TypeError, ValueError):
+            return default
+
+    try:
+        if cat == "comida":
+            row = Meal(
+                timestamp=now,
+                name=(data.get("name") or "Comida").strip()[:200],
+                carbs_g=_f("carbs"), fat_g=_f("fat"), protein_g=_f("protein"),
+                calories=_f("calories"), notes=(data.get("notes") or None),
+            )
+        elif cat == "insulina":
+            units = _f("units")
+            if units <= 0:
+                return jsonify({"ok": False, "error": "Unidades inválidas"}), 400
+            tipo = data.get("type") if data.get("type") in ("bolus", "basal") else "bolus"
+            row = InsulinDose(
+                timestamp=now, type=tipo, units=units,
+                purpose=(data.get("purpose") or None), notes=(data.get("notes") or None),
+            )
+        elif cat == "ejercicio":
+            row = Activity(
+                timestamp=now,
+                activity_type=(data.get("activity_type") or "Ejercicio").strip()[:100],
+                duration_min=int(_f("duration_min")),
+                intensity=(data.get("intensity") or None),
+                notes=(data.get("notes") or None),
+            )
+        else:
+            return jsonify({"ok": False, "error": "Categoría no soportada"}), 400
+
+        db.session.add(row)
+        db.session.commit()
+        return jsonify({"ok": True, "id": row.id})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 400
