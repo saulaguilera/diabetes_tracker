@@ -63,6 +63,10 @@ def _protect_all():
     token_param = request.args.get("token", "")
     if _SYNC_TOKEN and token_param == _SYNC_TOKEN:
         return
+    # APIs JSON: 401 limpio en vez de redirect a HTML (un fetch().json() sobre
+    # la página de login rompería; el front detecta el 401 y manda a /login).
+    if request.path.startswith("/api/"):
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
     return redirect(url_for("login", next=request.path))
 
 app.before_request(_protect_all)
