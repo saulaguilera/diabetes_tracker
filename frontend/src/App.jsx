@@ -109,7 +109,7 @@ export default function App() {
 
   const screen = {
     hoy:      <Hoy theme={theme} refreshKey={refreshKey} />,
-    patrones: <Patrones theme={theme} />,
+    patrones: <Patrones theme={theme} refreshKey={refreshKey} />,
     registro: <Registro theme={theme} onDone={() => { setRefreshKey(k => k + 1); setTab('hoy') }} />,
     copiloto: <Copiloto theme={theme} />,
     perfil:   <Perfil theme={theme} />,

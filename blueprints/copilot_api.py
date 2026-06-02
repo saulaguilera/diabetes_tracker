@@ -175,3 +175,62 @@ def copilot_log():
     except Exception as exc:
         db.session.rollback()
         return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@bp.route("/api/copilot/patterns", endpoint="copilot_patterns")
+def copilot_patterns():
+    """Pantalla Patrones — retrospectivo: TIR semanal, resumen y patrones
+    detectados (reusa analizar_patrones). Solo lectura, sin predicción."""
+    err = _require_login()
+    if err:
+        return err
+
+    from models import GlucoseReading
+    from utils.patrones_detector import analizar_patrones
+
+    try:
+        a = analizar_patrones(days=14) or {}
+    except Exception:
+        a = {}
+    resumen = a.get("resumen") or {}
+    patrones = a.get("patrones") or []
+
+    # patrones → formato liviano (observaciones; el médico decide acciones)
+    out_patterns = [{
+        "tipo": p.get("tipo"),
+        "nivel": p.get("nivel", "info"),
+        "titulo": p.get("titulo", ""),
+        "detalle": p.get("detalle", ""),
+        "sugerencia": p.get("sugerencia", ""),
+        "frecuencia": p.get("frecuencia"),
+    } for p in patrones]
+
+    # TIR por día — últimos 7 días
+    DOW = "LMMJVSD"  # lunes..domingo (weekday(): 0=lunes)
+    weekly = {"labels": [], "values": []}
+    now = datetime.now()
+    for i in range(6, -1, -1):
+        d0 = (now - timedelta(days=i)).replace(hour=0, minute=0, second=0, microsecond=0)
+        d1 = d0 + timedelta(days=1)
+        reads = (GlucoseReading.query
+                 .filter(GlucoseReading.timestamp >= d0, GlucoseReading.timestamp < d1)
+                 .all())
+        tir = round(100 * sum(1 for r in reads if LOW <= r.value_mgdl <= HIGH) / len(reads)) if reads else None
+        weekly["labels"].append(DOW[d0.weekday()])
+        weekly["values"].append(tir)
+
+    return jsonify({
+        "ok": True,
+        "resumen": {
+            "avg": resumen.get("avg"),
+            "cv": resumen.get("cv"),
+            "tir": resumen.get("tir"),
+            "hipo_pct": resumen.get("hipo_pct"),
+            "hiper_pct": resumen.get("hiper_pct"),
+            "n": resumen.get("n_lecturas"),
+            "days": 14,
+        },
+        "weekly": weekly,
+        "patterns": out_patterns,
+        "updated_at": datetime.now().isoformat(),
+    })
