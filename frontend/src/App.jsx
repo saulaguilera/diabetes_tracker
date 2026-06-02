@@ -105,8 +105,8 @@ export default function App() {
         overflow: 'hidden', background: theme.bg, color: theme.ink, fontFamily: SANS,
         boxShadow: '0 30px 90px rgba(0,0,0,0.5)',
       }}>
-        {/* glows ambientales de las nebulosas */}
-        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
+        {/* glows ambientales de las nebulosas — derivan lentamente (no estático) */}
+        <div className="ambient-drift" style={{ position: 'absolute', inset: '-15%', pointerEvents: 'none',
           background: `radial-gradient(60% 32% at 18% 6%, rgba(${PAL.metabolismo.rgb},0.16) 0%, transparent 70%), radial-gradient(55% 30% at 92% 64%, rgba(${PAL.glucosa.rgb},0.12) 0%, transparent 70%), radial-gradient(50% 28% at 50% 100%, rgba(${PAL.ritmo.rgb},0.10) 0%, transparent 70%)` }}/>
         <Starfield count={46} opacity={0.55} seed={3}/>
 

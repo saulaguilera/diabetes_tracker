@@ -43,5 +43,19 @@ body::after {
 @keyframes aiSpin { to { transform: rotate(360deg); } }
 .ai-orbit { animation: aiSpin 0.9s linear infinite; }
 
+/* logo: satélite orbitando + núcleo latiendo */
+@keyframes logoSpin { to { transform: rotate(360deg); } }
+.logo-sat { animation: logoSpin 16s linear infinite; transform-origin: 50% 50%; transform-box: view-box; }
+@keyframes corePulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
+.logo-core { animation: corePulse 3.6s ease-in-out infinite; }
+
+/* destello "ahora" del gráfico — pulso suave */
+@keyframes nowPulse { 0% { transform: scale(1); opacity: 0.7; } 70% { transform: scale(2.6); opacity: 0; } 100% { opacity: 0; } }
+.now-pulse { animation: nowPulse 2.4s ease-out infinite; transform-origin: center; transform-box: fill-box; }
+
+/* fondo ambiental — deriva lenta para que respire */
+@keyframes ambientDrift { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(2.5%, -2%) scale(1.07); } }
+.ambient-drift { animation: ambientDrift 26s ease-in-out infinite; }
+
 input, textarea, button { font-family: inherit; }
 input { -webkit-appearance: none; }
