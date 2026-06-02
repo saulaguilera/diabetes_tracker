@@ -97,7 +97,13 @@ function TopBar({ theme }) {
 
 export default function App() {
   // dark fijo por ahora; el toggle de tema se agrega cuando portemos Perfil.
-  const theme = makeTheme(true)
+  const [dark, setDark] = useState(() => {
+    try { return localStorage.getItem('orbit_theme') !== 'light' } catch (e) { return true }
+  })
+  useEffect(() => {
+    try { localStorage.setItem('orbit_theme', dark ? 'dark' : 'light') } catch (e) {}
+  }, [dark])
+  const theme = makeTheme(dark)
   const [tab, setTab] = useState('hoy')
   const [refreshKey, setRefreshKey] = useState(0)
 
@@ -112,7 +118,7 @@ export default function App() {
     patrones: <Patrones theme={theme} refreshKey={refreshKey} />,
     registro: <Registro theme={theme} onDone={() => { setRefreshKey(k => k + 1); setTab('hoy') }} />,
     copiloto: <Copiloto theme={theme} />,
-    perfil:   <Perfil theme={theme} />,
+    perfil:   <Perfil theme={theme} refreshKey={refreshKey} dark={dark} onToggleTheme={() => setDark(d => !d)} />,
   }[tab]
 
   return (

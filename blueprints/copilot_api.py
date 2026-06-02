@@ -234,3 +234,50 @@ def copilot_patterns():
         "patterns": out_patterns,
         "updated_at": datetime.now().isoformat(),
     })
+
+
+@bp.route("/api/copilot/profile", endpoint="copilot_profile")
+def copilot_profile():
+    """Pantalla Perfil — datos del usuario, sensor y terapia (solo lectura).
+    La edición fina sigue en la app/herramientas; acá se muestra el estado."""
+    err = _require_login()
+    if err:
+        return err
+
+    from models import GlucoseReading
+    from helpers import _get_setting
+
+    last = GlucoseReading.query.order_by(GlucoseReading.timestamp.desc()).first()
+    sync_raw = _get_setting("libre_last_sync")
+    sync_ago = None
+    if sync_raw:
+        try:
+            sync_ago = _hace(datetime.fromisoformat(sync_raw))
+        except Exception:
+            sync_ago = None
+
+    def _num(k):
+        v = _get_setting(k)
+        try:
+            return float(v) if v not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+
+    return jsonify({
+        "ok": True,
+        "name": _get_setting("user_name") or None,
+        "sensor": {
+            "last_reading": int(round(last.value_mgdl)) if last else None,
+            "last_reading_ago": _hace(last.timestamp) if last else None,
+            "source": last.source if last else None,
+            "last_sync_ago": sync_ago,
+        },
+        "config": {
+            "isf": _num("isf_manual"),
+            "icr": _num("icr"),
+            "objetivo": _num("objetivo"),
+            "basal_dose": _num("basal_dose_u"),
+            "basal_hora": _get_setting("basal_hora"),
+            "basal_tipo": _get_setting("basal_tipo"),
+        },
+    })
