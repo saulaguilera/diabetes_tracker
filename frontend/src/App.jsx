@@ -1,6 +1,6 @@
 // App.jsx — shell de Orbit Copilot: fondo cósmico + navegación + pantalla activa.
 // Andamiaje: las pantallas son placeholders por ahora (sin datos cableados).
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { SANS, PAL, makeTheme } from './theme.js'
 import Starfield from './components/Starfield.jsx'
 import BottomNav from './components/BottomNav.jsx'
@@ -9,6 +9,28 @@ import Registro from './screens/Registro.jsx'
 import Patrones from './screens/Patrones.jsx'
 import Copiloto from './screens/Copiloto.jsx'
 import Perfil from './screens/Perfil.jsx'
+
+// Transición suave al cambiar de sección: fundido + deriva hacia arriba + leve
+// escala. Calmo, en la temática "que respira". Se re-monta al cambiar de tab.
+function SectionTransition({ tabKey, children }) {
+  const [shown, setShown] = useState(false)
+  useEffect(() => {
+    setShown(false)
+    const t = setTimeout(() => setShown(true), 16)
+    return () => clearTimeout(t)
+  }, [tabKey])
+  return (
+    <div style={{
+      opacity: shown ? 1 : 0,
+      transform: shown ? 'translateY(0) scale(1)' : 'translateY(14px) scale(0.985)',
+      transition: shown
+        ? 'opacity 0.5s ease, transform 0.5s cubic-bezier(.2,.8,.2,1)'
+        : 'none',
+    }}>
+      {children}
+    </div>
+  )
+}
 
 export default function App() {
   // dark fijo por ahora; el toggle de tema se agrega cuando portemos Perfil.
@@ -37,7 +59,7 @@ export default function App() {
         <Starfield count={46} opacity={0.55} seed={3}/>
 
         <div style={{ position: 'absolute', inset: 0, paddingTop: 52, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          {screen}
+          <SectionTransition tabKey={tab}>{screen}</SectionTransition>
         </div>
 
         <BottomNav theme={theme} current={tab} onChange={setTab}/>
