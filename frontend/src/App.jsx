@@ -137,9 +137,13 @@ export default function App() {
         <Starfield count={46} opacity={0.55} seed={3}/>
         <TopBar theme={theme}/>
 
-        <PullToRefresh theme={theme} onRefresh={onRefresh}>
-          <SectionTransition tabKey={tab}>{screen}</SectionTransition>
-        </PullToRefresh>
+        {tab === 'copiloto' ? (
+          <div style={{ position: 'absolute', inset: 0, paddingTop: 52 }}>{screen}</div>
+        ) : (
+          <PullToRefresh theme={theme} onRefresh={onRefresh}>
+            <SectionTransition tabKey={tab}>{screen}</SectionTransition>
+          </PullToRefresh>
+        )}
 
         <BottomNav theme={theme} current={tab} onChange={setTab}/>
       </div>

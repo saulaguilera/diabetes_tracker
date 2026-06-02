@@ -281,3 +281,91 @@ def copilot_profile():
             "basal_tipo": _get_setting("basal_tipo"),
         },
     })
+
+
+# ── Copiloto (chat) — SOLO explica y acompaña. NUNCA recomienda ni predice. ────
+_CHAT_SYSTEM = """Sos el copiloto de Orbit, una app para una persona con diabetes tipo 1.
+Tu ÚNICO rol es EXPLICAR los datos de la persona y ACOMPAÑARLA con calidez y claridad.
+
+REGLAS ESTRICTAS E INVIOLABLES:
+- NUNCA recomiendes dosis de insulina, correcciones, ni cuánto comer o hacer.
+- NUNCA des indicaciones médicas ni de tratamiento.
+- NUNCA predigas la glucosa futura ni afirmes qué va a pasar.
+- Si te piden una dosis, una corrección o "qué hago", decliná con amabilidad y sugerí
+  consultarlo con su equipo médico. No es tu rol decidir.
+- Solo explicás lo que muestran sus datos (presente y pasado) y acompañás.
+- Respondé SIEMPRE en español, en segunda persona, cálido y breve (2 a 4 frases).
+- No inventes datos que no estén en el contexto.
+
+CONTEXTO ACTUAL DE LA PERSONA:
+{context}"""
+
+
+def _chat_context():
+    """Contexto compacto y real para el copiloto (solo lectura)."""
+    from models import GlucoseReading
+    try:
+        from utils.kinetics import get_kinetics_snapshot
+        snap = get_kinetics_snapshot(hours_lookback=6) or {}
+    except Exception:
+        snap = {}
+    last = GlucoseReading.query.order_by(GlucoseReading.timestamp.desc()).first()
+    since = datetime.now() - timedelta(hours=24)
+    reads = GlucoseReading.query.filter(GlucoseReading.timestamp >= since).all()
+    tir = round(100 * sum(1 for r in reads if LOW <= r.value_mgdl <= HIGH) / len(reads)) if reads else None
+    parts = []
+    if last:
+        parts.append(f"Glucosa actual: {int(round(last.value_mgdl))} mg/dL "
+                     f"(hace {_hace(last.timestamp)}).")
+    iob = round(snap.get("iob_bolus") or 0.0, 1)
+    cob = int(round(snap.get("cob") or 0))
+    if iob:
+        parts.append(f"Insulina activa: {iob} U.")
+    if cob:
+        parts.append(f"Carbohidratos activos: {cob} g.")
+    roc = snap.get("roc") or 0.0
+    parts.append("Tendencia: " + ("subiendo" if roc > 1 else "bajando" if roc < -1 else "estable") + ".")
+    if tir is not None:
+        parts.append(f"Tiempo en rango (24h): {tir}%.")
+    return " ".join(parts) if parts else "Sin datos recientes disponibles."
+
+
+@bp.route("/api/copilot/chat", methods=["POST"], endpoint="copilot_chat")
+def copilot_chat():
+    err = _require_login()
+    if err:
+        return err
+
+    import os
+    data = request.get_json(silent=True) or {}
+    message = (data.get("message") or "").strip()
+    if not message:
+        return jsonify({"ok": False, "error": "Mensaje vacío"}), 400
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return jsonify({"ok": True, "reply": "El copiloto no está disponible ahora mismo."})
+
+    # historial (multi-turno), acotado
+    history = data.get("history") or []
+    msgs = []
+    for m in history[-8:]:
+        role = m.get("role")
+        content = (m.get("content") or "").strip()
+        if role in ("user", "assistant") and content:
+            msgs.append({"role": role, "content": content})
+    msgs.append({"role": "user", "content": message})
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=320,
+            system=_CHAT_SYSTEM.format(context=_chat_context()),
+            messages=msgs,
+        )
+        reply = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+        return jsonify({"ok": True, "reply": reply or "…"})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "No pude responder ahora. Intentá de nuevo."}), 502
