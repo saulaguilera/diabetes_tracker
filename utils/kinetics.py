@@ -526,7 +526,12 @@ def current_basal_iob(at_time: Optional[datetime] = None) -> float:
     if dose <= 0:
         return 0.0
 
-    hora = int(_get_setting("basal_hora") or 22)
+    # int(float(...)): tolera valores guardados como '10.0' (float-string) o '10'.
+    try:
+        hora = int(float(_get_setting("basal_hora") or 22))
+    except (TypeError, ValueError):
+        hora = 22
+    hora = min(23, max(0, hora))
     inj  = at_time.replace(hour=hora, minute=0, second=0, microsecond=0)
     if inj > at_time:
         inj -= timedelta(days=1)
