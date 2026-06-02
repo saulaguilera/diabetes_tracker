@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { SANS, PAL, makeTheme } from './theme.js'
 import Starfield from './components/Starfield.jsx'
 import BottomNav from './components/BottomNav.jsx'
+import OrbitLogo from './components/OrbitLogo.jsx'
 import Hoy from './screens/Hoy.jsx'
 import Registro from './screens/Registro.jsx'
 import Patrones from './screens/Patrones.jsx'
@@ -77,6 +78,23 @@ function PullToRefresh({ theme, onRefresh, children }) {
   )
 }
 
+// Barra superior global de marca: logo Orbit + wordmark.
+function TopBar({ theme }) {
+  return (
+    <div style={{
+      position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30, height: 52,
+      display: 'flex', alignItems: 'center', gap: 9, padding: '0 22px', pointerEvents: 'none',
+      background: theme.dark
+        ? 'linear-gradient(180deg, rgba(6,11,24,0.92) 0%, rgba(6,11,24,0) 100%)'
+        : 'linear-gradient(180deg, rgba(230,238,250,0.92) 0%, rgba(230,238,250,0) 100%)',
+      backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)',
+    }}>
+      <OrbitLogo size={26}/>
+      <span style={{ fontFamily: SANS, fontSize: 20, fontWeight: 300, letterSpacing: '0.01em', color: theme.ink }}>Orbit</span>
+    </div>
+  )
+}
+
 export default function App() {
   // dark fijo por ahora; el toggle de tema se agrega cuando portemos Perfil.
   const theme = makeTheme(true)
@@ -105,10 +123,13 @@ export default function App() {
         overflow: 'hidden', background: theme.bg, color: theme.ink, fontFamily: SANS,
         boxShadow: '0 30px 90px rgba(0,0,0,0.5)',
       }}>
-        {/* glows ambientales de las nebulosas — derivan lentamente (no estático) */}
+        {/* glows ambientales — dos capas que respiran en contrafase (profundidad) */}
         <div className="ambient-drift" style={{ position: 'absolute', inset: '-15%', pointerEvents: 'none',
           background: `radial-gradient(60% 32% at 18% 6%, rgba(${PAL.metabolismo.rgb},0.16) 0%, transparent 70%), radial-gradient(55% 30% at 92% 64%, rgba(${PAL.glucosa.rgb},0.12) 0%, transparent 70%), radial-gradient(50% 28% at 50% 100%, rgba(${PAL.ritmo.rgb},0.10) 0%, transparent 70%)` }}/>
+        <div className="ambient-drift-2" style={{ position: 'absolute', inset: '-15%', pointerEvents: 'none',
+          background: `radial-gradient(50% 30% at 80% 12%, rgba(${PAL.pancreas.rgb},0.10) 0%, transparent 70%), radial-gradient(55% 32% at 12% 78%, rgba(${PAL.ritmo.rgb},0.10) 0%, transparent 70%)` }}/>
         <Starfield count={46} opacity={0.55} seed={3}/>
+        <TopBar theme={theme}/>
 
         <PullToRefresh theme={theme} onRefresh={onRefresh}>
           <SectionTransition tabKey={tab}>{screen}</SectionTransition>

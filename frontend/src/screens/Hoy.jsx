@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { apiGet } from '../api.js'
 import { PAL, SANS } from '../theme.js'
 import NebulaGuide from '../components/NebulaGuide.jsx'
-import OrbitLogo from '../components/OrbitLogo.jsx'
 import GlucoseWave from '../components/GlucoseWave.jsx'
 import { Card, Eyebrow, Meter } from '../components/ui.jsx'
 
@@ -61,12 +60,6 @@ export default function Hoy({ theme, refreshKey = 0 }) {
 
   return (
     <div style={{ padding: '4px 22px 120px', fontFamily: SANS, display: 'flex', flexDirection: 'column', gap: 22 }}>
-      {/* barra superior — logo + Dashboard */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-        <OrbitLogo size={22}/>
-        <span style={{ fontSize: 16, fontWeight: 500, color: theme.ink, letterSpacing: '-0.01em' }}>Dashboard</span>
-      </div>
-
       {/* hero — glucosa actual */}
       <div>
         <div style={{ color: theme.inkSoft, fontSize: 14, marginBottom: 10 }}>Ahora</div>
