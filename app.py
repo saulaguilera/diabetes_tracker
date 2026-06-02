@@ -18,7 +18,7 @@ try:
     load_dotenv()
 except ImportError:
     pass
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_from_directory
 from datetime import datetime, timedelta, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import db, GlucoseReading, Meal, MealComponent, InsulinDose, Activity, CGMImport, FoodItem, UserSettings
@@ -495,11 +495,12 @@ from blueprints.bench_bp     import bp as bench_bp
 from blueprints.tuning_bp    import bp as tuning_bp
 from blueprints.daily_brief_bp import bp as daily_brief_bp
 from blueprints.health_bp     import bp as health_bp
+from blueprints.copilot_api   import bp as copilot_api_bp
 
 for _bp in [auth_bp, glucemia_bp, insulina_bp, actividad_bp, alimentos_bp,
             backup_bp, sync_bp, comidas_bp, herramientas_bp, reportes_bp,
             patrones_bp, pmm_bp, bench_bp, tuning_bp, daily_brief_bp,
-            health_bp]:
+            health_bp, copilot_api_bp]:
     app.register_blueprint(_bp)
 
 # PMM blueprint exento de CSRF (API JSON)
@@ -508,6 +509,25 @@ csrf.exempt(bench_bp)
 csrf.exempt(tuning_bp)
 csrf.exempt(daily_brief_bp)
 csrf.exempt(health_bp)
+csrf.exempt(copilot_api_bp)
+
+
+# ── Orbit Copilot (frontend React) ─────────────────────────────────────────────
+# Sirve el build de Vite (static/copilot/) como SPA bajo /copilot.
+# Protegido por login (vía _protect_all). El build se genera con `npm run build`
+# en frontend/ (gitignored). Si no existe todavía, devuelve un aviso.
+import os as _os
+
+@app.route("/copilot")
+@app.route("/copilot/<path:path>")
+def copilot_spa(path=""):
+    root = _os.path.join(app.static_folder, "copilot")
+    if not _os.path.isfile(_os.path.join(root, "index.html")):
+        return ("Orbit Copilot no está compilado. Corré `npm run build` en frontend/.", 503)
+    full = _os.path.join(root, path)
+    if path and _os.path.isfile(full):
+        return send_from_directory(root, path)   # assets (js/css)
+    return send_from_directory(root, "index.html")  # fallback SPA
 
 # sync blueprint: exento de CSRF (cron externo + APIs JSON)
 csrf.exempt(sync_bp)
