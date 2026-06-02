@@ -369,3 +369,70 @@ def copilot_chat():
         return jsonify({"ok": True, "reply": reply or "…"})
     except Exception as exc:
         return jsonify({"ok": False, "error": "No pude responder ahora. Intentá de nuevo."}), 502
+
+
+# ── Estimación de macros desde foto (Claude visión) ──────────────────────────
+# Estimación APROXIMADA para registrar; el usuario revisa/edita antes de guardar.
+# No alimenta ninguna dosis (el producto no calcula bolo).
+_ESTIMATE_PROMPT = (
+    "Sos un asistente nutricional. Mirá la foto de la comida y ESTIMÁ sus "
+    "macronutrientes. Respondé SOLO con un JSON válido, sin texto extra, con esta "
+    "forma exacta:\n"
+    '{"name": "nombre corto del plato", "carbs": <g carbohidratos>, '
+    '"protein": <g proteína>, "fat": <g grasa>, "calories": <kcal>}\n'
+    "Los valores numéricos son enteros aproximados. Si no se distingue comida, "
+    'devolvé {"name": "", "carbs": 0, "protein": 0, "fat": 0, "calories": 0}.'
+)
+
+
+@bp.route("/api/copilot/estimate", methods=["POST"], endpoint="copilot_estimate")
+def copilot_estimate():
+    """Recibe una foto (data URL base64) y devuelve macros estimados."""
+    err = _require_login()
+    if err:
+        return err
+
+    import os, json, re
+    data = request.get_json(silent=True) or {}
+    image = data.get("image") or ""
+    # data URL → media_type + base64
+    m = re.match(r"data:(image/[a-zA-Z0-9.+-]+);base64,(.*)$", image, re.DOTALL)
+    if not m:
+        return jsonify({"ok": False, "error": "Imagen inválida"}), 400
+    media_type, b64 = m.group(1), m.group(2)
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return jsonify({"ok": False, "error": "Estimación no disponible ahora."}), 503
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=200,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
+                    {"type": "text", "text": _ESTIMATE_PROMPT},
+                ],
+            }],
+        )
+        txt = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
+        mjson = re.search(r"\{.*\}", txt, re.DOTALL)
+        parsed = json.loads(mjson.group(0)) if mjson else {}
+
+        def _i(k):
+            try:
+                return max(0, int(round(float(parsed.get(k) or 0))))
+            except (TypeError, ValueError):
+                return 0
+
+        return jsonify({
+            "ok": True,
+            "name": (parsed.get("name") or "").strip()[:200],
+            "carbs": _i("carbs"), "protein": _i("protein"), "fat": _i("fat"), "calories": _i("calories"),
+        })
+    except Exception:
+        return jsonify({"ok": False, "error": "No pude estimar la foto. Cargá los datos a mano."}), 502
