@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="theme-color" content="#0B1324"/>
+<title>Orbit — Logo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Outfit",system-ui,sans-serif}
+  .panel{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:48px 20px}
+  .dark{background:radial-gradient(125% 90% at 50% -8%, #16243F 0%, #0B1324 46%, #060B18 100%);color:#EAF2F8}
+  .light{background:radial-gradient(120% 80% at 50% -10%, #EAF2FB 0%, #DCE6F2 45%, #D0DCEC 100%);color:#0B1324}
+  .word{font-size:54px;font-weight:300;letter-spacing:0.01em;line-height:1}
+  .sub{font-size:13px;letter-spacing:0.42em;text-transform:uppercase;color:#39C6E6;font-weight:400;padding-left:0.42em}
+  .tag{font-size:11px;letter-spacing:0.2em;text-transform:uppercase;opacity:0.45;margin-top:6px}
+  .icons{display:flex;gap:28px;align-items:center;margin-top:10px}
+  .icon{width:104px;height:104px;border-radius:24px;display:grid;place-items:center}
+  .icon.d{background:radial-gradient(120% 120% at 30% 20%, #1A2D4E 0%, #0B1324 80%);box-shadow:0 12px 30px rgba(0,0,0,0.5)}
+  .icon.l{background:#fff;box-shadow:0 12px 30px rgba(40,60,100,0.18)}
+  .ilabel{font-size:11px;letter-spacing:0.1em;text-transform:uppercase;opacity:0.5;text-align:center;margin-top:8px}
+  .col{display:flex;flex-direction:column;align-items:center}
+  .divider{font-size:11px;letter-spacing:0.3em;text-transform:uppercase;opacity:0.4;margin-bottom:6px}
+
+  @keyframes logoSpin { to { transform: rotate(360deg); } }
+  .logo-sat { animation: logoSpin 16s linear infinite; transform-origin:60px 60px; transform-box: view-box; }
+  @keyframes corePulse { 0%,100%{opacity:1} 50%{opacity:0.65} }
+  .logo-core { animation: corePulse 3.6s ease-in-out infinite; }
+</style>
+</head>
+<body>
+
+<!-- símbolo del logo (definido una vez) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="ringG" x1="0" y1="0" x2="1" y2="1.1">
+      <stop offset="0%" stop-color="#22D3EE"/><stop offset="45%" stop-color="#38BDF8"/><stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <radialGradient id="coreG" cx="44%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#FFFFFF"/><stop offset="35%" stop-color="#5FE3F5"/>
+      <stop offset="72%" stop-color="#22D3EE" stop-opacity="0.7"/><stop offset="100%" stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="haloG" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#22D3EE" stop-opacity="0.45"/><stop offset="100%" stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="bS" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="2"/></filter>
+    <filter id="bL" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="6"/></filter>
+
+    <symbol id="orbitMark" viewBox="0 0 120 120" overflow="visible">
+      <circle cx="60" cy="60" r="44" fill="none" stroke="url(#ringG)" stroke-width="9" opacity="0.4" filter="url(#bL)"/>
+      <circle cx="60" cy="60" r="44" fill="none" stroke="url(#ringG)" stroke-width="6.5" stroke-linecap="round"/>
+      <circle cx="60" cy="60" r="25" fill="none" stroke="#22D3EE" stroke-width="1" stroke-dasharray="2 4.5" opacity="0.5"/>
+      <circle cx="60" cy="60" r="26" fill="url(#haloG)" class="logo-core"/>
+      <circle cx="60" cy="60" r="13" fill="url(#coreG)"/>
+      <circle cx="60" cy="60" r="6" fill="#FFFFFF"/>
+      <g class="logo-sat">
+        <circle cx="94" cy="32" r="6" fill="#22D3EE" opacity="0.4" filter="url(#bS)"/>
+        <circle cx="94" cy="32" r="4" fill="#FFFFFF"/>
+        <circle cx="94" cy="32" r="4" fill="none" stroke="#22D3EE" stroke-width="1.5"/>
+      </g>
+    </symbol>
+  </defs>
+</svg>
+
+<!-- DARK -->
+<section class="panel dark">
+  <div class="divider">Dark</div>
+  <svg width="190" height="190"><use href="#orbitMark"/></svg>
+  <div class="word">Orbit</div>
+  <div class="sub">Metabolic Copilot</div>
+  <div class="icons">
+    <div class="col"><div class="icon d"><svg width="74" height="74"><use href="#orbitMark"/></svg></div><div class="ilabel">App icon</div></div>
+    <div class="col"><div class="icon l"><svg width="74" height="74"><use href="#orbitMark"/></svg></div><div class="ilabel">Light</div></div>
+  </div>
+  <div class="tag">Diseñado para personas con diabetes tipo 1</div>
+</section>
+
+<!-- LIGHT -->
+<section class="panel light">
+  <div class="divider">Light</div>
+  <svg width="190" height="190"><use href="#orbitMark"/></svg>
+  <div class="word">Orbit</div>
+  <div class="sub">Metabolic Copilot</div>
+  <div class="tag">Calm · Intelligent · Empowering</div>
+</section>
+
+</body>
+</html>
