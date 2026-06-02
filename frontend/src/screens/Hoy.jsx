@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { apiGet } from '../api.js'
 import { PAL, SANS } from '../theme.js'
 import NebulaGuide from '../components/NebulaGuide.jsx'
+import OrbitLogo from '../components/OrbitLogo.jsx'
+import GlucoseWave from '../components/GlucoseWave.jsx'
 import { Card, Eyebrow, Meter } from '../components/ui.jsx'
 
 const STATUS = {
@@ -37,17 +39,18 @@ function Metric({ theme, label, value, unit, color }) {
   )
 }
 
-export default function Hoy({ theme }) {
+export default function Hoy({ theme, refreshKey = 0 }) {
   const [data, setData] = useState(null)
   const [err, setErr] = useState(null)
 
   useEffect(() => {
     let alive = true
+    setErr(null)
     apiGet('/home')
       .then(d => { if (alive) setData(d) })
       .catch(e => { if (alive) setErr(e.message) })
     return () => { alive = false }
-  }, [])
+  }, [refreshKey])
 
   if (err) return <Centered theme={theme}>No se pudieron cargar tus datos ahora.</Centered>
   if (!data) return <Centered theme={theme}>Cargando…</Centered>
@@ -58,7 +61,11 @@ export default function Hoy({ theme }) {
 
   return (
     <div style={{ padding: '4px 22px 120px', fontFamily: SANS, display: 'flex', flexDirection: 'column', gap: 22 }}>
-      <Eyebrow theme={theme}>Hoy</Eyebrow>
+      {/* barra superior — logo + Dashboard */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+        <OrbitLogo size={22}/>
+        <span style={{ fontSize: 16, fontWeight: 500, color: theme.ink, letterSpacing: '-0.01em' }}>Dashboard</span>
+      </div>
 
       {/* hero — glucosa actual */}
       <div>
@@ -82,6 +89,18 @@ export default function Hoy({ theme }) {
           <div style={{ color: theme.inkSoft, fontSize: 15 }}>Sin lecturas recientes.</div>
         )}
       </div>
+
+      {/* onda de glucosa — últimas 24h (solo lecturas) */}
+      {data.series && data.series.length > 1 && (
+        <div>
+          <GlucoseWave series={data.series} theme={theme}/>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, padding: '0 2px' }}>
+            {['00', '06', '12', '18', '24'].map(a => (
+              <span key={a} style={{ fontSize: 10.5, letterSpacing: '0.1em', color: theme.inkFaint, fontVariantNumeric: 'tabular-nums' }}>{a}</span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* contexto ahora — IOB / COB / tendencia */}
       <Card theme={theme} style={{ padding: '16px 20px' }}>

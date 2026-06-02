@@ -40,5 +40,8 @@ body::after {
 @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
 @keyframes slideUp { from{transform:translateY(60px); opacity:0} to{transform:translateY(0); opacity:1} }
 
+@keyframes aiSpin { to { transform: rotate(360deg); } }
+.ai-orbit { animation: aiSpin 0.9s linear infinite; }
+
 input, textarea, button { font-family: inherit; }
 input { -webkit-appearance: none; }

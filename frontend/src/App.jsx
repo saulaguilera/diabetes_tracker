@@ -1,6 +1,6 @@
 // App.jsx — shell de Orbit Copilot: fondo cósmico + navegación + pantalla activa.
 // Andamiaje: las pantallas son placeholders por ahora (sin datos cableados).
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { SANS, PAL, makeTheme } from './theme.js'
 import Starfield from './components/Starfield.jsx'
 import BottomNav from './components/BottomNav.jsx'
@@ -32,13 +32,65 @@ function SectionTransition({ tabKey, children }) {
   )
 }
 
+// Pull-to-refresh: tirar hacia abajo desde el tope → recarga los datos de la
+// pantalla activa (bump de refreshKey). Gesto táctil (móvil).
+function PullToRefresh({ theme, onRefresh, children }) {
+  const ref = useRef(null)
+  const startY = useRef(null)
+  const [pull, setPull] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
+  const THRESH = 64
+
+  const onStart = (e) => {
+    startY.current = (ref.current && ref.current.scrollTop <= 0) ? e.touches[0].clientY : null
+  }
+  const onMove = (e) => {
+    if (startY.current == null || refreshing) return
+    const dy = e.touches[0].clientY - startY.current
+    setPull(dy > 0 && ref.current.scrollTop <= 0 ? Math.min(80, dy * 0.5) : 0)
+  }
+  const onEnd = async () => {
+    if (refreshing) return
+    if (pull >= THRESH * 0.6) {
+      setRefreshing(true); setPull(40)
+      try { await onRefresh() } finally { setRefreshing(false); setPull(0) }
+    } else {
+      setPull(0)
+    }
+    startY.current = null
+  }
+
+  return (
+    <div ref={ref} onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd}
+      style={{ position: 'absolute', inset: 0, paddingTop: 52, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      <div style={{ height: refreshing ? 40 : pull, display: 'grid', placeItems: 'center', overflow: 'hidden',
+        transition: startY.current == null ? 'height 0.25s ease' : 'none' }}>
+        {(pull > 8 || refreshing) && (
+          <div className={refreshing ? 'ai-orbit' : ''} style={{ width: 18, height: 18, borderRadius: '50%',
+            border: `2px solid ${theme.accent}44`, borderTopColor: theme.accent,
+            transform: refreshing ? undefined : `rotate(${pull * 4}deg)`,
+            opacity: refreshing ? 1 : Math.min(1, pull / 40) }}/>
+        )}
+      </div>
+      {children}
+    </div>
+  )
+}
+
 export default function App() {
   // dark fijo por ahora; el toggle de tema se agrega cuando portemos Perfil.
   const theme = makeTheme(true)
   const [tab, setTab] = useState('hoy')
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  // recarga la pantalla activa; el spinner queda ~650ms mientras refetchea
+  const onRefresh = () => {
+    setRefreshKey(k => k + 1)
+    return new Promise(res => setTimeout(res, 650))
+  }
 
   const screen = {
-    hoy:      <Hoy theme={theme} />,
+    hoy:      <Hoy theme={theme} refreshKey={refreshKey} />,
     patrones: <Patrones theme={theme} />,
     registro: <Registro theme={theme} />,
     copiloto: <Copiloto theme={theme} />,
@@ -58,9 +110,9 @@ export default function App() {
           background: `radial-gradient(60% 32% at 18% 6%, rgba(${PAL.metabolismo.rgb},0.16) 0%, transparent 70%), radial-gradient(55% 30% at 92% 64%, rgba(${PAL.glucosa.rgb},0.12) 0%, transparent 70%), radial-gradient(50% 28% at 50% 100%, rgba(${PAL.ritmo.rgb},0.10) 0%, transparent 70%)` }}/>
         <Starfield count={46} opacity={0.55} seed={3}/>
 
-        <div style={{ position: 'absolute', inset: 0, paddingTop: 52, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <PullToRefresh theme={theme} onRefresh={onRefresh}>
           <SectionTransition tabKey={tab}>{screen}</SectionTransition>
-        </div>
+        </PullToRefresh>
 
         <BottomNav theme={theme} current={tab} onChange={setTab}/>
       </div>

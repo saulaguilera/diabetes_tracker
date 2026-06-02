@@ -83,9 +83,13 @@ def copilot_home():
              .filter(GlucoseReading.timestamp >= since)
              .all())
     tir = None
+    series = []
     if reads:
         in_range = sum(1 for r in reads if LOW <= r.value_mgdl <= HIGH)
         tir = round(100 * in_range / len(reads))
+        # serie ordenada para la onda de 24h (solo lecturas, sin predicción)
+        series = [{"t": r.timestamp.isoformat(), "v": round(r.value_mgdl, 1)}
+                  for r in sorted(reads, key=lambda r: r.timestamp)]
 
     # ── actividad reciente (comida / insulina / ejercicio) ────────────────
     events = []
@@ -110,6 +114,7 @@ def copilot_home():
         "glucose": glucose,
         "context": {"iob": iob, "cob": cob, "trend": trend},
         "tir_today": tir,
+        "series": series,
         "recent": recent,
         "updated_at": datetime.now().isoformat(),
     })
