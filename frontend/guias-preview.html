@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Orbit — Guías (preview)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Outfit",system-ui,sans-serif;background:radial-gradient(125% 90% at 50% -8%, #16243F 0%, #0B1324 46%, #060B18 100%);color:#EAF2F8;min-height:100vh;padding:32px 18px 60px}
+  h1{font-weight:300;font-size:26px;letter-spacing:-0.02em;text-align:center;margin-bottom:6px}
+  .sub{text-align:center;color:rgba(234,242,248,0.5);font-size:13px;margin-bottom:32px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;max-width:780px;margin:0 auto}
+  .card{background:rgba(255,255,255,0.045);border:0.5px solid rgba(255,255,255,0.09);border-radius:24px;padding:22px 10px 22px;display:flex;flex-direction:column;align-items:center;gap:6px}
+  .card .name{font-size:18px;font-weight:400;margin-top:10px}
+  .card .role{font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(234,242,248,0.4)}
+
+  @keyframes breathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-5px) scale(1.02)}}
+  @keyframes breathe-slow{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-3px) scale(1.012)}}
+  @keyframes breathe-fast{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-6px) scale(1.025)}}
+  .breathe{animation:breathe 6.5s ease-in-out infinite;transform-origin:center}
+  .breathe-slow{animation:breathe-slow 8.5s ease-in-out infinite;transform-origin:center}
+  .breathe-fast{animation:breathe-fast 5s ease-in-out infinite;transform-origin:center}
+  @keyframes haloPulse{0%,100%{opacity:.5}50%{opacity:.85}}
+  .halo-pulse{animation:haloPulse 5.5s ease-in-out infinite}
+  @keyframes guideStarsDrift{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+  .guide-stars{transform-box:view-box;transform-origin:100px 100px;animation:guideStarsDrift 48s linear infinite}
+  @keyframes guideTwinkle{0%,100%{opacity:.85}45%{opacity:.3}}
+  .guide-twinkle{animation:guideTwinkle 4.5s ease-in-out infinite}
+</style>
+</head>
+<body>
+<h1>Guías de Orbit</h1>
+<div class="sub">Rediseño — núcleo luminoso + órbita de estrellas centrada + motivo por guía</div>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
+<script type="text/babel">
+const { useMemo } = React;
+const PAL = {
+  pancreas:    { key:'#38BDF8', mid:'#2A8FD0', deep:'#16456A', rgb:'56,189,248'  },
+  glucosa:     { key:'#22D3EE', mid:'#0E9AB5', deep:'#0A4A5A', rgb:'34,211,238'  },
+  insulina:    { key:'#14B8A6', mid:'#0E8C7E', deep:'#0A4A44', rgb:'20,184,166'  },
+  ritmo:       { key:'#8B5CF6', mid:'#6D44C8', deep:'#382264', rgb:'139,92,246'  },
+  metabolismo: { key:'#7C6CF6', mid:'#5B4BD0', deep:'#2C2566', rgb:'124,108,246' },
+};
+const SEED = { pancreas:4, glucosa:11, insulina:7, ritmo:2, metabolismo:19 };
+const TILT = { pancreas:-18, glucosa:14, insulina:-24, ritmo:8, metabolismo:-12 };
+
+function NebulaGuide({ kind='pancreas', size=150, breathe=true, light=false }) {
+  const c = PAL[kind];
+  const id = 'g_' + kind;
+  const cls = breathe ? (kind==='ritmo'||kind==='pancreas'?'breathe-slow':kind==='glucosa'?'breathe-fast':'breathe') : '';
+  const tilt = TILT[kind] || -18;
+  const orbit = useMemo(() => {
+    const n=7, rx=82, ry=28, th=tilt*Math.PI/180, ct=Math.cos(th), st=Math.sin(th);
+    let s=(SEED[kind]||1)*1777; const rnd=()=>{s=(s*9301+49297)%233280;return s/233280};
+    const off=rnd()*Math.PI*2;
+    return Array.from({length:n},(_,i)=>{const a=off+(i/n)*Math.PI*2,px=rx*Math.cos(a),py=ry*Math.sin(a);return{x:100+px*ct-py*st,y:100+px*st+py*ct,r:0.8+(i%3)*0.5}});
+  }, [kind,tilt]);
+
+  return (
+    <svg width={size} height={size} viewBox="0 0 200 200" className={cls} style={{overflow:'visible'}}>
+      <defs>
+        <radialGradient id={`${id}core`} cx="50%" cy="42%" r="56%"><stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.95"/><stop offset="30%" stopColor={c.key} stopOpacity="0.90"/><stop offset="70%" stopColor={c.mid} stopOpacity="0.48"/><stop offset="100%" stopColor={c.deep} stopOpacity="0"/></radialGradient>
+        <radialGradient id={`${id}halo`} cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor={c.key} stopOpacity="0.34"/><stop offset="100%" stopColor={c.key} stopOpacity="0"/></radialGradient>
+        <filter id={`${id}soft`} x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="2.4"/></filter>
+        <filter id={`${id}blur`} x="-90%" y="-90%" width="280%" height="280%"><feGaussianBlur stdDeviation="12"/></filter>
+      </defs>
+
+      <circle cx="100" cy="100" r="74" fill={`url(#${id}halo)`} filter={`url(#${id}blur)`} className="halo-pulse"/>
+      <ellipse cx="100" cy="100" rx="82" ry="28" fill="none" stroke={c.key} strokeWidth="0.7" opacity="0.18" transform={`rotate(${tilt} 100 100)`}/>
+
+      <g className="guide-stars">
+        {orbit.map((d,i)=>(<g key={i}><circle cx={d.x} cy={d.y} r={d.r+1.3} fill={c.key} opacity="0.22" filter={`url(#${id}soft)`}/><circle cx={d.x} cy={d.y} r={d.r} fill="#FFFFFF" opacity="0.85" className="guide-twinkle" style={{animationDelay:`${(i*0.5).toFixed(1)}s`}}/></g>))}
+      </g>
+
+      {kind==='pancreas' && (<g><circle cx="100" cy="100" r="33" fill={`url(#${id}core)`} filter={`url(#${id}soft)`}/><circle cx="70" cy="100" r="7.5" fill={`url(#${id}core)`} filter={`url(#${id}soft)`} opacity="0.82"/><circle cx="130" cy="100" r="7.5" fill={`url(#${id}core)`} filter={`url(#${id}soft)`} opacity="0.82"/></g>)}
+      {kind==='glucosa' && (<g><ellipse cx="100" cy="110" rx="30" ry="32" fill={`url(#${id}core)`} filter={`url(#${id}soft)`}/>{[[100,64,7],[83,80,4.5],[117,78,5.5]].map(([x,y,r],i)=>(<circle key={i} cx={x} cy={y} r={r} fill={`url(#${id}core)`} filter={`url(#${id}soft)`} opacity="0.85"/>))}</g>)}
+      {kind==='insulina' && (<g><circle cx="100" cy="100" r="28" fill={`url(#${id}core)`} filter={`url(#${id}soft)`}/><path d="M100,56 L107,93 L144,100 L107,107 L100,144 L93,107 L56,100 L93,93 Z" fill={`url(#${id}core)`} filter={`url(#${id}soft)`} opacity="0.92"/></g>)}
+      {kind==='ritmo' && (<g><circle cx="100" cy="100" r="34" fill={`url(#${id}core)`} filter={`url(#${id}soft)`}/><circle cx="114" cy="91" r="30" fill="#0B1324" opacity="0.92"/></g>)}
+      {kind==='metabolismo' && (<g><path d="M100,62 C122,86 122,116 100,140 C78,116 78,86 100,62 Z" fill={`url(#${id}core)`} filter={`url(#${id}soft)`}/><ellipse cx="100" cy="110" rx="13" ry="19" fill={`url(#${id}core)`} opacity="0.7"/></g>)}
+    </svg>
+  );
+}
+
+const GUIDES = [
+  { kind:'pancreas',    name:'Lúmino', role:'Páncreas · El equilibrio' },
+  { kind:'glucosa',     name:'Veya',   role:'Glucosa · La energía' },
+  { kind:'insulina',    name:'Auréon', role:'Insulina · La clave' },
+  { kind:'ritmo',       name:'Nocta',  role:'Ritmo · El ciclo' },
+  { kind:'metabolismo', name:'Solu',   role:'Metabolismo · La transformación' },
+];
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <div className="grid">
+    {GUIDES.map(g => (
+      <div className="card" key={g.kind}>
+        <NebulaGuide kind={g.kind} size={140}/>
+        <span className="name">{g.name}</span>
+        <span className="role">{g.role}</span>
+      </div>
+    ))}
+  </div>
+);
+</script>
+</body>
+</html>
