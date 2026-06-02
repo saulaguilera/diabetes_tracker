@@ -23,3 +23,9 @@ uploads/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Frontend (Orbit Copilot)
+node_modules/
+# Build compilado de React: NO se commitea (se genera con `npm run build`).
+# Cuando se despliegue /copilot, se configura el build en Railway.
+static/copilot/
