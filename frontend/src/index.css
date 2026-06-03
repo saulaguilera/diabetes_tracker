@@ -71,3 +71,14 @@ body::after {
 
 input, textarea, button { font-family: inherit; }
 input { -webkit-appearance: none; }
+
+/* Marco de la app: en desktop, frame tipo teléfono centrado; en móvil llena la
+   pantalla (100dvh para manejar la barra del navegador). */
+.app-frame { width: 100vw; height: 100dvh; display: grid; place-items: center; background: #060B18; }
+.app-shell {
+  position: relative; width: min(402px, 100vw); height: min(874px, 100dvh);
+  overflow: hidden; box-shadow: 0 30px 90px rgba(0,0,0,0.5);
+}
+@media (max-width: 480px) {
+  .app-shell { width: 100vw; height: 100dvh; box-shadow: none; }
+}

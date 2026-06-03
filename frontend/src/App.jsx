@@ -63,7 +63,7 @@ function PullToRefresh({ theme, onRefresh, children }) {
 
   return (
     <div ref={ref} onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd}
-      style={{ position: 'absolute', inset: 0, paddingTop: 52, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      style={{ position: 'absolute', inset: 0, paddingTop: 'calc(52px + env(safe-area-inset-top))', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
       <div style={{ height: refreshing ? 40 : pull, display: 'grid', placeItems: 'center', overflow: 'hidden',
         transition: startY.current == null ? 'height 0.25s ease' : 'none' }}>
         {(pull > 8 || refreshing) && (
@@ -82,11 +82,12 @@ function PullToRefresh({ theme, onRefresh, children }) {
 function TopBar({ theme }) {
   return (
     <div style={{
-      position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30, height: 52,
-      display: 'flex', alignItems: 'center', gap: 9, padding: '0 22px', pointerEvents: 'none',
+      position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30,
+      height: 'calc(52px + env(safe-area-inset-top))', paddingTop: 'env(safe-area-inset-top)',
+      display: 'flex', alignItems: 'center', gap: 9, paddingLeft: 22, paddingRight: 22, pointerEvents: 'none',
       background: theme.dark
-        ? 'linear-gradient(180deg, rgba(6,11,24,0.92) 0%, rgba(6,11,24,0) 100%)'
-        : 'linear-gradient(180deg, rgba(230,238,250,0.92) 0%, rgba(230,238,250,0) 100%)',
+        ? 'linear-gradient(180deg, rgba(6,11,24,0.95) 0%, rgba(6,11,24,0) 100%)'
+        : 'linear-gradient(180deg, rgba(230,238,250,0.95) 0%, rgba(230,238,250,0) 100%)',
       backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)',
     }}>
       <OrbitLogo size={26}/>
@@ -122,13 +123,9 @@ export default function App() {
   }[tab]
 
   return (
-    // Marco tipo teléfono, centrado — coincide con el prototipo (402×874).
-    <div style={{ width: '100vw', height: '100vh', display: 'grid', placeItems: 'center', background: '#060B18' }}>
-      <div style={{
-        position: 'relative', width: 'min(402px, 100vw)', height: 'min(874px, 100vh)',
-        overflow: 'hidden', background: theme.bg, color: theme.ink, fontFamily: SANS,
-        boxShadow: '0 30px 90px rgba(0,0,0,0.5)',
-      }}>
+    // Marco: llena la pantalla en móvil; frame tipo teléfono en desktop (ver CSS).
+    <div className="app-frame">
+      <div className="app-shell" style={{ background: theme.bg, color: theme.ink, fontFamily: SANS }}>
         {/* glows ambientales — dos capas que respiran en contrafase (profundidad) */}
         <div className="ambient-drift" style={{ position: 'absolute', inset: '-15%', pointerEvents: 'none',
           background: `radial-gradient(60% 32% at 18% 6%, rgba(${PAL.metabolismo.rgb},0.16) 0%, transparent 70%), radial-gradient(55% 30% at 92% 64%, rgba(${PAL.glucosa.rgb},0.12) 0%, transparent 70%), radial-gradient(50% 28% at 50% 100%, rgba(${PAL.ritmo.rgb},0.10) 0%, transparent 70%)` }}/>
@@ -138,7 +135,7 @@ export default function App() {
         <TopBar theme={theme}/>
 
         {tab === 'copiloto' ? (
-          <div style={{ position: 'absolute', inset: 0, paddingTop: 52 }}>{screen}</div>
+          <div style={{ position: 'absolute', inset: 0, paddingTop: 'calc(52px + env(safe-area-inset-top))' }}>{screen}</div>
         ) : (
           <PullToRefresh theme={theme} onRefresh={onRefresh}>
             <SectionTransition tabKey={tab}>{screen}</SectionTransition>

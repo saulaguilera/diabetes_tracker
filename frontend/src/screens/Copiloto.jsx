@@ -73,7 +73,7 @@ export default function Copiloto({ theme }) {
       )}
 
       {/* barra de entrada (sobre la nav) */}
-      <div style={{ flexShrink: 0, padding: '10px 16px', marginBottom: 92, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
+      <div style={{ flexShrink: 0, padding: '10px 16px', marginBottom: 'calc(92px + env(safe-area-inset-bottom))', display: 'flex', alignItems: 'flex-end', gap: 10 }}>
         <textarea
           value={input}
           onChange={e => setInput(e.target.value)}
