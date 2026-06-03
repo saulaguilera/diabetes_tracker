@@ -25,7 +25,7 @@ function NavIcon({ kind, color }) {
 export default function BottomNav({ theme, current, onChange }) {
   return (
     <div style={{
-      position: 'absolute', left: 14, right: 14, bottom: 'calc(18px + env(safe-area-inset-bottom))', zIndex: 40, borderRadius: 32,
+      position: 'absolute', left: 14, right: 14, bottom: 'calc(7px + env(safe-area-inset-bottom))', zIndex: 40, borderRadius: 32,
       background: theme.dark ? 'rgba(14,16,34,0.66)' : 'rgba(255,255,255,0.7)',
       backdropFilter: 'blur(30px) saturate(180%)', WebkitBackdropFilter: 'blur(30px) saturate(180%)',
       border: `0.5px solid ${theme.border}`,

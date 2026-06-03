@@ -51,6 +51,7 @@ function Stat({ theme, label, value, unit, color }) {
 export default function Patrones({ theme, refreshKey = 0 }) {
   const [data, setData] = useState(null)
   const [err, setErr] = useState(null)
+  const [expanded, setExpanded] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -71,13 +72,53 @@ export default function Patrones({ theme, refreshKey = 0 }) {
     <div style={{ padding: '4px 22px 120px', fontFamily: SANS, display: 'flex', flexDirection: 'column', gap: 20 }}>
       <Eyebrow theme={theme}>Patrones</Eyebrow>
 
-      {/* TIR semanal */}
-      <Card theme={theme} style={{ padding: '20px 20px 16px' }}>
+      {/* TIR semanal — clickeable para expandir detalle */}
+      <Card theme={theme} style={{ padding: '20px 20px 16px', cursor: 'pointer' }} onClick={() => setExpanded(e => !e)}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
           <span style={{ color: theme.inkSoft, fontSize: 14 }}>Tiempo en rango</span>
-          <span style={{ color: theme.inkFaint, fontSize: 13 }}>7 días</span>
+          <span style={{ color: theme.inkFaint, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+            7 días
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={theme.inkFaint} strokeWidth="2.2"
+              strokeLinecap="round" strokeLinejoin="round" style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.25s' }}>
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </span>
         </div>
         <WeeklyBars theme={theme} weekly={data.weekly}/>
+
+        {expanded && (() => {
+          const bajo = r.hipo_pct || 0, alto = r.hiper_pct || 0
+          const rango = r.tir != null ? r.tir : Math.max(0, 100 - bajo - alto)
+          const dist = [
+            { label: 'Alto · > 180', val: alto, color: '#E0B057' },
+            { label: 'En rango · 70–180', val: rango, color: '#5FC6A8' },
+            { label: 'Bajo · < 70', val: bajo, color: '#D98A6A' },
+          ]
+          return (
+            <div style={{ marginTop: 18, paddingTop: 16, borderTop: `0.5px solid ${theme.border}` }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.inkFaint, marginBottom: 12 }}>
+                Distribución · {r.days || 14} días
+              </div>
+              {/* barra apilada */}
+              <div style={{ display: 'flex', height: 12, borderRadius: 6, overflow: 'hidden', background: theme.surface, marginBottom: 14 }}>
+                {[['#D98A6A', bajo], ['#5FC6A8', rango], ['#E0B057', alto]].map(([c, w], i) => w > 0 && (
+                  <div key={i} style={{ width: `${w}%`, background: c }}/>
+                ))}
+              </div>
+              {dist.map((d, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: d.color }}/>
+                  <span style={{ flex: 1, color: theme.inkSoft, fontSize: 13.5 }}>{d.label}</span>
+                  <span style={{ color: theme.ink, fontSize: 14, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>{d.val}%</span>
+                </div>
+              ))}
+              <div style={{ display: 'flex', gap: 14, marginTop: 12, paddingTop: 12, borderTop: `0.5px solid ${theme.border}` }}>
+                <span style={{ color: theme.inkSoft, fontSize: 13 }}>Promedio <b style={{ color: theme.ink, fontWeight: 500 }}>{r.avg ?? '—'}</b> mg/dL</span>
+                <span style={{ color: theme.inkSoft, fontSize: 13 }}>Variabilidad <b style={{ color: theme.ink, fontWeight: 500 }}>{r.cv ?? '—'}%</b></span>
+              </div>
+            </div>
+          )
+        })()}
       </Card>
 
       {/* resumen */}

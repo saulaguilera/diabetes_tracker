@@ -451,22 +451,83 @@ def copilot_history():
     events = []
 
     for m in Meal.query.filter(Meal.timestamp >= since).order_by(Meal.timestamp.desc()).limit(150).all():
-        events.append({"cat": "comida", "title": m.name or "Comida",
-                       "badge": f"{int(m.carbs_g)}g" if m.carbs_g else "", "ts": m.timestamp})
+        events.append({"cat": "comida", "id": m.id, "title": m.name or "Comida",
+                       "badge": f"{int(m.carbs_g)}g" if m.carbs_g else "", "ts": m.timestamp,
+                       "data": {"name": m.name or "", "carbs": m.carbs_g or 0,
+                                "protein": m.protein_g or 0, "fat": m.fat_g or 0,
+                                "calories": m.calories or 0, "notes": m.notes or ""}})
     for d in InsulinDose.query.filter(InsulinDose.timestamp >= since).order_by(InsulinDose.timestamp.desc()).limit(150).all():
         label = {"bolus": "Rápida", "basal": "Basal"}.get(d.type, (d.type or "").capitalize())
-        events.append({"cat": "insulina", "title": f"Insulina {label}".strip(),
-                       "badge": f"{d.units}U", "ts": d.timestamp})
+        events.append({"cat": "insulina", "id": d.id, "title": f"Insulina {label}".strip(),
+                       "badge": f"{d.units:g}U", "ts": d.timestamp,
+                       "data": {"units": d.units, "type": d.type, "label": label,
+                                "purpose": d.purpose or "", "notes": d.notes or ""}})
     for a in Activity.query.filter(Activity.timestamp >= since).order_by(Activity.timestamp.desc()).limit(150).all():
-        events.append({"cat": "ejercicio", "title": a.activity_type or "Ejercicio",
-                       "badge": f"{a.duration_min}m" if a.duration_min else "", "ts": a.timestamp})
+        events.append({"cat": "ejercicio", "id": a.id, "title": a.activity_type or "Ejercicio",
+                       "badge": f"{a.duration_min}m" if a.duration_min else "", "ts": a.timestamp,
+                       "data": {"activity_type": a.activity_type or "", "duration_min": a.duration_min or 0,
+                                "intensity": a.intensity or "", "notes": a.notes or ""}})
 
     events.sort(key=lambda e: e["ts"], reverse=True)
     out = [{
-        "cat": e["cat"], "title": e["title"], "badge": e["badge"],
+        "cat": e["cat"], "id": e["id"], "title": e["title"], "badge": e["badge"],
         "ts": e["ts"].isoformat(),
         "date": e["ts"].strftime("%Y-%m-%d"),
         "time": e["ts"].strftime("%H:%M"),
+        "data": e["data"],
     } for e in events[:150]]
 
     return jsonify({"ok": True, "events": out, "days": days})
+
+
+@bp.route("/api/copilot/meal/<int:meal_id>", methods=["PUT"], endpoint="copilot_meal_edit")
+def copilot_meal_edit(meal_id):
+    """Editar una comida del historial (nombre + macros)."""
+    err = _require_login()
+    if err:
+        return err
+    from models import db, Meal
+    m = Meal.query.get(meal_id)
+    if not m:
+        return jsonify({"ok": False, "error": "No encontrada"}), 404
+    data = request.get_json(silent=True) or {}
+
+    def _f(k, default):
+        try:
+            return float(data[k]) if k in data and data[k] not in (None, "") else default
+        except (TypeError, ValueError):
+            return default
+
+    try:
+        if "name" in data:
+            m.name = (data.get("name") or "Comida").strip()[:200]
+        m.carbs_g = _f("carbs", m.carbs_g)
+        m.protein_g = _f("protein", m.protein_g)
+        m.fat_g = _f("fat", m.fat_g)
+        db.session.commit()
+        return jsonify({"ok": True})
+    except Exception:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": "No se pudo guardar"}), 400
+
+
+@bp.route("/api/copilot/entry/<cat>/<int:entry_id>", methods=["DELETE"], endpoint="copilot_entry_delete")
+def copilot_entry_delete(cat, entry_id):
+    """Eliminar un registro del historial (comida / insulina / ejercicio)."""
+    err = _require_login()
+    if err:
+        return err
+    from models import db, Meal, InsulinDose, Activity
+    model = {"comida": Meal, "insulina": InsulinDose, "ejercicio": Activity}.get(cat)
+    if not model:
+        return jsonify({"ok": False, "error": "Categoría inválida"}), 400
+    row = model.query.get(entry_id)
+    if not row:
+        return jsonify({"ok": False, "error": "No encontrado"}), 404
+    try:
+        db.session.delete(row)
+        db.session.commit()
+        return jsonify({"ok": True})
+    except Exception:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": "No se pudo eliminar"}), 400
