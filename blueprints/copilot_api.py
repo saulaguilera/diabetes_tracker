@@ -436,3 +436,37 @@ def copilot_estimate():
         })
     except Exception:
         return jsonify({"ok": False, "error": "No pude estimar la foto. Cargá los datos a mano."}), 502
+
+
+@bp.route("/api/copilot/history", endpoint="copilot_history")
+def copilot_history():
+    """Historial de eventos (comida / insulina / ejercicio), ordenado desc."""
+    err = _require_login()
+    if err:
+        return err
+
+    from models import Meal, InsulinDose, Activity
+    days = min(int(request.args.get("days", 14)), 90)
+    since = datetime.now() - timedelta(days=days)
+    events = []
+
+    for m in Meal.query.filter(Meal.timestamp >= since).order_by(Meal.timestamp.desc()).limit(150).all():
+        events.append({"cat": "comida", "title": m.name or "Comida",
+                       "badge": f"{int(m.carbs_g)}g" if m.carbs_g else "", "ts": m.timestamp})
+    for d in InsulinDose.query.filter(InsulinDose.timestamp >= since).order_by(InsulinDose.timestamp.desc()).limit(150).all():
+        label = {"bolus": "Rápida", "basal": "Basal"}.get(d.type, (d.type or "").capitalize())
+        events.append({"cat": "insulina", "title": f"Insulina {label}".strip(),
+                       "badge": f"{d.units}U", "ts": d.timestamp})
+    for a in Activity.query.filter(Activity.timestamp >= since).order_by(Activity.timestamp.desc()).limit(150).all():
+        events.append({"cat": "ejercicio", "title": a.activity_type or "Ejercicio",
+                       "badge": f"{a.duration_min}m" if a.duration_min else "", "ts": a.timestamp})
+
+    events.sort(key=lambda e: e["ts"], reverse=True)
+    out = [{
+        "cat": e["cat"], "title": e["title"], "badge": e["badge"],
+        "ts": e["ts"].isoformat(),
+        "date": e["ts"].strftime("%Y-%m-%d"),
+        "time": e["ts"].strftime("%H:%M"),
+    } for e in events[:150]]
+
+    return jsonify({"ok": True, "events": out, "days": days})

@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { apiPost } from '../api.js'
 import { PAL, SANS } from '../theme.js'
 import { Card, Eyebrow, Stepper, Segmented, Chips, Field } from '../components/ui.jsx'
+import Historial from '../components/Historial.jsx'
 
 // Redimensiona la foto en el cliente antes de enviarla (evita subir MB).
 function fileToDataURL(file, max = 768, quality = 0.7) {
@@ -34,6 +35,7 @@ const CATS = [
 ]
 
 export default function Registro({ theme, onDone }) {
+  const [mode, setMode] = useState('registrar')
   const [cat, setCat] = useState('comida')
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState(null)
@@ -99,6 +101,10 @@ export default function Registro({ theme, onDone }) {
     <div style={{ padding: '4px 22px 120px', fontFamily: SANS, display: 'flex', flexDirection: 'column', gap: 20 }}>
       <Eyebrow theme={theme}>Registro</Eyebrow>
 
+      <Segmented theme={theme} options={[{ id: 'registrar', label: 'Registrar' }, { id: 'historial', label: 'Historial' }]} value={mode} onChange={setMode} color={theme.accent}/>
+
+      {mode === 'historial' ? <Historial theme={theme}/> : (
+      <>
       <Segmented theme={theme} options={CATS} value={cat} onChange={setCat} color={color}/>
 
       {cat === 'comida' && (
@@ -155,6 +161,8 @@ export default function Registro({ theme, onDone }) {
         opacity: saving ? 0.6 : 1, transition: 'opacity 0.2s' }}>
         {saving ? 'Guardando…' : 'Registrar'}
       </button>
+      </>
+      )}
     </div>
   )
 }
