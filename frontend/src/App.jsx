@@ -124,6 +124,16 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem('orbit_theme', dark ? 'dark' : 'light') } catch (e) {}
   }, [dark])
+
+  // App nativa (Capacitor): desactivar el scroll del WebView para que el teclado
+  // NO desplace toda la pantalla. El input sube solo (ver Copiloto/visualViewport).
+  useEffect(() => {
+    try {
+      const Keyboard = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Keyboard
+      if (Keyboard && Keyboard.setScroll) Keyboard.setScroll({ isDisabled: true })
+    } catch (e) {}
+  }, [])
+
   const theme = makeTheme(dark)
   const [tab, setTab] = useState('hoy')
   const [refreshKey, setRefreshKey] = useState(0)
