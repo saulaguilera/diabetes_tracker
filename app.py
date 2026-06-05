@@ -530,8 +530,18 @@ def copilot_spa(path=""):
         return ("Orbit Copilot no está compilado. Corré `npm run build` en frontend/.", 503)
     full = _os.path.join(root, path)
     if path and _os.path.isfile(full):
-        return send_from_directory(root, path)   # assets (js/css)
-    return send_from_directory(root, "index.html")  # fallback SPA
+        resp = send_from_directory(root, path)   # assets (js/css)
+        # Los assets tienen hash en el nombre → cachear fuerte (inmutables).
+        if path.startswith("assets/"):
+            resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return resp
+    # index.html: NUNCA cachear, así el navegador/PWA siempre toma el build nuevo
+    # (evita quedarse con una versión vieja apuntando a assets que ya no existen).
+    resp = send_from_directory(root, "index.html")
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 # sync blueprint: exento de CSRF (cron externo + APIs JSON)
 csrf.exempt(sync_bp)

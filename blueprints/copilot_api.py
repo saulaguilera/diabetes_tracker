@@ -584,3 +584,34 @@ def copilot_entry_delete(cat, entry_id):
     except Exception:
         db.session.rollback()
         return jsonify({"ok": False, "error": "No se pudo eliminar"}), 400
+
+
+@bp.route("/api/copilot/profile", methods=["PUT"], endpoint="copilot_profile_edit")
+def copilot_profile_edit():
+    """Editar perfil/terapia (nombre, objetivo, ISF, ICR). Escribe a settings."""
+    err = _require_login()
+    if err:
+        return err
+    from helpers import _set_setting
+    data = request.get_json(silent=True) or {}
+
+    def _numstr(k):
+        v = data.get(k)
+        if v in (None, ""):
+            return None
+        try:
+            return str(float(v))
+        except (TypeError, ValueError):
+            return None
+
+    try:
+        if "name" in data:
+            _set_setting("user_name", (data.get("name") or "").strip()[:60])
+        for key, setting in (("objetivo", "objetivo"), ("isf", "isf_manual"), ("icr", "icr")):
+            if key in data:
+                val = _numstr(key)
+                if val is not None:
+                    _set_setting(setting, val)
+        return jsonify({"ok": True})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
