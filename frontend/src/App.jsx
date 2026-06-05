@@ -11,6 +11,26 @@ import Patrones from './screens/Patrones.jsx'
 import Copiloto from './screens/Copiloto.jsx'
 import Perfil from './screens/Perfil.jsx'
 
+// Alto del viewport visible (se achica al abrir el teclado en móvil). Permite
+// que el chat del Copiloto deje el input sobre el teclado, sin mover el resto.
+function useViewport() {
+  const [vp, setVp] = useState(() => ({
+    h: (typeof window !== 'undefined' && window.visualViewport) ? window.visualViewport.height : window.innerHeight,
+    full: window.innerHeight,
+  }))
+  useEffect(() => {
+    const vv = window.visualViewport
+    const on = () => setVp({ h: vv ? vv.height : window.innerHeight, full: window.innerHeight })
+    if (vv) { vv.addEventListener('resize', on); vv.addEventListener('scroll', on) }
+    window.addEventListener('resize', on)
+    return () => {
+      if (vv) { vv.removeEventListener('resize', on); vv.removeEventListener('scroll', on) }
+      window.removeEventListener('resize', on)
+    }
+  }, [])
+  return vp
+}
+
 // Transición suave al cambiar de sección: fundido + deriva hacia arriba + leve
 // escala. Calmo, en la temática "que respira". Se re-monta al cambiar de tab.
 function SectionTransition({ tabKey, children }) {
@@ -107,6 +127,8 @@ export default function App() {
   const theme = makeTheme(dark)
   const [tab, setTab] = useState('hoy')
   const [refreshKey, setRefreshKey] = useState(0)
+  const vp = useViewport()
+  const keyboardOpen = vp.full - vp.h > 120
 
   // recarga la pantalla activa; el spinner queda ~650ms mientras refetchea
   const onRefresh = () => {
@@ -118,7 +140,7 @@ export default function App() {
     hoy:      <Hoy theme={theme} refreshKey={refreshKey} />,
     patrones: <Patrones theme={theme} refreshKey={refreshKey} />,
     registro: <Registro theme={theme} onDone={() => { setRefreshKey(k => k + 1); setTab('hoy') }} />,
-    copiloto: <Copiloto theme={theme} />,
+    copiloto: <Copiloto theme={theme} keyboardOpen={keyboardOpen} />,
     perfil:   <Perfil theme={theme} refreshKey={refreshKey} dark={dark} onToggleTheme={() => setDark(d => !d)} />,
   }[tab]
 
@@ -135,7 +157,8 @@ export default function App() {
         <TopBar theme={theme}/>
 
         {tab === 'copiloto' ? (
-          <div style={{ position: 'absolute', inset: 0, paddingTop: 'calc(52px + env(safe-area-inset-top))' }}>{screen}</div>
+          // Alto = viewport visible → al abrir el teclado, el input sube con él.
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: vp.h, paddingTop: 'calc(52px + env(safe-area-inset-top))' }}>{screen}</div>
         ) : (
           <PullToRefresh theme={theme} onRefresh={onRefresh}>
             <SectionTransition tabKey={tab}>{screen}</SectionTransition>

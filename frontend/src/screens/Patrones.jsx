@@ -112,7 +112,18 @@ export default function Patrones({ theme, refreshKey = 0 }) {
                   <span style={{ color: theme.ink, fontSize: 14, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>{d.val}%</span>
                 </div>
               ))}
-              <div style={{ display: 'flex', gap: 14, marginTop: 12, paddingTop: 12, borderTop: `0.5px solid ${theme.border}` }}>
+              {/* GMI estimada (≈ HbA1c) */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 14, paddingTop: 14, borderTop: `0.5px solid ${theme.border}` }}>
+                <div>
+                  <div style={{ color: theme.inkSoft, fontSize: 13.5 }}>GMI estimada</div>
+                  <div style={{ color: theme.inkFaint, fontSize: 11, marginTop: 2 }}>≈ HbA1c · de tu promedio</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
+                  <span style={{ fontSize: 26, fontWeight: 300, color: theme.ink, fontVariantNumeric: 'tabular-nums' }}>{r.gmi ?? '—'}</span>
+                  {r.gmi != null && <span style={{ fontSize: 14, color: theme.inkSoft }}>%</span>}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 14, marginTop: 12 }}>
                 <span style={{ color: theme.inkSoft, fontSize: 13 }}>Promedio <b style={{ color: theme.ink, fontWeight: 500 }}>{r.avg ?? '—'}</b> mg/dL</span>
                 <span style={{ color: theme.inkSoft, fontSize: 13 }}>Variabilidad <b style={{ color: theme.ink, fontWeight: 500 }}>{r.cv ?? '—'}%</b></span>
               </div>

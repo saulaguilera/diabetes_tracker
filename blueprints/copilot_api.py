@@ -219,12 +219,18 @@ def copilot_patterns():
         weekly["labels"].append(DOW[d0.weekday()])
         weekly["values"].append(tir)
 
+    # GMI estimada (Glucose Management Indicator ≈ HbA1c estimada).
+    # Fórmula estándar (Bergenstal 2018): GMI% = 3.31 + 0.02392 × glucosa media (mg/dL)
+    avg = resumen.get("avg")
+    gmi = round(3.31 + 0.02392 * avg, 1) if avg else None
+
     return jsonify({
         "ok": True,
         "resumen": {
             "avg": resumen.get("avg"),
             "cv": resumen.get("cv"),
             "tir": resumen.get("tir"),
+            "gmi": gmi,
             "hipo_pct": resumen.get("hipo_pct"),
             "hiper_pct": resumen.get("hiper_pct"),
             "n": resumen.get("n_lecturas"),
