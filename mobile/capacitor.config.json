@@ -17,7 +17,7 @@
   },
   "plugins": {
     "Keyboard": {
-      "resize": "none"
+      "resize": "native"
     }
   }
 }
