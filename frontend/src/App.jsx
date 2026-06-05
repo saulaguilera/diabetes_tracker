@@ -166,7 +166,7 @@ export default function App() {
 
         {/* scrim inferior: el contenido se desvanece detrás de la nav (no asoma) */}
         {tab !== 'copiloto' && (
-          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 'calc(96px + env(safe-area-inset-bottom))', zIndex: 35, pointerEvents: 'none',
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 'calc(58px + env(safe-area-inset-bottom))', zIndex: 35, pointerEvents: 'none',
             background: `linear-gradient(to top, ${theme.dark ? '#070C18' : '#D6E0EE'} 34%, transparent)` }}/>
         )}
 

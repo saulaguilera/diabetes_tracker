@@ -78,10 +78,12 @@ input { -webkit-appearance: none; }
 /* position:fixed inset:0 = llena EXACTO el viewport (lo más robusto en iOS
    standalone; no depende de medir alturas, que tiene rarezas). */
 .app-frame { position: fixed; inset: 0; display: grid; place-items: center; background: #060B18; }
-.app-shell {
-  position: relative; width: min(402px, 100%); height: min(874px, 100%);
-  overflow: hidden; box-shadow: 0 30px 90px rgba(0,0,0,0.5);
-}
-@media (max-width: 480px) {
-  .app-shell { width: 100%; height: 100%; box-shadow: none; }
+/* Default = MÓVIL: el shell llena 100% (sin tope de 874 que dejaba franja). */
+.app-shell { position: relative; width: 100%; height: 100%; overflow: hidden; }
+/* Solo en pantallas grandes (desktop) usamos el marco tipo teléfono centrado. */
+@media (min-width: 481px) {
+  .app-shell {
+    width: min(402px, 100%); height: min(874px, 100%);
+    box-shadow: 0 30px 90px rgba(0,0,0,0.5);
+  }
 }
