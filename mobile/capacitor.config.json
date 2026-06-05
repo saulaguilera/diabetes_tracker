@@ -1,0 +1,13 @@
+{
+  "appId": "com.saulaguilera.orbit",
+  "appName": "Orbit",
+  "webDir": "www",
+  "server": {
+    "url": "https://web-production-c2f1.up.railway.app/copilot",
+    "cleartext": false
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "backgroundColor": "#060B18"
+  }
+}
