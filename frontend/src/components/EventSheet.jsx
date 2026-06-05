@@ -34,6 +34,11 @@ export default function EventSheet({ theme, ev, onClose, onChanged }) {
   const [protein, setProtein] = useState(Math.round(d.protein || 0))
   const [fat, setFat] = useState(Math.round(d.fat || 0))
   const [busy, setBusy] = useState(false)
+  const [confirm, setConfirm] = useState(false)   // paso "¿seguro?" antes de borrar
+
+  const noun = isMeal ? 'este alimento'
+    : ev.cat === 'insulina' ? 'este registro de insulina'
+    : 'esta actividad'
 
   const save = async () => {
     setBusy(true)
@@ -81,16 +86,33 @@ export default function EventSheet({ theme, ev, onClose, onChanged }) {
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
-          <button onClick={remove} disabled={busy} style={{ padding: '13px 16px', borderRadius: 14, border: `0.5px solid ${theme.border}`,
-            background: 'transparent', color: '#D98A6A', fontSize: 14, fontFamily: SANS, cursor: 'pointer' }}>Eliminar</button>
-          {isMeal && (
-            <button onClick={save} disabled={busy} style={{ flex: 1, padding: '13px', borderRadius: 14, border: 'none',
-              background: m.color, color: '#0A0C1E', fontSize: 15, fontWeight: 600, fontFamily: SANS, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
-              {busy ? 'Guardando…' : 'Guardar'}
-            </button>
-          )}
-        </div>
+        {confirm ? (
+          <div style={{ marginTop: 22 }}>
+            <div style={{ color: theme.inkSoft, fontSize: 14, lineHeight: 1.45, marginBottom: 14 }}>
+              ¿Seguro que querés eliminar <b style={{ color: theme.ink }}>{noun}</b>? Esta acción no se puede deshacer.
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirm(false)} disabled={busy} style={{ flex: 1, padding: '13px', borderRadius: 14,
+                border: `0.5px solid ${theme.border}`, background: 'transparent', color: theme.inkSoft, fontSize: 15,
+                fontFamily: SANS, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={remove} disabled={busy} style={{ flex: 1, padding: '13px', borderRadius: 14, border: 'none',
+                background: '#D9665A', color: '#fff', fontSize: 15, fontWeight: 600, fontFamily: SANS, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
+                {busy ? 'Eliminando…' : 'Sí, eliminar'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
+            <button onClick={() => setConfirm(true)} disabled={busy} style={{ padding: '13px 16px', borderRadius: 14, border: `0.5px solid ${theme.border}`,
+              background: 'transparent', color: '#D98A6A', fontSize: 14, fontFamily: SANS, cursor: 'pointer' }}>Eliminar</button>
+            {isMeal && (
+              <button onClick={save} disabled={busy} style={{ flex: 1, padding: '13px', borderRadius: 14, border: 'none',
+                background: m.color, color: '#0A0C1E', fontSize: 15, fontWeight: 600, fontFamily: SANS, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
+                {busy ? 'Guardando…' : 'Guardar'}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   ), document.body)
