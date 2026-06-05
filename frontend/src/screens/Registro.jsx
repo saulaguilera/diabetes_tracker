@@ -45,6 +45,7 @@ export default function Registro({ theme, onDone }) {
   const [carbs, setCarbs] = useState(30)
   const [protein, setProtein] = useState(0)
   const [fat, setFat] = useState(0)
+  const [fiber, setFiber] = useState(0)   // fibra estimada (se descuenta de carbos)
   // insulina
   const [units, setUnits] = useState(4)
   const [insType, setInsType] = useState('Rápida')
@@ -67,7 +68,11 @@ export default function Registro({ theme, onDone }) {
       setPhoto(dataUrl)
       const r = await apiPost('/estimate', { image: dataUrl })
       if (r.name) setName(r.name)
-      setCarbs(r.carbs || 0); setProtein(r.protein || 0); setFat(r.fat || 0)
+      const f = r.fiber || 0
+      setFiber(f)
+      // Carbos NETOS = totales − fibra (la fibra casi no sube la glucosa).
+      setCarbs(Math.max(0, Math.round((r.carbs || 0) - f)))
+      setProtein(r.protein || 0); setFat(r.fat || 0)
       setScanned(true)
     } catch (e2) {
       setErr('No pude estimar la foto. Cargá los datos a mano.')
@@ -133,6 +138,11 @@ export default function Registro({ theme, onDone }) {
           )}
           <Field theme={theme} value={name} onChange={setName} placeholder="¿Qué comiste?"/>
           <Row theme={theme} label="Carbohidratos"><Stepper theme={theme} value={carbs} setValue={setCarbs} step={5} max={300} unit="g" color={color}/></Row>
+          {scanned && fiber > 0 && (
+            <div style={{ fontSize: 12, color: theme.inkFaint, lineHeight: 1.5, marginTop: -8 }}>
+              Carbos <b style={{ color: theme.inkSoft }}>netos</b>: estimamos {carbs + fiber}g de carbos − {fiber}g de fibra = {carbs}g (la fibra casi no sube la glucosa).
+            </div>
+          )}
           <Row theme={theme} label="Proteína"><Stepper theme={theme} value={protein} setValue={setProtein} step={5} max={200} unit="g" color={theme.ink}/></Row>
           <Row theme={theme} label="Grasa"><Stepper theme={theme} value={fat} setValue={setFat} step={5} max={200} unit="g" color={theme.ink}/></Row>
         </Card>

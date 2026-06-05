@@ -429,12 +429,13 @@ def copilot_chat():
 # No alimenta ninguna dosis (el producto no calcula bolo).
 _ESTIMATE_PROMPT = (
     "Sos un asistente nutricional. Mirá la foto de la comida y ESTIMÁ sus "
-    "macronutrientes. Respondé SOLO con un JSON válido, sin texto extra, con esta "
-    "forma exacta:\n"
-    '{"name": "nombre corto del plato", "carbs": <g carbohidratos>, '
-    '"protein": <g proteína>, "fat": <g grasa>, "calories": <kcal>}\n'
+    "macronutrientes. 'carbs' son los carbohidratos TOTALES y 'fiber' la fibra "
+    "que contienen (la fibra es parte de los carbohidratos totales). Respondé SOLO "
+    "con un JSON válido, sin texto extra, con esta forma exacta:\n"
+    '{"name": "nombre corto del plato", "carbs": <g carbohidratos totales>, '
+    '"fiber": <g fibra>, "protein": <g proteína>, "fat": <g grasa>, "calories": <kcal>}\n'
     "Los valores numéricos son enteros aproximados. Si no se distingue comida, "
-    'devolvé {"name": "", "carbs": 0, "protein": 0, "fat": 0, "calories": 0}.'
+    'devolvé {"name": "", "carbs": 0, "fiber": 0, "protein": 0, "fat": 0, "calories": 0}.'
 )
 
 
@@ -485,7 +486,7 @@ def copilot_estimate():
         return jsonify({
             "ok": True,
             "name": (parsed.get("name") or "").strip()[:200],
-            "carbs": _i("carbs"), "protein": _i("protein"), "fat": _i("fat"), "calories": _i("calories"),
+            "carbs": _i("carbs"), "fiber": _i("fiber"), "protein": _i("protein"), "fat": _i("fat"), "calories": _i("calories"),
         })
     except Exception:
         return jsonify({"ok": False, "error": "No pude estimar la foto. Cargá los datos a mano."}), 502
