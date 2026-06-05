@@ -144,9 +144,8 @@ export default function App() {
   }[tab]
 
   return (
-    // Marco: alto = viewport visible real (visualViewport) → llena el iPhone sin
-    // franja abajo y la nav queda pegada al borde visible (también al abrir teclado).
-    <div className="app-frame" style={{ height: vp.h }}>
+    // Marco: position:fixed inset:0 (CSS) → llena exacto la pantalla en standalone.
+    <div className="app-frame">
       <div className="app-shell" style={{ background: theme.bg, color: theme.ink, fontFamily: SANS }}>
         {/* glows ambientales — dos capas que respiran en contrafase (profundidad) */}
         <div className="ambient-drift" style={{ position: 'absolute', inset: '-15%', pointerEvents: 'none',
@@ -157,7 +156,8 @@ export default function App() {
         <TopBar theme={theme}/>
 
         {tab === 'copiloto' ? (
-          <div style={{ position: 'absolute', inset: 0, paddingTop: 'calc(52px + env(safe-area-inset-top))' }}>{screen}</div>
+          // height = viewport visible → al abrir el teclado, el input sube con él
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: vp.h, paddingTop: 'calc(52px + env(safe-area-inset-top))' }}>{screen}</div>
         ) : (
           <PullToRefresh theme={theme} onRefresh={onRefresh}>
             <SectionTransition tabKey={tab}>{screen}</SectionTransition>
