@@ -5,6 +5,7 @@
   "appendUserAgent": "OrbitApp",
   "server": {
     "url": "https://web-production-c2f1.up.railway.app/copilot",
+    "allowNavigation": ["web-production-c2f1.up.railway.app", "*.railway.app"],
     "cleartext": false
   },
   "ios": {
