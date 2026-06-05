@@ -5,6 +5,7 @@ import { apiGet } from '../api.js'
 import { PAL, SANS } from '../theme.js'
 import NebulaGuide from '../components/NebulaGuide.jsx'
 import GlucoseWave from '../components/GlucoseWave.jsx'
+import EventSheet from '../components/EventSheet.jsx'
 import { Card, Eyebrow, Meter } from '../components/ui.jsx'
 
 const STATUS = {
@@ -41,15 +42,16 @@ function Metric({ theme, label, value, unit, color }) {
 export default function Hoy({ theme, refreshKey = 0 }) {
   const [data, setData] = useState(null)
   const [err, setErr] = useState(null)
+  const [sel, setSel] = useState(null)     // evento abierto para editar/borrar
+  const [reload, setReload] = useState(0)
 
   useEffect(() => {
     let alive = true
-    setErr(null)
     apiGet('/home')
       .then(d => { if (alive) setData(d) })
       .catch(e => { if (alive) setErr(e.message) })
     return () => { alive = false }
-  }, [refreshKey])
+  }, [refreshKey, reload])
 
   if (err) return <Centered theme={theme}>No se pudieron cargar tus datos ahora.</Centered>
   if (!data) return <Centered theme={theme}>Cargando…</Centered>
@@ -131,7 +133,7 @@ export default function Hoy({ theme, refreshKey = 0 }) {
         <Card theme={theme} style={{ padding: '6px 18px 10px' }}>
           <Eyebrow theme={theme} style={{ fontSize: 10, padding: '12px 0 4px' }}>Actividad reciente</Eyebrow>
           {data.recent.map((e, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderTop: `0.5px solid ${theme.border}` }}>
+            <div key={i} onClick={() => e.id && setSel(e)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderTop: `0.5px solid ${theme.border}`, cursor: e.id ? 'pointer' : 'default' }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
                 background: CAT_COLOR[e.cat] || theme.accent, boxShadow: `0 0 8px ${CAT_COLOR[e.cat] || theme.accent}` }}/>
               <span style={{ flex: 1, color: theme.ink, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.title}</span>
@@ -151,6 +153,8 @@ export default function Hoy({ theme, refreshKey = 0 }) {
         </div>
         <span style={{ color: theme.inkFaint, fontSize: 20 }}>›</span>
       </Card>
+
+      {sel && <EventSheet theme={theme} ev={sel} onClose={() => setSel(null)} onChanged={() => { setSel(null); setReload(r => r + 1) }}/>}
     </div>
   )
 }

@@ -92,22 +92,29 @@ def copilot_home():
                   for r in sorted(reads, key=lambda r: r.timestamp)]
 
     # ── actividad reciente (comida / insulina / ejercicio) ────────────────
+    # Incluye id + data para poder editar/borrar tocando el item (misma hoja
+    # que el Historial).
     events = []
     for m in Meal.query.order_by(Meal.timestamp.desc()).limit(4).all():
-        events.append({"cat": "comida", "title": m.name or "Comida",
-                       "badge": f"{int(m.carbs_g)}g" if m.carbs_g else "",
-                       "ts": m.timestamp})
+        events.append({"cat": "comida", "id": m.id, "title": m.name or "Comida",
+                       "badge": f"{int(m.carbs_g)}g" if m.carbs_g else "", "ts": m.timestamp,
+                       "data": {"name": m.name or "", "carbs": m.carbs_g or 0,
+                                "protein": m.protein_g or 0, "fat": m.fat_g or 0}})
     for d in InsulinDose.query.order_by(InsulinDose.timestamp.desc()).limit(4).all():
         label = {"bolus": "Rápida", "basal": "Basal"}.get(d.type, (d.type or "").capitalize())
-        events.append({"cat": "insulina", "title": f"Insulina {label}".strip(),
-                       "badge": f"{d.units:g}U", "ts": d.timestamp})
+        events.append({"cat": "insulina", "id": d.id, "title": f"Insulina {label}".strip(),
+                       "badge": f"{d.units:g}U", "ts": d.timestamp,
+                       "data": {"units": d.units, "type": d.type, "label": label}})
     for a in Activity.query.order_by(Activity.timestamp.desc()).limit(4).all():
-        events.append({"cat": "ejercicio", "title": a.activity_type or "Ejercicio",
-                       "badge": f"{a.duration_min}m" if a.duration_min else "",
-                       "ts": a.timestamp})
+        events.append({"cat": "ejercicio", "id": a.id, "title": a.activity_type or "Ejercicio",
+                       "badge": f"{a.duration_min}m" if a.duration_min else "", "ts": a.timestamp,
+                       "data": {"activity_type": a.activity_type or "", "duration_min": a.duration_min or 0,
+                                "intensity": a.intensity or ""}})
     events.sort(key=lambda e: e["ts"], reverse=True)
-    recent = [{"cat": e["cat"], "title": e["title"], "badge": e["badge"],
-               "ago": _hace(e["ts"])} for e in events[:4]]
+    recent = [{"cat": e["cat"], "id": e["id"], "title": e["title"], "badge": e["badge"],
+               "ago": _hace(e["ts"]), "data": e["data"],
+               "date": e["ts"].strftime("%Y-%m-%d"), "time": e["ts"].strftime("%H:%M")}
+              for e in events[:4]]
 
     return jsonify({
         "ok": True,
