@@ -127,7 +127,6 @@ export default function App() {
   const theme = makeTheme(dark)
   const [tab, setTab] = useState('hoy')
   const [refreshKey, setRefreshKey] = useState(0)
-  const vp = useViewport()
 
   // recarga la pantalla activa; el spinner queda ~650ms mientras refetchea
   const onRefresh = () => {
@@ -156,8 +155,7 @@ export default function App() {
         <TopBar theme={theme}/>
 
         {tab === 'copiloto' ? (
-          // height = viewport visible → al abrir el teclado, el input sube con él
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: vp.h, paddingTop: 'calc(52px + env(safe-area-inset-top))' }}>{screen}</div>
+          <div style={{ position: 'absolute', inset: 0, paddingTop: 'calc(52px + env(safe-area-inset-top))' }}>{screen}</div>
         ) : (
           <PullToRefresh theme={theme} onRefresh={onRefresh}>
             <SectionTransition tabKey={tab}>{screen}</SectionTransition>
