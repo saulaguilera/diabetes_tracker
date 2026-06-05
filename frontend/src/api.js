@@ -12,8 +12,8 @@ async function request(path, opts = {}) {
     ...opts,
   })
   if (res.status === 401) {
-    // sesión no iniciada → redirigir al login de Flask
-    window.location.href = '/login'
+    // sesión no iniciada → login de Flask, volviendo a /copilot al terminar
+    window.location.href = '/login?next=' + encodeURIComponent('/copilot')
     throw new Error('no-auth')
   }
   if (!res.ok) throw new Error(`API ${path} → ${res.status}`)

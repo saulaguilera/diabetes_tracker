@@ -41,7 +41,11 @@ def login():
             session.permanent = True
             session["logged_in"] = True
             session["username"] = username
-            next_url = request.args.get("next") or url_for("dashboard")
+            # next puede venir por query (?next=) o por el campo oculto del form.
+            # Solo se aceptan rutas internas (que empiezan con "/") por seguridad.
+            next_url = request.form.get("next") or request.args.get("next") or ""
+            if not next_url.startswith("/"):
+                next_url = url_for("dashboard")
             return redirect(next_url)
         else:
             error = "Usuario o contraseña incorrectos."
