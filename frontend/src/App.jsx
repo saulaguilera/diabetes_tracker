@@ -125,6 +125,17 @@ export default function App() {
     try { localStorage.setItem('orbit_theme', dark ? 'dark' : 'light') } catch (e) {}
   }, [dark])
 
+  // El documento NUNCA debe scrollear como página (solo scrollean las listas por
+  // dentro). iOS desplaza el documento para mostrar el input enfocado → toda la
+  // pantalla "sube". Forzamos scroll del documento a 0 para que no se mueva.
+  useEffect(() => {
+    const lock = () => {
+      if (window.scrollY !== 0 || window.scrollX !== 0) window.scrollTo(0, 0)
+    }
+    window.addEventListener('scroll', lock, { passive: true })
+    return () => window.removeEventListener('scroll', lock)
+  }, [])
+
   const theme = makeTheme(dark)
   const [tab, setTab] = useState('hoy')
   const [refreshKey, setRefreshKey] = useState(0)

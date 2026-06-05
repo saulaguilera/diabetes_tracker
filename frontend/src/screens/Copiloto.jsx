@@ -22,7 +22,7 @@ export default function Copiloto({ theme }) {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [kb, setKb] = useState(0)   // alto del teclado (visualViewport)
-  const endRef = useRef(null)
+  const listRef = useRef(null)
 
   // Sube el input con el teclado en vez de empujar toda la pantalla.
   useEffect(() => {
@@ -37,8 +37,11 @@ export default function Copiloto({ theme }) {
     return () => { vv.removeEventListener('resize', onVV); vv.removeEventListener('scroll', onVV) }
   }, [])
 
+  // Scrollea SOLO la lista por dentro (no scrollIntoView, que puede mover la
+  // página entera y hacer que "suba todo").
   useEffect(() => {
-    if (messages.length > 1 || sending || kb > 0) endRef.current && endRef.current.scrollIntoView({ behavior: 'smooth' })
+    const el = listRef.current
+    if (el) el.scrollTop = el.scrollHeight
   }, [messages, sending, kb])
 
   const send = async (textArg) => {
@@ -60,7 +63,7 @@ export default function Copiloto({ theme }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', fontFamily: SANS }}>
       {/* mensajes */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 18px 8px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div ref={listRef} style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', padding: '8px 18px 8px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         {messages.map((m, i) => (
           <Bubble key={i} theme={theme} role={m.role} text={m.content}/>
         ))}
@@ -70,7 +73,6 @@ export default function Copiloto({ theme }) {
             pensando…
           </div>
         )}
-        <div ref={endRef}/>
       </div>
 
       {/* preguntas sugeridas (al empezar) */}
