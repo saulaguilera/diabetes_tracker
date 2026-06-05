@@ -56,7 +56,10 @@ def login_required(f):
 
 def _protect_all():
     """Protege todas las rutas excepto login, logout, static y APIs con token válido."""
-    exempt = {"login", "logout", "static"}
+    # Los endpoints reales llevan prefijo de blueprint (auth.login), por eso se
+    # incluyen ambas formas. Sin "auth.login" aquí, /login se redirige a sí mismo
+    # → loop infinito ("too many redirects") cuando no hay sesión.
+    exempt = {"login", "logout", "static", "auth.login", "auth.logout"}
     if request.endpoint in exempt or session.get("logged_in"):
         return
     # Permitir llamadas de cron/API autenticadas con SYNC_TOKEN
