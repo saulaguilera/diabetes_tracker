@@ -128,7 +128,6 @@ export default function App() {
   const [tab, setTab] = useState('hoy')
   const [refreshKey, setRefreshKey] = useState(0)
   const vp = useViewport()
-  const keyboardOpen = vp.full - vp.h > 120
 
   // recarga la pantalla activa; el spinner queda ~650ms mientras refetchea
   const onRefresh = () => {
@@ -140,13 +139,14 @@ export default function App() {
     hoy:      <Hoy theme={theme} refreshKey={refreshKey} />,
     patrones: <Patrones theme={theme} refreshKey={refreshKey} />,
     registro: <Registro theme={theme} onDone={() => { setRefreshKey(k => k + 1); setTab('hoy') }} />,
-    copiloto: <Copiloto theme={theme} keyboardOpen={keyboardOpen} />,
+    copiloto: <Copiloto theme={theme} />,
     perfil:   <Perfil theme={theme} refreshKey={refreshKey} dark={dark} onToggleTheme={() => setDark(d => !d)} />,
   }[tab]
 
   return (
-    // Marco: llena la pantalla en móvil; frame tipo teléfono en desktop (ver CSS).
-    <div className="app-frame">
+    // Marco: alto = viewport visible real (visualViewport) → llena el iPhone sin
+    // franja abajo y la nav queda pegada al borde visible (también al abrir teclado).
+    <div className="app-frame" style={{ height: vp.h }}>
       <div className="app-shell" style={{ background: theme.bg, color: theme.ink, fontFamily: SANS }}>
         {/* glows ambientales — dos capas que respiran en contrafase (profundidad) */}
         <div className="ambient-drift" style={{ position: 'absolute', inset: '-15%', pointerEvents: 'none',
@@ -157,12 +157,17 @@ export default function App() {
         <TopBar theme={theme}/>
 
         {tab === 'copiloto' ? (
-          // Alto = viewport visible → al abrir el teclado, el input sube con él.
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: vp.h, paddingTop: 'calc(52px + env(safe-area-inset-top))' }}>{screen}</div>
+          <div style={{ position: 'absolute', inset: 0, paddingTop: 'calc(52px + env(safe-area-inset-top))' }}>{screen}</div>
         ) : (
           <PullToRefresh theme={theme} onRefresh={onRefresh}>
             <SectionTransition tabKey={tab}>{screen}</SectionTransition>
           </PullToRefresh>
+        )}
+
+        {/* scrim inferior: el contenido se desvanece detrás de la nav (no asoma) */}
+        {tab !== 'copiloto' && (
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 'calc(96px + env(safe-area-inset-bottom))', zIndex: 35, pointerEvents: 'none',
+            background: `linear-gradient(to top, ${theme.dark ? '#070C18' : '#D6E0EE'} 34%, transparent)` }}/>
         )}
 
         <BottomNav theme={theme} current={tab} onChange={setTab}/>

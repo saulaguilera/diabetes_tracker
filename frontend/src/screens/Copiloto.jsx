@@ -17,7 +17,7 @@ const SUGGESTIONS = [
   'Explicame mi tiempo en rango',
 ]
 
-export default function Copiloto({ theme, keyboardOpen = false }) {
+export default function Copiloto({ theme }) {
   const [messages, setMessages] = useState([{ role: 'assistant', content: GREETING }])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -73,8 +73,7 @@ export default function Copiloto({ theme, keyboardOpen = false }) {
       )}
 
       {/* barra de entrada (sobre la nav) */}
-      <div style={{ flexShrink: 0, padding: '10px 16px', display: 'flex', alignItems: 'flex-end', gap: 10,
-        marginBottom: keyboardOpen ? 10 : 'calc(92px + env(safe-area-inset-bottom))' }}>
+      <div style={{ flexShrink: 0, padding: '10px 16px', marginBottom: 'calc(92px + env(safe-area-inset-bottom))', display: 'flex', alignItems: 'flex-end', gap: 10 }}>
         <textarea
           value={input}
           onChange={e => setInput(e.target.value)}

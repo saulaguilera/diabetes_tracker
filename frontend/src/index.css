@@ -4,9 +4,7 @@ html, body, #root { height: 100%; }
 body {
   font-family: "Outfit", -apple-system, system-ui, sans-serif;
   background: #060B18;
-  /* Bloquear el scroll del body: evita que la página "salte" al abrir el
-     teclado y que quede una franja vacía abajo en iPhone. */
-  position: fixed; inset: 0; width: 100%; overflow: hidden;
+  overflow: hidden;
   overscroll-behavior: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

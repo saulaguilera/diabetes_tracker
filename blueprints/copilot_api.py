@@ -308,32 +308,79 @@ CONTEXTO ACTUAL DE LA PERSONA:
 
 
 def _chat_context():
-    """Contexto compacto y real para el copiloto (solo lectura)."""
-    from models import GlucoseReading
+    """Contexto real y con HISTORIAL para el copiloto (solo lectura): estado
+    actual + glucosa 24h + comidas/insulina/actividad recientes + patrones."""
+    from models import GlucoseReading, Meal, InsulinDose, Activity
+    now = datetime.now()
+    L = []
+
+    # ── estado actual ─────────────────────────────────────────────────────
     try:
         from utils.kinetics import get_kinetics_snapshot
         snap = get_kinetics_snapshot(hours_lookback=6) or {}
     except Exception:
         snap = {}
     last = GlucoseReading.query.order_by(GlucoseReading.timestamp.desc()).first()
-    since = datetime.now() - timedelta(hours=24)
-    reads = GlucoseReading.query.filter(GlucoseReading.timestamp >= since).all()
-    tir = round(100 * sum(1 for r in reads if LOW <= r.value_mgdl <= HIGH) / len(reads)) if reads else None
-    parts = []
+    cur = []
     if last:
-        parts.append(f"Glucosa actual: {int(round(last.value_mgdl))} mg/dL "
-                     f"(hace {_hace(last.timestamp)}).")
+        cur.append(f"glucosa {int(round(last.value_mgdl))} mg/dL (hace {_hace(last.timestamp)})")
     iob = round(snap.get("iob_bolus") or 0.0, 1)
     cob = int(round(snap.get("cob") or 0))
-    if iob:
-        parts.append(f"Insulina activa: {iob} U.")
-    if cob:
-        parts.append(f"Carbohidratos activos: {cob} g.")
+    if iob: cur.append(f"insulina activa {iob} U")
+    if cob: cur.append(f"carbos activos {cob} g")
     roc = snap.get("roc") or 0.0
-    parts.append("Tendencia: " + ("subiendo" if roc > 1 else "bajando" if roc < -1 else "estable") + ".")
-    if tir is not None:
-        parts.append(f"Tiempo en rango (24h): {tir}%.")
-    return " ".join(parts) if parts else "Sin datos recientes disponibles."
+    cur.append("tendencia " + ("subiendo" if roc > 1 else "bajando" if roc < -1 else "estable"))
+    L.append("ESTADO ACTUAL: " + ", ".join(cur) + ".")
+
+    # ── glucosa últimas 24h ───────────────────────────────────────────────
+    since = now - timedelta(hours=24)
+    reads = GlucoseReading.query.filter(GlucoseReading.timestamp >= since).order_by(GlucoseReading.timestamp).all()
+    if reads:
+        vals = [r.value_mgdl for r in reads]
+        tir = round(100 * sum(1 for v in vals if LOW <= v <= HIGH) / len(vals))
+        lo_r = min(reads, key=lambda r: r.value_mgdl)
+        hi_r = max(reads, key=lambda r: r.value_mgdl)
+        L.append(f"GLUCOSA 24h: tiempo en rango {tir}%, mínimo {int(lo_r.value_mgdl)} "
+                 f"a las {lo_r.timestamp.strftime('%H:%M')}, máximo {int(hi_r.value_mgdl)} "
+                 f"a las {hi_r.timestamp.strftime('%H:%M')}.")
+
+    # ── eventos recientes (48h) ───────────────────────────────────────────
+    since48 = now - timedelta(hours=48)
+
+    def _fmt(rows, fn):
+        return "; ".join(fn(x) for x in rows) if rows else "ninguno"
+
+    meals = Meal.query.filter(Meal.timestamp >= since48).order_by(Meal.timestamp.desc()).limit(8).all()
+    L.append("COMIDAS (48h): " + _fmt(meals, lambda m:
+             f"{m.timestamp.strftime('%d/%m %H:%M')} {m.name or 'comida'} "
+             f"({int(m.carbs_g or 0)}g CH" + (f", {int(m.fat_g)}g grasa" if (m.fat_g or 0) > 0 else "") + ")"))
+    doses = InsulinDose.query.filter(InsulinDose.timestamp >= since48).order_by(InsulinDose.timestamp.desc()).limit(8).all()
+    L.append("INSULINA (48h): " + _fmt(doses, lambda d:
+             f"{d.timestamp.strftime('%d/%m %H:%M')} {d.units:g}U "
+             f"{ {'bolus':'rápida','basal':'basal'}.get(d.type, d.type or '') }"))
+    acts = Activity.query.filter(Activity.timestamp >= since48).order_by(Activity.timestamp.desc()).limit(5).all()
+    if acts:
+        L.append("ACTIVIDAD (48h): " + _fmt(acts, lambda a:
+                 f"{a.timestamp.strftime('%d/%m %H:%M')} {a.activity_type or 'ejercicio'} "
+                 f"{a.duration_min or 0}min"))
+
+    # ── patrones + resumen 14 días ────────────────────────────────────────
+    try:
+        from utils.patrones_detector import analizar_patrones
+        a = analizar_patrones(days=14) or {}
+        res = a.get("resumen") or {}
+        if res.get("avg"):
+            gmi = round(3.31 + 0.02392 * res["avg"], 1)
+            L.append(f"RESUMEN 14 días: promedio {res['avg']} mg/dL, GMI estimada {gmi}%, "
+                     f"tiempo en rango {res.get('tir')}%, variabilidad CV {res.get('cv')}%.")
+        pats = a.get("patrones") or []
+        if pats:
+            L.append("PATRONES DETECTADOS: " + " | ".join(
+                f"{p.get('titulo')}: {p.get('detalle', '')[:160]}" for p in pats[:3]))
+    except Exception:
+        pass
+
+    return "\n".join(L) if L else "Sin datos recientes disponibles."
 
 
 @bp.route("/api/copilot/chat", methods=["POST"], endpoint="copilot_chat")
