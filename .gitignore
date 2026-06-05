@@ -30,3 +30,5 @@ node_modules/
 # sirve Python puro (sin paso de build de Node). Se regenera con `npm run build`
 # en frontend/ y se commitea. Si algún día se agrega build automático en Railway,
 # volver a ignorarlo.
+mobile/ios/
+mobile/assets/
