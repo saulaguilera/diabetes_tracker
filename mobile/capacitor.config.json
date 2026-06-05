@@ -5,11 +5,19 @@
   "appendUserAgent": "OrbitApp",
   "server": {
     "url": "https://web-production-c2f1.up.railway.app/copilot",
-    "allowNavigation": ["web-production-c2f1.up.railway.app", "*.railway.app"],
+    "allowNavigation": [
+      "web-production-c2f1.up.railway.app",
+      "*.railway.app"
+    ],
     "cleartext": false
   },
   "ios": {
     "contentInset": "never",
     "backgroundColor": "#060B18"
+  },
+  "plugins": {
+    "Keyboard": {
+      "resize": "none"
+    }
   }
 }

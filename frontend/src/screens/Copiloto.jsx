@@ -21,11 +21,25 @@ export default function Copiloto({ theme }) {
   const [messages, setMessages] = useState([{ role: 'assistant', content: GREETING }])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
+  const [kb, setKb] = useState(0)   // alto del teclado (visualViewport)
   const endRef = useRef(null)
 
+  // Sube el input con el teclado en vez de empujar toda la pantalla.
   useEffect(() => {
-    if (messages.length > 1 || sending) endRef.current && endRef.current.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, sending])
+    const vv = window.visualViewport
+    if (!vv) return
+    const onVV = () => {
+      const h = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+      setKb(h > 110 ? h : 0)
+    }
+    vv.addEventListener('resize', onVV)
+    vv.addEventListener('scroll', onVV)
+    return () => { vv.removeEventListener('resize', onVV); vv.removeEventListener('scroll', onVV) }
+  }, [])
+
+  useEffect(() => {
+    if (messages.length > 1 || sending || kb > 0) endRef.current && endRef.current.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, sending, kb])
 
   const send = async (textArg) => {
     const text = (typeof textArg === 'string' ? textArg : input).trim()
@@ -73,7 +87,9 @@ export default function Copiloto({ theme }) {
       )}
 
       {/* barra de entrada (sobre la nav) */}
-      <div style={{ flexShrink: 0, padding: '10px 16px', marginBottom: 'calc(92px + env(safe-area-inset-bottom))', display: 'flex', alignItems: 'flex-end', gap: 10 }}>
+      <div style={{ flexShrink: 0, padding: '10px 16px', display: 'flex', alignItems: 'flex-end', gap: 10,
+        marginBottom: kb > 0 ? kb + 8 : 'calc(92px + env(safe-area-inset-bottom))',
+        transition: 'margin-bottom 0.2s ease' }}>
         <textarea
           value={input}
           onChange={e => setInput(e.target.value)}
