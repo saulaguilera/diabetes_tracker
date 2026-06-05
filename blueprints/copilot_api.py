@@ -127,6 +127,143 @@ def copilot_home():
     })
 
 
+# ── Brief diario — resumen retrospectivo del día (SIN predicción) ─────────────
+def _today_stats():
+    """Métricas de HOY (desde la medianoche local) calculadas, no predichas."""
+    from models import GlucoseReading, Meal, InsulinDose, Activity
+    now = datetime.now()
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    reads = (GlucoseReading.query
+             .filter(GlucoseReading.timestamp >= start)
+             .order_by(GlucoseReading.timestamp).all())
+    g = {"readings_n": len(reads), "tir": None, "avg": None,
+         "low_pct": 0, "high_pct": 0, "min": None, "max": None}
+    if reads:
+        vals = [r.value_mgdl for r in reads]
+        g["avg"] = int(round(sum(vals) / len(vals)))
+        g["tir"] = round(100 * sum(1 for v in vals if LOW <= v <= HIGH) / len(vals))
+        g["low_pct"] = round(100 * sum(1 for v in vals if v < LOW) / len(vals))
+        g["high_pct"] = round(100 * sum(1 for v in vals if v > HIGH) / len(vals))
+        lo = min(reads, key=lambda r: r.value_mgdl)
+        hi = max(reads, key=lambda r: r.value_mgdl)
+        g["min"] = {"v": int(round(lo.value_mgdl)), "time": lo.timestamp.strftime("%H:%M")}
+        g["max"] = {"v": int(round(hi.value_mgdl)), "time": hi.timestamp.strftime("%H:%M")}
+
+    meals = Meal.query.filter(Meal.timestamp >= start).all()
+    doses = InsulinDose.query.filter(InsulinDose.timestamp >= start).all()
+    acts = Activity.query.filter(Activity.timestamp >= start).all()
+
+    return {
+        **g,
+        "carbs_total": int(round(sum(m.carbs_g or 0 for m in meals))),
+        "meals_n": len(meals),
+        "insulin_total": round(sum(d.units or 0 for d in doses), 1),
+        "bolus_total": round(sum(d.units or 0 for d in doses if d.type == "bolus"), 1),
+        "basal_total": round(sum(d.units or 0 for d in doses if d.type == "basal"), 1),
+        "activity_n": len(acts),
+        "activity_min": int(sum(a.duration_min or 0 for a in acts)),
+    }
+
+
+def _greeting(hour):
+    if hour < 12:
+        return "Buenos días"
+    if hour < 20:
+        return "Buenas tardes"
+    return "Buenas noches"
+
+
+def _brief_context(s):
+    """Texto compacto de los datos de hoy para alimentar la narrativa."""
+    L = []
+    if s["readings_n"]:
+        L.append(f"Tiempo en rango hoy: {s['tir']}% ({s['readings_n']} lecturas).")
+        L.append(f"Glucosa promedio: {s['avg']} mg/dL. Mínima {s['min']['v']} a las "
+                 f"{s['min']['time']}, máxima {s['max']['v']} a las {s['max']['time']}.")
+        if s["low_pct"]:
+            L.append(f"{s['low_pct']}% del tiempo por debajo de 70.")
+        if s["high_pct"]:
+            L.append(f"{s['high_pct']}% del tiempo por encima de 180.")
+    else:
+        L.append("Todavía no hay lecturas de glucosa hoy.")
+    if s["meals_n"]:
+        L.append(f"Comidas: {s['meals_n']} ({s['carbs_total']} g de carbohidratos en total).")
+    if s["insulin_total"]:
+        L.append(f"Insulina: {s['insulin_total']} U en total.")
+    if s["activity_min"]:
+        L.append(f"Actividad: {s['activity_n']} sesión/es, {s['activity_min']} min.")
+    return " ".join(L)
+
+
+def _brief_fallback(s):
+    """Narrativa determinista si el LLM no está disponible."""
+    if not s["readings_n"]:
+        return ("Todavía no hay lecturas de glucosa registradas hoy. "
+                "Cuando sincronices tu sensor, te muestro cómo viene tu día.")
+    txt = f"Hoy llevás {s['tir']}% del tiempo en rango, con un promedio de {s['avg']} mg/dL."
+    if s["low_pct"] >= 4:
+        txt += f" Hubo momentos por debajo de 70 (tu mínima fue {s['min']['v']})."
+    elif s["high_pct"] >= 25:
+        txt += f" Pasaste un rato por encima de 180 (tu máxima fue {s['max']['v']})."
+    if s["meals_n"]:
+        txt += f" Registraste {s['meals_n']} comida(s), {s['carbs_total']} g de carbohidratos."
+    return txt
+
+
+_BRIEF_SYSTEM = """Sos el copiloto de Orbit. Escribí el RESUMEN DEL DÍA de una persona con diabetes tipo 1.
+
+REGLAS ESTRICTAS E INVIOLABLES:
+- Solo DESCRIBÍS y ACOMPAÑÁS con lo que muestran los datos de hoy.
+- NUNCA recomiendes dosis, correcciones, qué comer o hacer, ni des indicaciones médicas.
+- NUNCA predigas la glucosa futura ni afirmes qué va a pasar.
+- 2 a 3 frases, en segunda persona, tono humano, cálido y tranquilo. Sin listas ni emojis.
+- No inventes datos que no estén abajo.
+
+DATOS DE HOY:
+{context}"""
+
+
+@bp.route("/api/copilot/brief", endpoint="copilot_brief")
+def copilot_brief():
+    """Brief diario: métricas calculadas de hoy + narrativa que solo explica."""
+    err = _require_login()
+    if err:
+        return err
+
+    import os
+    s = _today_stats()
+    ctx = _brief_context(s)
+    narrative = _brief_fallback(s)
+
+    # narrativa con el LLM (mismos guardarraíles); si falla, queda el fallback
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if api_key and s["readings_n"]:
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=api_key)
+            resp = client.messages.create(
+                model="claude-haiku-4-5",
+                max_tokens=200,
+                system=_BRIEF_SYSTEM.format(context=ctx),
+                messages=[{"role": "user", "content": "Escribí mi resumen del día."}],
+            )
+            txt = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+            if txt:
+                narrative = txt
+        except Exception:
+            pass
+
+    return jsonify({
+        "ok": True,
+        "greeting": _greeting(datetime.now().hour),
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "narrative": narrative,
+        "stats": s,
+        "updated_at": datetime.now().isoformat(),
+    })
+
+
 @bp.route("/api/copilot/log", methods=["POST"], endpoint="copilot_log")
 def copilot_log():
     """Registrar comida / insulina / ejercicio. Escribe a las mismas tablas que

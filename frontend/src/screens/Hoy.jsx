@@ -6,6 +6,7 @@ import { PAL, SANS } from '../theme.js'
 import NebulaGuide from '../components/NebulaGuide.jsx'
 import GlucoseWave from '../components/GlucoseWave.jsx'
 import EventSheet from '../components/EventSheet.jsx'
+import BriefSheet from '../components/BriefSheet.jsx'
 import { Card, Eyebrow, Meter } from '../components/ui.jsx'
 
 const STATUS = {
@@ -44,6 +45,7 @@ export default function Hoy({ theme, refreshKey = 0 }) {
   const [err, setErr] = useState(null)
   const [sel, setSel] = useState(null)     // evento abierto para editar/borrar
   const [reload, setReload] = useState(0)
+  const [showBrief, setShowBrief] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -59,6 +61,10 @@ export default function Hoy({ theme, refreshKey = 0 }) {
   const g = data.glucose
   const st = STATUS[g && g.status] || STATUS.rango
   const div = <div style={{ width: '0.5px', background: theme.border }}/>
+
+  const hour = new Date().getHours()
+  const hello = hour < 12 ? 'Buenos días' : hour < 20 ? 'Buenas tardes' : 'Buenas noches'
+  const briefTeaser = data.tir_today != null ? `${hello} · ${data.tir_today}% en rango hoy` : 'Tu resumen del día'
 
   return (
     <div style={{ padding: '4px 22px 120px', fontFamily: SANS, display: 'flex', flexDirection: 'column', gap: 22 }}>
@@ -144,17 +150,18 @@ export default function Hoy({ theme, refreshKey = 0 }) {
         </Card>
       )}
 
-      {/* brief diario (entrada — el detalle se construye más adelante) */}
-      <Card theme={theme} glow={PAL.ritmo.soft} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px' }}>
+      {/* brief diario — resumen del día (retrospectivo, sin predicción) */}
+      <Card theme={theme} glow={PAL.ritmo.soft} onClick={() => setShowBrief(true)} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px' }}>
         <div style={{ marginLeft: -4, flexShrink: 0 }}><NebulaGuide kind="pancreas" size={52} light={!theme.dark}/></div>
         <div style={{ flex: 1 }}>
           <Eyebrow theme={theme} style={{ fontSize: 9.5 }}>Brief diario</Eyebrow>
-          <div style={{ color: theme.ink, fontSize: 15, marginTop: 6, lineHeight: 1.4 }}>Tu resumen del día.</div>
+          <div style={{ color: theme.ink, fontSize: 15, marginTop: 6, lineHeight: 1.4 }}>{briefTeaser}</div>
         </div>
         <span style={{ color: theme.inkFaint, fontSize: 20 }}>›</span>
       </Card>
 
       {sel && <EventSheet theme={theme} ev={sel} onClose={() => setSel(null)} onChanged={() => { setSel(null); setReload(r => r + 1) }}/>}
+      {showBrief && <BriefSheet theme={theme} onClose={() => setShowBrief(false)}/>}
     </div>
   )
 }
