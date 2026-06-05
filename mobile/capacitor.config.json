@@ -2,6 +2,7 @@
   "appId": "com.saulaguilera.orbit",
   "appName": "Orbit",
   "webDir": "www",
+  "appendUserAgent": "OrbitApp",
   "server": {
     "url": "https://web-production-c2f1.up.railway.app/copilot",
     "cleartext": false

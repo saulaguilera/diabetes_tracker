@@ -78,6 +78,10 @@ def _hace(ts):
 @bp.route("/", endpoint="dashboard")
 def dashboard():
     from datetime import datetime
+    # La app nativa Orbit (Capacitor) marca su User-Agent con "OrbitApp".
+    # Si entra a la raíz, la mandamos al Copilot (no al dashboard de research).
+    if "OrbitApp" in (request.headers.get("User-Agent") or ""):
+        return redirect("/copilot")
     stats   = stats_resumen()
     chart   = chart_glucose_timeline(hours=24)
     alertas = _detectar_patrones(days=30)
