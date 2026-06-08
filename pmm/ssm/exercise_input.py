@@ -51,8 +51,19 @@ EX_TYPE_DROP_MULT = {"aerobico": 1.0, "mixto": 0.7, "anaerobico": 0.2}
 EX_TYPE_DROP_DEFAULT = 0.7
 
 # Baja directa base a intensidad "media" aeróbica, durante la actividad (mg/dL/min).
+# Se mantiene conservadora (0.6): subirla mejora el sesgo a +60 pero SOBRE-corrige
+# el horizonte +30 (MAE peor), porque la respuesta al ejercicio es muy variable.
 EX_DROP_RATE_BASE: float = 0.6
 EX_DROP_RATE_CAP:  float = 2.5         # tope (suma de actividades simultáneas)
+
+# Escala de la COLA de sensibilidad post-ejercicio — SOLO dentro del SSM.
+# sens_mult = 1 + EX_SENS_SCALE × (factor_clínico − 1). Con 1.0 es idéntico al
+# modelo clínico; >1 amplifica el efecto de sensibilidad. No toca las
+# recomendaciones (que llaman a exercise_sensitivity_factor directamente).
+# Calibrado a 2.0 (2026-06-08, bench/tune_exercise.py): mejora Pareto en las
+# ventanas post-ejercicio del usuario a +60 (MAE 19.9→19.4, sesgo −10.4→−8.2,
+# ±20 61→63%) sin regresión en +30. Margen para subir con datos en vivo.
+EX_SENS_SCALE: float = 2.0
 
 DURATION_DEFAULT_MIN: int = 30          # si duration_min es None
 
@@ -119,10 +130,12 @@ def compute_exercise_effect(t: datetime, activities: list) -> tuple[float, float
             drop += EX_DROP_RATE_BASE * intensity_f * type_drop_f
     drop = min(drop, EX_DROP_RATE_CAP)
 
-    # 2) Sensibilidad — reutilizar el modelo clínico validado de la app.
+    # 2) Sensibilidad — reutilizar el modelo clínico validado de la app,
+    #    con una escala opcional (EX_SENS_SCALE) que solo afecta al SSM.
     try:
         from utils.kinetics import exercise_sensitivity_factor
-        sens_mult = float(exercise_sensitivity_factor(activities, at_time=t))
+        raw = float(exercise_sensitivity_factor(activities, at_time=t))
+        sens_mult = 1.0 + EX_SENS_SCALE * (raw - 1.0)
     except Exception:
         sens_mult = 1.0
 

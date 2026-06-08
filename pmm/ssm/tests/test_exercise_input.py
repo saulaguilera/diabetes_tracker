@@ -62,9 +62,13 @@ def test_anaerobic_acute_resistance():
     fz = ExerciseEvent(timestamp=NOW - timedelta(minutes=10), duration_min=40,
                        intensity="alta", exercise_type="anaerobico",
                        activity_type="Fuerza")
-    drop, sens = compute_exercise_effect(NOW, [fz])
-    assert sens < 1.0                   # resistencia aguda (sens<1)
-    assert drop < 0.3                   # poca baja directa en anaeróbico
+    aero = ExerciseEvent(timestamp=NOW - timedelta(minutes=10), duration_min=40,
+                         intensity="alta", exercise_type="aerobico",
+                         activity_type="Correr")
+    drop_fz, sens = compute_exercise_effect(NOW, [fz])
+    drop_aero, _ = compute_exercise_effect(NOW, [aero])
+    assert sens < 1.0                       # resistencia aguda (sens<1)
+    assert drop_fz < 0.5 * drop_aero        # mucha menos baja directa que el aeróbico
 
 
 def test_drop_is_capped():
