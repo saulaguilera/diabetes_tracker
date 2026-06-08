@@ -52,7 +52,8 @@ MAX_UNRESOLVED_AUDITS_WARNING    = 100
 # Backlog admisible de hypo audits sin outcome (más de 12h)
 MAX_UNRESOLVED_HYPO_AUDITS_AGE_H = 12
 
-ACTIVE_MODEL_VERSION             = "ssm_v0_ukf6_basal"
+from pmm.ssm.version import MODEL_VERSION
+ACTIVE_MODEL_VERSION             = MODEL_VERSION   # versión activa monitoreada
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────

@@ -32,3 +32,6 @@ node_modules/
 # volver a ignorarlo.
 mobile/ios/
 mobile/assets/
+
+# backups locales de la DB
+instance/*.bak-*

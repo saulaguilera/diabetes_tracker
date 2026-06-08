@@ -14,6 +14,7 @@ bp = Blueprint("bench", __name__)
 # Orden de preferencia para elegir qué modelo mostrar en el verdict
 # cuando el usuario no pidió uno específico.
 _MODEL_PREFERENCE = [
+    "ssm_v0_ukf6_basal_ex",
     "ssm_v0_ukf6_basal",
     "ssm_v0_ukf6",
 ]

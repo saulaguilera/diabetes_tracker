@@ -3,7 +3,7 @@ services/background_predictor.py
 ─────────────────────────────────
 Genera una predicción del SSM a 30/60 min en cada CGM sync, sin requerir
 interacción del usuario. Persiste el resultado en `glucose_prediction` con
-`model_version = "ssm_v0_ukf6_basal"` para que el bench tenga cobertura
+`model_version = MODEL_VERSION` para que el bench tenga cobertura
 continua (no sólo cuando el usuario abre /calcular).
 
 Diseño
@@ -21,6 +21,8 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from typing import Optional
+
+from pmm.ssm.version import MODEL_VERSION
 
 logger = logging.getLogger("background_predictor")
 
@@ -69,7 +71,7 @@ def run_and_save_ssm_prediction(now: Optional[datetime] = None) -> dict:
         #    queremos evitar también el costo de run_filter).
         from datetime import timedelta
         recent = (db.session.query(GlucosePrediction)
-                  .filter(GlucosePrediction.model_version == "ssm_v0_ukf6_basal")
+                  .filter(GlucosePrediction.model_version == MODEL_VERSION)
                   .filter(GlucosePrediction.predicted_at >= now - timedelta(minutes=4, seconds=30))
                   .first())
         if recent:
@@ -177,7 +179,7 @@ def run_and_save_ssm_prediction(now: Optional[datetime] = None) -> dict:
             g_pred_60     = float(ssm_preds[60].g_pred),
             sigma_30      = float(ssm_preds[30].sigma),
             sigma_60      = float(ssm_preds[60].sigma),
-            model_version = "ssm_v0_ukf6_basal",
+            model_version = MODEL_VERSION,
             iob           = iob_now,
             cob           = cob_now,
             roc           = roc,
@@ -201,7 +203,7 @@ def run_and_save_ssm_prediction(now: Optional[datetime] = None) -> dict:
                 log_prediction_audit(
                     predicted_at     = now,
                     horizon_min      = h_min,
-                    model_version    = "ssm_v0_ukf6_basal",
+                    model_version    = MODEL_VERSION,
                     mu               = float(pp.g_pred),
                     sigma            = float(pp.sigma),
                     p_hypo           = float(pp.p_hypo),
@@ -218,7 +220,7 @@ def run_and_save_ssm_prediction(now: Optional[datetime] = None) -> dict:
                 )
             if ssm_result.innovations:
                 log_filter_innovations(
-                    model_version = "ssm_v0_ukf6_basal",
+                    model_version = MODEL_VERSION,
                     run_at        = now,
                     innovations   = ssm_result.innovations,
                 )

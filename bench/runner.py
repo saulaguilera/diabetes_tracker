@@ -147,7 +147,7 @@ _TARGETS = {
 }
 
 
-_SSM_MODEL_PREFERENCE = ["ssm_v0_ukf6_basal", "ssm_v0_ukf6"]
+_SSM_MODEL_PREFERENCE = ["ssm_v0_ukf6_basal_ex", "ssm_v0_ukf6_basal", "ssm_v0_ukf6"]
 
 
 def verdict(report: dict, model: Optional[str] = None) -> dict:

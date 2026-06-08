@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, request, redirect, url_for, flash, session
 from models import db, GlucoseReading, MealComponent
 from helpers import _get_setting, _set_setting
 from utils.libre_linkup import sync_all as libre_sync_all
+from pmm.ssm.version import MODEL_VERSION
 
 bp = Blueprint("sync", __name__)
 # Este blueprint está exento de CSRF: recibe llamadas de cron externos
@@ -1418,7 +1419,7 @@ def api_predict_glucose():
                     g_pred_60     = float(ssm_preds[60].g_pred),
                     sigma_30      = float(ssm_preds[30].sigma),
                     sigma_60      = float(ssm_preds[60].sigma),
-                    model_version = "ssm_v0_ukf6_basal",
+                    model_version = MODEL_VERSION,
                     iob           = iob_now,
                     cob           = cob_now,
                     roc           = roc,
@@ -1439,7 +1440,7 @@ def api_predict_glucose():
                         log_prediction_audit(
                             predicted_at     = now,
                             horizon_min      = h_min,
-                            model_version    = "ssm_v0_ukf6_basal",  # consistente con save_prediction
+                            model_version    = MODEL_VERSION,  # consistente con save_prediction
                             mu               = float(pp.g_pred),
                             sigma            = float(pp.sigma),
                             p_hypo           = float(pp.p_hypo),
@@ -1457,7 +1458,7 @@ def api_predict_glucose():
                     # Innovations granulares para whiteness tests
                     if ssm_result.innovations:
                         log_filter_innovations(
-                            model_version = "ssm_v0_ukf6_basal",
+                            model_version = MODEL_VERSION,
                             run_at        = now,
                             innovations   = ssm_result.innovations,
                         )
