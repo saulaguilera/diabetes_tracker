@@ -38,6 +38,7 @@ from pmm.ssm.state       import (
 )
 from pmm.ssm.dynamics    import step, StepInputs, k_a_for_meal_category
 from pmm.ssm.basal_input import load_basal_doses, compute_basal_eff
+from pmm.ssm.exercise_input import load_activities, compute_exercise_effect
 from pmm.ssm.observation import h_cgm, R_cgm, gating_outlier
 from pmm.ssm.ukf         import UKF
 
@@ -196,6 +197,11 @@ def run_filter(
     # (~5 days) cubre el efecto residual de cualquier dosis pasada.
     basal_doses = load_basal_doses(now)
 
+    # Actividad física: efecto determinístico (baja directa + sensibilidad
+    # aumentada con cola post-ejercicio), calculado en cada step como la basal.
+    # Lookback amplio para captar la cola de sesiones previas a la ventana.
+    activities = load_activities(now, lookback_hours=max(24, hours + 12))
+
     if not cgm_events:
         return FilterResult(
             x=np.zeros(DIM_X), P=np.eye(DIM_X),
@@ -260,6 +266,7 @@ def run_filter(
             K_depot=p.K_DEPOT_BASAL, K_pi=p.K_PI, K_ie=p.K_IE,
             F_bio=p.F_BIO_BASAL,
         )
+        ex_drop, ex_sens = compute_exercise_effect(t_prev, activities)
         u = StepInputs(
             bolus_U=0.0, meal_g=0.0,
             k_a=k_a_for_meal_category(None,
@@ -267,6 +274,8 @@ def run_filter(
             icr=icr_for_meals,
             s_i_target=s_i_target,
             i_basal_eff=i_basal_eff,
+            exercise_drop_rate=ex_drop,
+            ex_sensitivity_mult=ex_sens,
             drift_factor=drift_factor,
         )
 
@@ -335,10 +344,13 @@ def run_filter(
             K_depot=p.K_DEPOT_BASAL, K_pi=p.K_PI, K_ie=p.K_IE,
             F_bio=p.F_BIO_BASAL,
         )
+        ex_drop_f, ex_sens_f = compute_exercise_effect(t_prev, activities)
         u_final = StepInputs(
             bolus_U=0.0, meal_g=0.0, k_a=k_a_for_meal_category(None),
             icr=icr_for_meals, s_i_target=s_i_target,
             i_basal_eff=i_basal_eff_final,
+            exercise_drop_rate=ex_drop_f,
+            ex_sensitivity_mult=ex_sens_f,
             drift_factor=drift_factor,
         )
         dt_cap = min(dt_final, 60.0)
@@ -440,6 +452,7 @@ def forward_predict(
     ex_sensitivity_mult: float = 1.0,
     params = None,
     i_basal_eff_override: Optional[float] = None,
+    activities: Optional[list] = None,
 ) -> dict[int, SSMPrediction]:
     """
     Forward-sample el SSM desde el posterior actual hasta cada horizonte.
@@ -474,6 +487,13 @@ def forward_predict(
     # o cuando load_basal_doses no tiene contexto de DB). None → cargar desde DB.
     basal_doses = load_basal_doses(result.last_ts)
 
+    # Actividad física: efecto determinístico recalculado por step en el tiempo
+    # PROYECTADO (capta la cola post-ejercicio que decae durante el horizonte).
+    # Los escalares exercise_drop_rate / ex_sensitivity_mult quedan como override
+    # manual (default 0.0 / 1.0 → no-op; el efecto real viene de `activities`).
+    if activities is None:
+        activities = load_activities(result.last_ts)
+
     # Inputs del horizonte (sin nuevos boluses/meals — predicción "as is")
     u_template = StepInputs(
         bolus_U=0.0, meal_g=0.0,
@@ -497,17 +517,21 @@ def forward_predict(
             h_now = targets.pop(0)
             preds[h_now] = _snapshot_prediction(ukf, h_now)
             continue
+        t_step = result.last_ts + timedelta(minutes=t_sim)
         # Recomputar I_basal_eff en cada step (varía suavemente con t_sim)
         if i_basal_eff_override is not None:
             i_basal = i_basal_eff_override
         else:
-            t_step = result.last_ts + timedelta(minutes=t_sim)
             i_basal = compute_basal_eff(
                 t_step, basal_doses,
                 K_depot=p.K_DEPOT_BASAL, K_pi=p.K_PI, K_ie=p.K_IE,
                 F_bio=p.F_BIO_BASAL,
             )
-        u = StepInputs(**{**u_template.__dict__, "i_basal_eff": i_basal})
+        # Efecto del ejercicio en el tiempo proyectado (+ override manual)
+        ex_drop, ex_sens = compute_exercise_effect(t_step, activities)
+        u = StepInputs(**{**u_template.__dict__, "i_basal_eff": i_basal,
+                          "exercise_drop_rate": ex_drop + exercise_drop_rate,
+                          "ex_sensitivity_mult": ex_sens * ex_sensitivity_mult})
         ukf.predict(fx=lambda x: step(x, u, dt, params=p), Q=_Q_for_dt(dt, params=p))
         t_sim += dt
         if abs(t_sim - targets[0]) < 1e-6:

@@ -1398,14 +1398,18 @@ def api_predict_glucose():
                 pmm_speed_factors=pmm_speed_factors,
             )
             if ssm_result.error is None and ssm_result.n_cgm_used >= 3:
+                # Ejercicio unificado: forward_predict recalcula por step la
+                # baja directa + la sensibilidad (mismo modelo que el resto).
+                # Pasamos las actividades ya cargadas para no re-consultar.
+                # (Antes acá se inyectaba ex_factor a mano → ahora se computa
+                #  internamente; evitamos el doble conteo.)
                 ssm_preds = forward_predict(
                     ssm_result,
                     horizons_min=(30, 60),
                     drift_factor=drift_factor,
                     icr_for_meals=(icr if icr and icr > 0 else 12.0),
-                    exercise_drop_rate=0.0,
                     dawn_rate=dawn_roc,
-                    ex_sensitivity_mult=ex_factor,
+                    activities=activities,
                 )
                 save_prediction(
                     predicted_at  = now,

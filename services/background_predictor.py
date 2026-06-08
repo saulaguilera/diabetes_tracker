@@ -152,14 +152,20 @@ def run_and_save_ssm_prediction(now: Optional[datetime] = None) -> dict:
         except Exception:
             dawn_rate = 0.0
 
+        # Ejercicio: forward_predict carga las actividades y recalcula el efecto
+        # (baja directa + sensibilidad post-ejercicio) por step. Computamos el
+        # multiplicador actual aparte solo para registrarlo en el audit.
+        from pmm.ssm.exercise_input import load_activities, compute_exercise_effect
+        _acts = load_activities(now)
+        _ex_drop_now, ex_factor_now = compute_exercise_effect(now, _acts)
+
         ssm_preds = forward_predict(
             ssm_result,
             horizons_min=(30, 60),
             drift_factor=drift_factor,
             icr_for_meals=icr_for_meals,
-            exercise_drop_rate=0.0,
             dawn_rate=dawn_rate,
-            ex_sensitivity_mult=1.0,
+            activities=_acts,
         )
 
         # 8. Persistir GlucosePrediction
@@ -177,7 +183,7 @@ def run_and_save_ssm_prediction(now: Optional[datetime] = None) -> dict:
             roc           = roc,
             isf_used      = isf_prior,
             icr_used      = icr_for_meals,
-            ex_factor     = 1.0,
+            ex_factor     = round(ex_factor_now, 3),
         )
 
         # 9. Audit científico (PredictionAudit + SSMInnovation)
