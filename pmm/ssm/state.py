@@ -90,9 +90,11 @@ PROCESS_NOISE_DIAG = {
 }
 
 # Observation noise (R) — CGM-specific
-# Libre 3: MARD ~9% (Abbott spec), modelado como multiplicativo
-CGM_MARD_PCT: float    = 0.09
-CGM_NOISE_FLOOR: float = 4.0     # mg/dL — floor de ruido a bajas glucemias
+# Recalibrado por whitening de innovaciones (2026-06-09): el ruido BLANCO que ve
+# el filtro (sensor-vs-sensor) es ~⅓ del MARD de spec (~9%, que es sensor-vs-lab
+# e incluye sesgo de calibración lento). Ver pmm/ssm/parameters.py para el detalle.
+CGM_MARD_PCT: float    = 0.027
+CGM_NOISE_FLOOR: float = 1.2     # mg/dL — floor de ruido a bajas glucemias
 
 
 # ── Estado y dimensión ───────────────────────────────────────────────────

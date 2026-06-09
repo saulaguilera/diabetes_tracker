@@ -58,8 +58,15 @@ class SSMParameters:
     Q_SI:      float = 2.5e-7    # = SIGMA_SI² with SIGMA_SI=0.0005
 
     # ── 2. Observation noise (CGM) ──
-    R_CGM_BASE:   float = 4.0    # mg/dL — noise floor at low G
-    R_CGM_MARD:   float = 0.09   # multiplicative fraction (Libre 3 spec)
+    # Recalibrado (2026-06-09, ×0.30 del valor previo 4.0/0.09) por whitening de
+    # innovaciones sobre datos reales: el MARD de spec (~9%) mide sensor-vs-lab e
+    # incluye sesgo de calibración LENTO; el ruido blanco relevante para el filtro
+    # (sensor-vs-sensor) es ~⅓ de eso. Con el R previo el filtro era "lento"
+    # (innovaciones autocorrelacionadas, ACF₁=0.60; sub-dispersas, std(z)=0.67).
+    # Bajar R blanquea (ACF₁→0.15, std(z)→1.0) y mejora el pronóstico
+    # (MAE +30: 11.1→8.8, +60: 17.8→15.4 en validación offline).
+    R_CGM_BASE:   float = 1.2    # mg/dL — noise floor at low G
+    R_CGM_MARD:   float = 0.027  # fracción multiplicativa (ruido blanco efectivo)
 
     # ── 3. Physiological dynamics ──
     # Insulin PK

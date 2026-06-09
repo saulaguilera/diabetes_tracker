@@ -14,5 +14,9 @@ Historial
   ssm_v0_ukf6_basal_ex   — agrega ejercicio como input determinístico
                            (baja directa insulino-independiente + cola de
                            sensibilidad post-ejercicio). [Hito 8]
+  ssm_v0_ukf6_basal_ex_r1 — recalibra el ruido de observación R (×0.30) por
+                           whitening de innovaciones: innovaciones blancas
+                           (ACF₁ 0.60→0.15) y calibradas (std(z) 0.67→1.0);
+                           mejora el pronóstico (MAE +60 17.8→15.4). [Hito 9]
 """
-MODEL_VERSION = "ssm_v0_ukf6_basal_ex"
+MODEL_VERSION = "ssm_v0_ukf6_basal_ex_r1"
