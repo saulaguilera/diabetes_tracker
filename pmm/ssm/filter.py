@@ -39,6 +39,7 @@ from pmm.ssm.state       import (
 from pmm.ssm.dynamics    import step, StepInputs, k_a_for_meal_category
 from pmm.ssm.basal_input import load_basal_doses, compute_basal_eff
 from pmm.ssm.exercise_input import load_activities, compute_exercise_effect
+import pmm.ssm.fpe_input as fpe   # Fat/Protein Effect — apagable (FPE_ENABLED)
 from pmm.ssm.observation import h_cgm, R_cgm, gating_outlier
 from pmm.ssm.ukf         import UKF
 
@@ -202,6 +203,10 @@ def run_filter(
     # Lookback amplio para captar la cola de sesiones previas a la ventana.
     activities = load_activities(now, lookback_hours=max(24, hours + 12))
 
+    # FPE (grasa/proteína): solo se cargan comidas si el flag está prendido.
+    # Con el flag apagado → fpe_meals=[] → compute_fpe_effect=0 → idéntico a r1.
+    fpe_meals = fpe.load_fpe_meals(now) if fpe.FPE_ENABLED else []
+
     if not cgm_events:
         return FilterResult(
             x=np.zeros(DIM_X), P=np.eye(DIM_X),
@@ -267,6 +272,7 @@ def run_filter(
             F_bio=p.F_BIO_BASAL,
         )
         ex_drop, ex_sens = compute_exercise_effect(t_prev, activities)
+        fpe_rise = fpe.compute_fpe_effect(t_prev, fpe_meals)
         u = StepInputs(
             bolus_U=0.0, meal_g=0.0,
             k_a=k_a_for_meal_category(None,
@@ -276,6 +282,7 @@ def run_filter(
             i_basal_eff=i_basal_eff,
             exercise_drop_rate=ex_drop,
             ex_sensitivity_mult=ex_sens,
+            fpe_rise_rate=fpe_rise,
             drift_factor=drift_factor,
         )
 
@@ -345,12 +352,14 @@ def run_filter(
             F_bio=p.F_BIO_BASAL,
         )
         ex_drop_f, ex_sens_f = compute_exercise_effect(t_prev, activities)
+        fpe_rise_f = fpe.compute_fpe_effect(t_prev, fpe_meals)
         u_final = StepInputs(
             bolus_U=0.0, meal_g=0.0, k_a=k_a_for_meal_category(None),
             icr=icr_for_meals, s_i_target=s_i_target,
             i_basal_eff=i_basal_eff_final,
             exercise_drop_rate=ex_drop_f,
             ex_sensitivity_mult=ex_sens_f,
+            fpe_rise_rate=fpe_rise_f,
             drift_factor=drift_factor,
         )
         dt_cap = min(dt_final, 60.0)
@@ -494,6 +503,10 @@ def forward_predict(
     if activities is None:
         activities = load_activities(result.last_ts)
 
+    # FPE (grasa/proteína): recalculado por step en el tiempo proyectado, gated
+    # por el flag. Apagado → fpe_meals=[] → 0 → forward idéntico a r1.
+    fpe_meals = fpe.load_fpe_meals(result.last_ts) if fpe.FPE_ENABLED else []
+
     # Inputs del horizonte (sin nuevos boluses/meals — predicción "as is")
     u_template = StepInputs(
         bolus_U=0.0, meal_g=0.0,
@@ -529,9 +542,11 @@ def forward_predict(
             )
         # Efecto del ejercicio en el tiempo proyectado (+ override manual)
         ex_drop, ex_sens = compute_exercise_effect(t_step, activities)
+        fpe_rise = fpe.compute_fpe_effect(t_step, fpe_meals)
         u = StepInputs(**{**u_template.__dict__, "i_basal_eff": i_basal,
                           "exercise_drop_rate": ex_drop + exercise_drop_rate,
-                          "ex_sensitivity_mult": ex_sens * ex_sensitivity_mult})
+                          "ex_sensitivity_mult": ex_sens * ex_sensitivity_mult,
+                          "fpe_rise_rate": fpe_rise})
         ukf.predict(fx=lambda x: step(x, u, dt, params=p), Q=_Q_for_dt(dt, params=p))
         t_sim += dt
         if abs(t_sim - targets[0]) < 1e-6:

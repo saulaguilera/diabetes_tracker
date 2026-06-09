@@ -68,6 +68,7 @@ class StepInputs:
     dawn_rate:     float = 0.0     # mg/dL/min adicionales por dawn
     exercise_drop_rate: float = 0.0  # mg/dL/min de drop por ejercicio
     ex_sensitivity_mult: float = 1.0  # multiplicador del efecto insulínico
+    fpe_rise_rate: float = 0.0     # mg/dL/min de subida tardía grasa/proteína (FPE, apagable)
 
     # Insulina basal efectiva intersticial (U activas) — input determinístico
     # computado por basal_input.compute_basal_eff() desde el historial de
@@ -127,7 +128,7 @@ def _flow(x: np.ndarray, u: StepInputs, params=None) -> np.ndarray:
     if G > renal_t:
         nim_uptake += krenal * (G - renal_t)
 
-    dG = (egp + u.dawn_rate + carb_effect
+    dG = (egp + u.dawn_rate + carb_effect + u.fpe_rise_rate
           - insulin_effect - nim_uptake - u.exercise_drop_rate)
 
     # ── S_I OU mean-reversion ──
@@ -180,6 +181,7 @@ def step(
         dawn_rate=u.dawn_rate,
         exercise_drop_rate=u.exercise_drop_rate,
         ex_sensitivity_mult=u.ex_sensitivity_mult,
+        fpe_rise_rate=u.fpe_rise_rate,
         i_basal_eff=u.i_basal_eff,
         drift_factor=u.drift_factor,
     )
