@@ -1,6 +1,12 @@
 """
 pmm/ssm/fpe_input.py
 ─────────────────────
+⚠️ EXPERIMENTO RECHAZADO (branch experiment/r2-fpe-rejected, 2026-06-09).
+   La validación held-out dio óptimo FPE_GAIN=0: prender el FPE EMPEORA
+   post-meal 2-5h, high-fat/protein y global (el modelo ya sobre-predice
+   post-comida). NO promover ni desplegar. Ver bench/reports/fpe/README.md.
+   Se preserva apagable (FPE_ENABLED=False) como registro reproducible.
+
 Fat/Protein Effect (FPE) — input determinístico DESACOPLADO y APAGABLE.
 
 Hipótesis (r2_fpe)
