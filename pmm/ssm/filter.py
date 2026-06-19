@@ -39,6 +39,7 @@ from pmm.ssm.state       import (
 from pmm.ssm.dynamics    import step, StepInputs, k_a_for_meal_category
 from pmm.ssm.basal_input import load_basal_doses, compute_basal_eff
 from pmm.ssm.exercise_input import load_activities, compute_exercise_effect
+from pmm.ssm import basal_bias   # r2 (offline): corrección de sesgo basal neto (flag OFF → no-op)
 from pmm.ssm.observation import h_cgm, R_cgm, gating_outlier
 from pmm.ssm.ukf         import UKF
 
@@ -276,6 +277,7 @@ def run_filter(
             i_basal_eff=i_basal_eff,
             exercise_drop_rate=ex_drop,
             ex_sensitivity_mult=ex_sens,
+            basal_net_offset=basal_bias.net_basal_offset(),
             drift_factor=drift_factor,
         )
 
@@ -351,6 +353,7 @@ def run_filter(
             i_basal_eff=i_basal_eff_final,
             exercise_drop_rate=ex_drop_f,
             ex_sensitivity_mult=ex_sens_f,
+            basal_net_offset=basal_bias.net_basal_offset(),
             drift_factor=drift_factor,
         )
         dt_cap = min(dt_final, 60.0)
@@ -503,6 +506,7 @@ def forward_predict(
         dawn_rate=dawn_rate,
         exercise_drop_rate=exercise_drop_rate,
         ex_sensitivity_mult=ex_sensitivity_mult,
+        basal_net_offset=basal_bias.net_basal_offset(),
         drift_factor=drift_factor,
     )
 

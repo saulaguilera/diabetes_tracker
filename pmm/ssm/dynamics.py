@@ -76,6 +76,11 @@ class StepInputs:
     # es muy chico (half-life depot ~20h).
     i_basal_eff:   float = 0.0     # U activas en intersticial
 
+    # EXPERIMENTO r2 (offline, apagable): offset constante a dG (mg/dL/min) para
+    # corregir el sesgo de producción endógena neta. 0.0 → sin efecto (= r1).
+    # Ver pmm/ssm/basal_bias.py. Default 0.
+    basal_net_offset: float = 0.0
+
     # Para predicción forward: nuestro multiplicador del SSM mismo
     drift_factor:  float = 1.0     # acoplado al CUSUM (resistance/sensitivity)
 
@@ -128,7 +133,8 @@ def _flow(x: np.ndarray, u: StepInputs, params=None) -> np.ndarray:
         nim_uptake += krenal * (G - renal_t)
 
     dG = (egp + u.dawn_rate + carb_effect
-          - insulin_effect - nim_uptake - u.exercise_drop_rate)
+          - insulin_effect - nim_uptake - u.exercise_drop_rate
+          + u.basal_net_offset)   # r2: corrección de producción neta (0 si flag OFF)
 
     # ── S_I OU mean-reversion ──
     dSI = -lam_si * (S_I - u.s_i_target)
@@ -181,6 +187,7 @@ def step(
         exercise_drop_rate=u.exercise_drop_rate,
         ex_sensitivity_mult=u.ex_sensitivity_mult,
         i_basal_eff=u.i_basal_eff,
+        basal_net_offset=u.basal_net_offset,
         drift_factor=u.drift_factor,
     )
 
