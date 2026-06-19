@@ -133,8 +133,12 @@ def _flow(x: np.ndarray, u: StepInputs, params=None) -> np.ndarray:
         nim_uptake += krenal * (G - renal_t)
 
     dG = (egp + u.dawn_rate + carb_effect
-          - insulin_effect - nim_uptake - u.exercise_drop_rate
-          + u.basal_net_offset)   # r2: corrección de producción neta (0 si flag OFF)
+          - insulin_effect - nim_uptake - u.exercise_drop_rate)
+    # r3: corrección de producción neta con compuerta por glucosa.
+    # Si basal_net_offset==0 (flag OFF) → se saltea por completo → idéntico a r1.
+    if u.basal_net_offset:
+        from pmm.ssm.basal_bias import gate as _basal_gate
+        dG += u.basal_net_offset * _basal_gate(G)
 
     # ── S_I OU mean-reversion ──
     dSI = -lam_si * (S_I - u.s_i_target)
