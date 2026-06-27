@@ -554,6 +554,11 @@ def _snapshot_prediction(ukf: UKF, h: int, params=None) -> SSMPrediction:
     R = _R_cgm(g_pred, params=params)[0, 0]
     sig_total = math.sqrt(sig_g**2 + R)
 
+    # r4 (offline): calibración post-hoc del intervalo. Escala SOLO σ (y por ende
+    # p_hypo/p_hyper); g_pred queda intacto → media/MAE/sesgo sin cambio. flag OFF → ×1.0.
+    from pmm.ssm.interval_calib import sigma_mult
+    sig_total *= sigma_mult(h)
+
     # P(G<70) y P(G>180) bajo N(g_pred, sig_total²)
     def _p_below(thresh: float) -> float:
         from math import erf, sqrt
