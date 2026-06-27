@@ -58,3 +58,23 @@ Cumple todos los gates incluida la seguridad en hipo. Pendiente de:
 3. experimento separado de calibración de intervalos a +60.
 
 No merge. No deploy. Flag OFF. Producción intacta.
+
+────────────────────────────────────────────────────────────────────────
+UPDATE 2026-06-27 — PROMOTED + LIVE-VALIDATED (7/7)
+────────────────────────────────────────────────────────────────────────
+production version: ssm_v0_ukf6_basal_ex_r2_gated_bias
+live window:        19–27 Jun 2026
+resolved predictions: 874
+
+GLOBAL bias +60:      -10.2 → -2.1
+GLOBAL MAE  +60:       14.8 → 11.7
+hypo_window bias +60:  -3.1 → +0.1
+hypo_window MAE  +60:  10.2 → 10.3
+
+live gates: 7/7 passed
+conclusion: mean bias correction CONFIRMED in production (generalizes to
+            new days; hypo safety preserved by the glucose gate).
+
+note: +60 interval calibration remains UNRESOLVED and was intentionally
+      NOT modified (std(z)≈1.63, IC90≈80%). Handled separately in
+      experiment/r4-interval-calibration-h60.
