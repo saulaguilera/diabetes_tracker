@@ -1,5 +1,14 @@
 experiment/r4-interval-calibration-h60
-status: offline candidate — passed held-out gates (8/8), pending review / live deployment decision
+status: offline candidate — passed 8/8 held-out gates, pending review/live deployment decision
+
+Por qué es fuerte: corrige la sobreconfianza a +60 SIN tocar la media, el MAE, el
+sesgo, R, Q, el gated bias, el hypo engine ni los thresholds. Ortogonal a r2.
+
+Decisión: NO hacer calibración regime-aware por ahora. El multiplicador único
+m=1.64 es simple, estable y suficiente como primer candidato.
+
+Promoción futura (tras revisión): ssm_v0_ukf6_basal_ex_r3_cal60 — flag ON con
+SIGMA_MULT_60=1.64, con su propio veredicto live de 5–7 días.
 
 objetivo: calibrar los intervalos +60 del modelo de producción
           ssm_v0_ukf6_basal_ex_r2_gated_bias (sobreconfiados: std(z)≈1.63, IC90≈80%).
