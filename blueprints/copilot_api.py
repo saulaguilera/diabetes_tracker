@@ -224,6 +224,19 @@ DATOS DE HOY:
 {context}"""
 
 
+@bp.route("/api/copilot/drive", endpoint="copilot_drive")
+def copilot_drive():
+    """ORBIT Drive Mode — estado de seguridad glanceable para conducir.
+    Solo glucosa actual + tendencia + frescura. SIN predicción, SIN dosis.
+    Devuelve el payload del adapter (mismo contrato para web y superficies nativas)."""
+    err = _require_login()
+    if err:
+        return err
+    from drive_mode import build_drive_mode_state, to_live_activity_payload
+    state = build_drive_mode_state()
+    return jsonify({"ok": True, "drive": to_live_activity_payload(state), "state": state.to_dict()})
+
+
 @bp.route("/api/copilot/brief", endpoint="copilot_brief")
 def copilot_brief():
     """Brief diario: métricas calculadas de hoy + narrativa que solo explica."""
