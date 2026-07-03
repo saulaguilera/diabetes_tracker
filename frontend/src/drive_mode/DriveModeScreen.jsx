@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 import { apiGet } from '../api.js'
 import DriveModeExpanded from './DriveModeExpanded.jsx'
 import { DEMO_STATES } from './demoStates.js'
+import { startDriveActivity, updateDriveActivity, endDriveActivity } from './liveActivityBridge.js'
 
 const SANS = '"Outfit", -apple-system, system-ui, sans-serif'
 const POLL_MS = 30000
@@ -15,17 +16,30 @@ export default function DriveModeScreen({ onClose, demo = false }) {
   const [err, setErr] = useState(false)
   const [demoIdx, setDemoIdx] = useState(0)
   const wakeRef = useRef(null)
+  const laStartedRef = useRef(false)   // Live Activity ya iniciada?
 
-  // datos en vivo (no en demo)
+  // datos en vivo (no en demo) + puente a la Live Activity nativa (si existe)
   useEffect(() => {
     if (demo) return
     let alive = true
     const load = () => apiGet('/drive')
-      .then(d => { if (alive) { setData(d.drive); setErr(false) } })
+      .then(d => {
+        if (!alive) return
+        setData(d.drive); setErr(false)
+        // Live Activity: iniciar la primera vez, actualizar después.
+        // En navegador/Railway el bridge es no-op → no rompe nada.
+        if (!laStartedRef.current) { startDriveActivity(d.drive); laStartedRef.current = true }
+        else { updateDriveActivity(d.drive) }
+      })
       .catch(() => { if (alive) setErr(true) })
     load()
     const id = setInterval(load, POLL_MS)
-    return () => { alive = false; clearInterval(id) }
+    return () => {
+      alive = false
+      clearInterval(id)
+      endDriveActivity()          // terminar al salir de Drive Mode
+      laStartedRef.current = false
+    }
   }, [demo])
 
   // mantener la pantalla encendida mientras se conduce
