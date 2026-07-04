@@ -82,3 +82,21 @@ campo prohibido aparezca (insulina/dosis/IOB/COB/predicción).
 - Acceptance criteria 1–14, 16–17: cubiertos por este scaffold + el bridge web.
 - **15 (Xcode build) y 16 (test en Lock Screen/Dynamic Island):** requieren
   compilar en Xcode (paso nativo). El código está listo para eso.
+
+## ⚠️ Registro del plugin (OBLIGATORIO con Capacitor 8 + SPM)
+Capacitor 8 con SPM **no auto-descubre** plugins locales del app-target. Hay que
+registrarlo manualmente (Swift-only, sin `.m` ni bridging header):
+
+1. Agregá `MainViewController.swift` (en este dir) al target **App**:
+   ```swift
+   class MainViewController: CAPBridgeViewController {
+       override func capacitorDidLoad() {
+           bridge?.registerPluginInstance(OrbitDriveActivityPlugin())
+       }
+   }
+   ```
+2. En `Main.storyboard`, cambiá la clase del view controller de
+   `CAPBridgeViewController` (módulo Capacitor) a **`MainViewController`**
+   (módulo `App`, `customModuleProvider="target"`).
+3. Rebuild. En la consola del webview: `window.Capacitor.Plugins.OrbitDriveActivity`
+   debe existir (ya no `undefined`).
