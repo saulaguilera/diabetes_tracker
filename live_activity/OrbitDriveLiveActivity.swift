@@ -35,16 +35,21 @@ private func warningSymbol(_ level: String) -> String? {
     }
 }
 
-// Estado en una palabra corta (para el espacio compacto de CarPlay).
-private func shortStatus(_ status: String) -> String {
+// Etiqueta corta para el espacio compacto de CarPlay.
+// Prioridad de SEGURIDAD primero (sin datos → nivel bajo/alto); si estás en rango,
+// muestra la TENDENCIA (Rising/Falling/Stable), derivada de la flecha.
+private func compactLabel(_ status: String, _ arrow: String) -> String {
     switch status {
-    case "stable":                  return "Stable"
-    case "attention":               return "Watch"
-    case "low", "urgent_low":       return "Low"
-    case "high", "urgent_high":     return "High"
-    case "stale":                   return "Stale"
-    case "disconnected":            return "Offline"
-    default:                        return ""
+    case "disconnected":        return "Offline"
+    case "stale":               return "Stale"
+    case "urgent_low", "low":   return "Low"
+    case "urgent_high", "high": return "High"
+    default: break
+    }
+    switch arrow {
+    case "↗", "↑": return "Rising"
+    case "↘", "↓": return "Falling"
+    default:       return "Stable"    // → (plano) / — (desconocido)
     }
 }
 
@@ -95,7 +100,7 @@ struct OrbitDriveLiveActivity: Widget {
                 // ── CARPLAY (derecha): flecha + estado corto ──
                 HStack(spacing: 3) {
                     Text(s.trendArrow).foregroundColor(c)
-                    Text(shortStatus(s.status))
+                    Text(compactLabel(s.status, s.trendArrow))
                         .font(.system(size: 11, weight: .medium)).foregroundColor(c)
                 }
             } minimal: {
