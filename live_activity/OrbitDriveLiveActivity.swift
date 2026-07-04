@@ -35,6 +35,19 @@ private func warningSymbol(_ level: String) -> String? {
     }
 }
 
+// Estado en una palabra corta (para el espacio compacto de CarPlay).
+private func shortStatus(_ status: String) -> String {
+    switch status {
+    case "stable":                  return "Stable"
+    case "attention":               return "Watch"
+    case "low", "urgent_low":       return "Low"
+    case "high", "urgent_high":     return "High"
+    case "stale":                   return "Stale"
+    case "disconnected":            return "Offline"
+    default:                        return ""
+    }
+}
+
 @available(iOS 16.2, *)
 struct OrbitDriveLiveActivity: Widget {
     var body: some WidgetConfiguration {
@@ -70,18 +83,20 @@ struct OrbitDriveLiveActivity: Widget {
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }
             } compactLeading: {
-                // ── Lo que ve CARPLAY (izquierda): símbolo de riesgo + número ──
+                // ── CARPLAY (izquierda): ⚠️ + valor + unidad al lado ──
                 HStack(spacing: 3) {
                     if let sym { Image(systemName: sym).foregroundColor(c) }
                     Text(s.valueText)
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .foregroundColor(c)
+                    Text("mg/dL").font(.system(size: 9)).foregroundColor(.secondary)
                 }
             } compactTrailing: {
-                // ── Lo que ve CARPLAY (derecha): flecha + unidad ──
-                HStack(spacing: 2) {
+                // ── CARPLAY (derecha): flecha + estado corto ──
+                HStack(spacing: 3) {
                     Text(s.trendArrow).foregroundColor(c)
-                    Text("mg/dL").font(.system(size: 9)).foregroundColor(.secondary)
+                    Text(shortStatus(s.status))
+                        .font(.system(size: 11, weight: .medium)).foregroundColor(c)
                 }
             } minimal: {
                 if let sym {
