@@ -84,6 +84,23 @@ campo prohibido aparezca (insulina/dosis/IOB/COB/predicción).
   compilar en Xcode (paso nativo). El código está listo para eso.
 
 ## ⚠️ Registro del plugin (OBLIGATORIO con Capacitor 8 + SPM)
+IMPORTANTE: la carpeta `App` usa referencias clásicas (no sincronizada). Si agregás
+un archivo nuevo por fuera de Xcode NO entra al target → el storyboard no encuentra
+la clase → **pantalla negra**. Por eso poné la clase dentro de `AppDelegate.swift`
+(que ya está en el target App):
+```swift
+// al final de AppDelegate.swift (que ya importa Capacitor):
+class MainViewController: CAPBridgeViewController {
+    override func capacitorDidLoad() {
+        bridge?.registerPluginInstance(OrbitDriveActivityPlugin())
+    }
+}
+```
+Y en `Main.storyboard` → view controller class = `MainViewController` (módulo App,
+`customModuleProvider="target"`). Rebuild.
+
+--- (enfoque alternativo con archivo separado, NO usar si App no es carpeta sincronizada) ---
+
 Capacitor 8 con SPM **no auto-descubre** plugins locales del app-target. Hay que
 registrarlo manualmente (Swift-only, sin `.m` ni bridging header):
 
