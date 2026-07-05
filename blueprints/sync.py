@@ -15,6 +15,13 @@ _LIBRE_EMAIL    = os.environ.get("LIBRE_EMAIL", "")
 _LIBRE_PASSWORD = os.environ.get("LIBRE_PASSWORD", "")
 _SYNC_TOKEN     = os.environ.get("SYNC_TOKEN", "")
 
+# Ventana de deduplicación de lecturas. FIX: era ±6 min — MÁS ANCHA que la
+# cadencia del sensor (~5 min) → cada lectura a +5 min de la anterior caía
+# dentro de la ventana de la previa y se descartaba como "duplicada": se
+# perdía la MITAD de los datos (cadencia observada: 10 min). ±2 min captura
+# duplicados reales y jitter de timestamp (segundos) sin tragarse vecinos.
+_DEDUP_WINDOW_MIN = 2
+
 
 def _do_libre_sync(email: str, password: str) -> dict:
     """
@@ -40,8 +47,8 @@ def _do_libre_sync(email: str, password: str) -> dict:
         # incluye desfases por cambios de timezone anteriores)
         ts = r["timestamp"]
         existe = GlucoseReading.query.filter(
-            GlucoseReading.timestamp >= ts - timedelta(minutes=6),
-            GlucoseReading.timestamp <= ts + timedelta(minutes=6),
+            GlucoseReading.timestamp >= ts - timedelta(minutes=_DEDUP_WINDOW_MIN),
+            GlucoseReading.timestamp <= ts + timedelta(minutes=_DEDUP_WINDOW_MIN),
         ).first()
         if not existe:
             db.session.add(GlucoseReading(
@@ -195,6 +202,47 @@ def _do_libre_sync(email: str, password: str) -> dict:
         "error":      None,
         "ultima":     ultima_ts,
     }
+
+
+def maybe_kick_background_sync(max_age_min: float = 6.0) -> bool:
+    """
+    Dispara una sync de Libre EN BACKGROUND si los datos están viejos — para
+    que abrir la app/Drive Mode traiga datos frescos sin esperar al scheduler.
+    Respeta cooldown (4 min) y rate-limit de Abbott. Nunca bloquea al caller.
+    Devuelve True si disparó.
+    """
+    if not _LIBRE_EMAIL or not _LIBRE_PASSWORD:
+        return False
+    now = datetime.now()
+    try:
+        rl = _get_setting("libre_rate_limited_at")
+        if rl and (now - datetime.fromisoformat(rl)).total_seconds() < 600:
+            return False
+        last = _get_setting("libre_last_sync")
+        if last and (now - datetime.fromisoformat(last)).total_seconds() < 240:
+            return False
+    except (ValueError, TypeError):
+        pass
+    ultima = GlucoseReading.query.order_by(GlucoseReading.timestamp.desc()).first()
+    if ultima and (now - ultima.timestamp).total_seconds() < max_age_min * 60:
+        return False   # datos frescos — no hace falta
+
+    # marcar YA para que requests concurrentes no dupliquen el disparo
+    _set_setting("libre_last_sync", now.isoformat())
+    from flask import current_app
+    app_obj = current_app._get_current_object()
+
+    import threading
+
+    def _run():
+        with app_obj.app_context():
+            try:
+                _do_libre_sync(_LIBRE_EMAIL, _LIBRE_PASSWORD)
+            except Exception:
+                pass
+
+    threading.Thread(target=_run, daemon=True, name="kick-sync").start()
+    return True
 
 
 @bp.route("/api/ultima-lectura", endpoint="api_ultima_lectura")
@@ -357,8 +405,8 @@ def api_sync_libre_recheck():
                 continue
             ts = r["timestamp"]
             existe = GlucoseReading.query.filter(
-                GlucoseReading.timestamp >= ts - timedelta(minutes=6),
-                GlucoseReading.timestamp <= ts + timedelta(minutes=6),
+                GlucoseReading.timestamp >= ts - timedelta(minutes=_DEDUP_WINDOW_MIN),
+                GlucoseReading.timestamp <= ts + timedelta(minutes=_DEDUP_WINDOW_MIN),
             ).first()
             if not existe:
                 continue   # ya se procesó en el sync normal
@@ -669,8 +717,8 @@ def api_sync_libre_verbose():
                 continue
 
             existe = GlucoseReading.query.filter(
-                GlucoseReading.timestamp >= ts - timedelta(minutes=6),
-                GlucoseReading.timestamp <= ts + timedelta(minutes=6),
+                GlucoseReading.timestamp >= ts - timedelta(minutes=_DEDUP_WINDOW_MIN),
+                GlucoseReading.timestamp <= ts + timedelta(minutes=_DEDUP_WINDOW_MIN),
             ).first()
 
             if existe:
