@@ -37,7 +37,12 @@ INTERVAL_CALIB_ENABLED: bool = True
 #   held-out 25-27/6: IC90 81→92%, std(z) 1.59→0.97 (8/8 gates)
 #   semana virgen 28/6–5/7 (n=946): IC90 74→88%, hypo_window 35→82%,
 #   std(z) 1.85→1.13, recall de hipos sin regresión. Ver bench/reports/.
-SIGMA_MULT_30: float = 1.0
+# r5 (CANDIDATO offline): m30=1.68 = RMS(z_train) sobre +30, train 19-30/6
+# (n=1231), tuneado SOLO en train. Held-out 1-5/7 (n=625): std(z) 1.89→1.12,
+# IC90 75→89%, IC90 hypo_window 50→71%, ancho ±15→±25 mg/dL, recall de hipos
+# sin regresión (13→13%), precisión de alarmas 24→30%. NO desplegado: en main
+# sigue 1.0 hasta revisión/promoción (futura ssm_v0_ukf6_basal_ex_r4_cal3060).
+SIGMA_MULT_30: float = 1.68
 SIGMA_MULT_60: float = 1.64
 
 
