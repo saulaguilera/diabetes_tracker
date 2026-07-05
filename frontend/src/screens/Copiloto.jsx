@@ -11,10 +11,10 @@ const GREETING = 'Hola 👋 Soy tu copiloto. Puedo explicarte tus datos y acompa
 // Se evitan a propósito las que piden juicio o recomendación ("¿está bien?",
 // "ideas para mi comida"), por el candado del copiloto.
 const SUGGESTIONS = [
-  '¿Por qué subí anoche?',
+  '¿Qué me estuvo afectando?',
+  '¿Qué pasa con mi glucosa después del ejercicio?',
+  '¿Cómo son mis noches?',
   '¿Cómo estuvo mi semana?',
-  '¿Cómo viene mi día?',
-  'Explicame mi tiempo en rango',
 ]
 
 export default function Copiloto({ theme }) {
@@ -52,7 +52,8 @@ export default function Copiloto({ theme }) {
     setInput(''); setSending(true)
     try {
       const r = await apiPost('/chat', { message: text, history })
-      setMessages(m => [...m, { role: 'assistant', content: r.reply || '…' }])
+      setMessages(m => [...m, { role: 'assistant', content: r.reply || '…',
+        usedData: (r.used_data || []).length > 0 }])
     } catch (e) {
       setMessages(m => [...m, { role: 'assistant', content: 'No pude responder ahora. Probá de nuevo.' }])
     } finally {
@@ -60,17 +61,25 @@ export default function Copiloto({ theme }) {
     }
   }
 
+  // el análisis con consultas tarda más que un saludo → avisar qué está pasando
+  const [slowThinking, setSlowThinking] = useState(false)
+  useEffect(() => {
+    if (!sending) { setSlowThinking(false); return }
+    const t = setTimeout(() => setSlowThinking(true), 2500)
+    return () => clearTimeout(t)
+  }, [sending])
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', fontFamily: SANS }}>
       {/* mensajes */}
       <div ref={listRef} style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', padding: '8px 18px 8px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         {messages.map((m, i) => (
-          <Bubble key={i} theme={theme} role={m.role} text={m.content}/>
+          <Bubble key={i} theme={theme} role={m.role} text={m.content} usedData={m.usedData}/>
         ))}
         {sending && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: theme.inkFaint, fontSize: 12.5, paddingLeft: 44 }}>
             <div className="ai-orbit" style={{ width: 14, height: 14, borderRadius: '50%', border: `2px solid ${theme.accent}44`, borderTopColor: theme.accent }}/>
-            pensando…
+            {slowThinking ? 'analizando tus datos…' : 'pensando…'}
           </div>
         )}
       </div>
@@ -115,7 +124,7 @@ export default function Copiloto({ theme }) {
   )
 }
 
-function Bubble({ theme, role, text }) {
+function Bubble({ theme, role, text, usedData }) {
   const isUser = role === 'user'
   return (
     <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexDirection: isUser ? 'row-reverse' : 'row' }}>
@@ -124,13 +133,20 @@ function Bubble({ theme, role, text }) {
           <NebulaGuide kind="insulina" size={34} breathe={false}/>
         </div>
       )}
-      <div style={{
-        maxWidth: '78%', padding: '11px 14px', borderRadius: 18, fontSize: 14.5, lineHeight: 1.5,
-        background: isUser ? theme.accent : theme.surface,
-        color: isUser ? '#0A0C1E' : theme.ink,
-        borderBottomRightRadius: isUser ? 6 : 18, borderBottomLeftRadius: isUser ? 18 : 6,
-        border: isUser ? 'none' : `0.5px solid ${theme.border}`, whiteSpace: 'pre-wrap' }}>
-        {text}
+      <div style={{ maxWidth: '78%' }}>
+        <div style={{
+          padding: '11px 14px', borderRadius: 18, fontSize: 14.5, lineHeight: 1.5,
+          background: isUser ? theme.accent : theme.surface,
+          color: isUser ? '#0A0C1E' : theme.ink,
+          borderBottomRightRadius: isUser ? 6 : 18, borderBottomLeftRadius: isUser ? 18 : 6,
+          border: isUser ? 'none' : `0.5px solid ${theme.border}`, whiteSpace: 'pre-wrap' }}>
+          {text}
+        </div>
+        {/* transparencia: esta respuesta salió de consultar tus datos reales */}
+        {usedData && !isUser && (
+          <div style={{ color: theme.inkFaint, fontSize: 10.5, marginTop: 4, paddingLeft: 6,
+            letterSpacing: '0.06em' }}>✦ basado en tus datos</div>
+        )}
       </div>
     </div>
   )

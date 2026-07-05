@@ -552,6 +552,14 @@ REGLAS ESTRICTAS E INVIOLABLES:
   descriptivo, nunca como predicción.
 - Si la persona te pide que recuerdes algo, la nota SE GUARDA AUTOMÁTICAMENTE:
   confirmalo con calidez ("Listo, lo voy a tener presente").
+- Tenés CONSULTAS a los datos reales (ejercicio, hipos, franjas horarias,
+  comidas, impacto de eventos). Cuando la pregunta lo amerite, usalas y
+  respondé con los NÚMEROS que devuelven — nada de sensaciones vagas.
+  Si una consulta trae pocos datos, decilo con honestidad ("tengo pocas
+  sesiones registradas para afirmarlo"). Los resultados describen el PASADO:
+  contalos en pasado ("después de entrenar te bajó ~25"), jamás como promesa
+  de lo que va a pasar. Para preguntas analíticas podés extenderte a 5-6
+  frases; seguí sin listas salvo que ayuden de verdad.
 
 CONTEXTO ACTUAL DE LA PERSONA:
 {context}"""
@@ -697,16 +705,42 @@ def copilot_chat():
     msgs.append({"role": "user", "content": message})
 
     try:
+        import json as _json
         import anthropic
+        from utils.copilot_tools import COPILOT_TOOLS, run_tool
+
         client = anthropic.Anthropic(api_key=api_key)
-        resp = client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=320,
-            system=_CHAT_SYSTEM.format(context=_chat_context()),
-            messages=msgs,
-        )
+        system = _CHAT_SYSTEM.format(context=_chat_context())
+        # Sonnet para calidad analítica (las consultas requieren razonar sobre
+        # números). Override por env si algún día hay que bajar costo.
+        model = os.environ.get("COPILOT_CHAT_MODEL", "claude-sonnet-5")
+
+        def _call():
+            return client.messages.create(
+                model=model, max_tokens=650, system=system,
+                messages=msgs, tools=COPILOT_TOOLS,
+            )
+
+        resp = _call()
+        used = []
+        # Loop de tool use: el modelo decide qué consultar; cap 3 rondas.
+        for _ in range(3):
+            if resp.stop_reason != "tool_use":
+                break
+            msgs.append({"role": "assistant", "content": resp.content})
+            results = []
+            for b in resp.content:
+                if getattr(b, "type", None) == "tool_use":
+                    used.append(b.name)
+                    out = run_tool(b.name, dict(b.input or {}))
+                    results.append({"type": "tool_result", "tool_use_id": b.id,
+                                    "content": _json.dumps(out, ensure_ascii=False)})
+            msgs.append({"role": "user", "content": results})
+            resp = _call()
+
         reply = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
-        return jsonify({"ok": True, "reply": reply or "…"})
+        return jsonify({"ok": True, "reply": reply or "…",
+                        "used_data": sorted(set(used))})
     except Exception as exc:
         return jsonify({"ok": False, "error": "No pude responder ahora. Intentá de nuevo."}), 502
 
