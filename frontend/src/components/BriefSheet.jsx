@@ -46,7 +46,8 @@ export default function BriefSheet({ theme, onClose }) {
   const tiles = []
   if (s) {
     if (s.readings_n) {
-      tiles.push(<Tile key="tir" theme={theme} label="Tiempo en rango" value={s.tir} unit="%" color={PAL.insulina.key}/>)
+      tiles.push(<Tile key="tir" theme={theme} label="Tiempo en rango" value={s.tir} unit="%" color={PAL.insulina.key}
+        sub={s.tir_ayer != null ? `ayer ${s.tir_ayer}% · ${s.tir - s.tir_ayer >= 0 ? '+' : ''}${s.tir - s.tir_ayer}` : null}/>)
       tiles.push(<Tile key="avg" theme={theme} label="Glucosa promedio" value={s.avg} unit="mg/dL"/>)
       if (s.min && s.max)
         tiles.push(<Tile key="rng" theme={theme} label="Rango de hoy" value={`${s.min.v}–${s.max.v}`} unit="mg/dL"
@@ -97,6 +98,26 @@ export default function BriefSheet({ theme, onClose }) {
             ) : (
               <div style={{ color: theme.inkSoft, fontSize: 13.5, lineHeight: 1.5, padding: '4px 2px 8px' }}>
                 Todavía no registraste nada hoy. Cuando agregues lecturas o eventos, los vas a ver acá.
+              </div>
+            )}
+
+            {/* cómo respondió tu glucosa a las comidas de hoy (retrospectivo) */}
+            {s && s.meal_responses && s.meal_responses.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <div style={{ color: theme.inkFaint, fontSize: 11, letterSpacing: '0.14em',
+                  textTransform: 'uppercase', marginBottom: 6 }}>Tus comidas de hoy</div>
+                {s.meal_responses.map((mr, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 0', borderTop: `0.5px solid ${theme.border}` }}>
+                    <span style={{ flex: 1, color: theme.ink, fontSize: 14, whiteSpace: 'nowrap',
+                      overflow: 'hidden', textOverflow: 'ellipsis' }}>{mr.name}</span>
+                    <span style={{ color: theme.inkFaint, fontSize: 12 }}>{mr.time} · {mr.carbs}g</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
+                      color: mr.delta_2h > 60 ? '#D98A6A' : mr.delta_2h < -25 ? '#E0B057' : '#5FC6A8' }}>
+                      {mr.delta_2h >= 0 ? '+' : ''}{mr.delta_2h} <span style={{ fontWeight: 400, fontSize: 11, color: theme.inkFaint }}>2h</span>
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
 

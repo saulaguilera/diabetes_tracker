@@ -7,7 +7,6 @@ import NebulaGuide from '../components/NebulaGuide.jsx'
 import GlucoseWave from '../components/GlucoseWave.jsx'
 import EventSheet from '../components/EventSheet.jsx'
 import BriefSheet from '../components/BriefSheet.jsx'
-import DriveModeScreen from '../drive_mode/DriveModeScreen.jsx'
 import { Card, Eyebrow, Meter } from '../components/ui.jsx'
 
 const STATUS = {
@@ -47,7 +46,6 @@ export default function Hoy({ theme, refreshKey = 0 }) {
   const [sel, setSel] = useState(null)     // evento abierto para editar/borrar
   const [reload, setReload] = useState(0)
   const [showBrief, setShowBrief] = useState(false)
-  const [showDrive, setShowDrive] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -105,7 +103,7 @@ export default function Hoy({ theme, refreshKey = 0 }) {
         </div>
       )}
 
-      {/* contexto ahora — IOB / COB / tendencia */}
+      {/* contexto ahora — IOB / COB / tendencia + basal */}
       <Card theme={theme} style={{ padding: '16px 20px' }}>
         <Eyebrow theme={theme} style={{ fontSize: 10 }}>Contexto ahora</Eyebrow>
         <div style={{ display: 'flex', gap: 12, marginTop: 14 }}>
@@ -118,6 +116,19 @@ export default function Hoy({ theme, refreshKey = 0 }) {
             <div style={{ fontSize: 18, fontWeight: 400, color: theme.ink, marginTop: 7 }}>{data.context.trend}</div>
           </div>
         </div>
+        {/* basal — antes no aparecía en el contexto */}
+        {data.context.basal && data.context.basal.last_units != null && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14,
+            paddingTop: 12, borderTop: `0.5px solid ${theme.border}` }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+              background: data.context.basal.logged_today ? '#5FC6A8' : '#E0B057',
+              boxShadow: `0 0 8px ${data.context.basal.logged_today ? '#5FC6A8' : '#E0B057'}` }}/>
+            <span style={{ color: theme.inkSoft, fontSize: 12.5 }}>
+              Basal{data.context.basal.tipo ? ` (${data.context.basal.tipo})` : ''} · {data.context.basal.last_units}U hace {data.context.basal.last_ago}
+              {!data.context.basal.logged_today && ' · hoy sin registrar'}
+            </span>
+          </div>
+        )}
       </Card>
 
       {/* tiempo en rango */}
@@ -162,26 +173,8 @@ export default function Hoy({ theme, refreshKey = 0 }) {
         <span style={{ color: theme.inkFaint, fontSize: 20 }}>›</span>
       </Card>
 
-      {/* modo conducción — vista glanceable y segura para el auto */}
-      <Card theme={theme} onClick={() => setShowDrive(true)} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px' }}>
-        <div style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'grid', placeItems: 'center',
-          background: theme.surface, border: `0.5px solid ${theme.border}` }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={PAL.glucosa.key} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11"/>
-            <path d="M5 11h14a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1z"/>
-            <circle cx="7.5" cy="14.5" r="1"/><circle cx="16.5" cy="14.5" r="1"/>
-          </svg>
-        </div>
-        <div style={{ flex: 1 }}>
-          <Eyebrow theme={theme} style={{ fontSize: 9.5 }}>Modo conducción</Eyebrow>
-          <div style={{ color: theme.ink, fontSize: 15, marginTop: 6, lineHeight: 1.4 }}>Tu glucosa, visible y segura en el auto</div>
-        </div>
-        <span style={{ color: theme.inkFaint, fontSize: 20 }}>›</span>
-      </Card>
-
       {sel && <EventSheet theme={theme} ev={sel} onClose={() => setSel(null)} onChanged={() => { setSel(null); setReload(r => r + 1) }}/>}
       {showBrief && <BriefSheet theme={theme} onClose={() => setShowBrief(false)}/>}
-      {showDrive && <DriveModeScreen onClose={() => setShowDrive(false)}/>}
     </div>
   )
 }

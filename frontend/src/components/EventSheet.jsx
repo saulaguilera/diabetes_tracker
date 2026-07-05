@@ -33,6 +33,10 @@ export default function EventSheet({ theme, ev, onClose, onChanged }) {
   const [carbs, setCarbs] = useState(Math.round(d.carbs || 0))
   const [protein, setProtein] = useState(Math.round(d.protein || 0))
   const [fat, setFat] = useState(Math.round(d.fat || 0))
+  // fecha/hora editables: muchas veces la comida se registra tarde y el
+  // horario real importa para entender la respuesta glucémica
+  const [date, setDate] = useState(ev.date || '')
+  const [time, setTime] = useState(ev.time || '')
   const [busy, setBusy] = useState(false)
   const [confirm, setConfirm] = useState(false)   // paso "¿seguro?" antes de borrar
 
@@ -42,7 +46,10 @@ export default function EventSheet({ theme, ev, onClose, onChanged }) {
 
   const save = async () => {
     setBusy(true)
-    try { await apiPut(`/meal/${ev.id}`, { name, carbs, protein, fat }); onChanged() }
+    const body = { name, carbs, protein, fat }
+    if (date && date !== ev.date) body.date = date
+    if (time && time !== ev.time) body.time = time
+    try { await apiPut(`/meal/${ev.id}`, body); onChanged() }
     catch (e) { setBusy(false) }
   }
   const remove = async () => {
@@ -71,6 +78,14 @@ export default function EventSheet({ theme, ev, onClose, onChanged }) {
             <Row theme={theme} label="Carbohidratos"><Stepper theme={theme} value={carbs} setValue={setCarbs} step={5} max={300} unit="g" color={m.color}/></Row>
             <Row theme={theme} label="Proteína"><Stepper theme={theme} value={protein} setValue={setProtein} step={5} max={200} unit="g" color={theme.ink}/></Row>
             <Row theme={theme} label="Grasa"><Stepper theme={theme} value={fat} setValue={setFat} step={5} max={200} unit="g" color={theme.ink}/></Row>
+            {/* ¿registraste tarde? corregí cuándo comiste en realidad */}
+            <Row theme={theme} label="Día">
+              <input type="date" value={date} max={new Date().toISOString().slice(0, 10)}
+                onChange={e => setDate(e.target.value)} style={timeInput(theme)}/>
+            </Row>
+            <Row theme={theme} label="Hora">
+              <input type="time" value={time} onChange={e => setTime(e.target.value)} style={timeInput(theme)}/>
+            </Row>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -116,6 +131,16 @@ export default function EventSheet({ theme, ev, onClose, onChanged }) {
       </div>
     </div>
   ), document.body)
+}
+
+// estilo compartido de los inputs nativos de fecha/hora (dark-friendly)
+function timeInput(theme) {
+  return {
+    padding: '9px 12px', borderRadius: 12, border: `0.5px solid ${theme.border}`,
+    background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+    color: theme.ink, fontSize: 15, fontFamily: SANS, colorScheme: theme.dark ? 'dark' : 'light',
+    WebkitAppearance: 'none', appearance: 'none', outline: 'none',
+  }
 }
 
 function Row({ theme, label, children }) {
