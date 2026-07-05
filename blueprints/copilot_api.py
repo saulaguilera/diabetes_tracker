@@ -237,6 +237,24 @@ def copilot_drive():
     return jsonify({"ok": True, "drive": to_live_activity_payload(state), "state": state.to_dict()})
 
 
+@bp.route("/api/copilot/drive/push-token", methods=["POST"], endpoint="copilot_drive_push_token")
+def copilot_drive_push_token():
+    """Registra el push token de ActivityKit para updates de la Live Activity
+    vía APNs en background. Token vacío → des-registro. Solo se usa con
+    DRIVE_APNS_ENABLED=1 (ver drive_mode/apns_push.py)."""
+    err = _require_login()
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    token = (data.get("token") or "").strip().lower()
+    if token and (len(token) > 200 or any(c not in "0123456789abcdef" for c in token)):
+        return jsonify({"ok": False, "error": "Token inválido"}), 400
+    from helpers import _set_setting
+    _set_setting("drive_apns_token", token)
+    _set_setting("drive_apns_token_updated_at", datetime.now().isoformat())
+    return jsonify({"ok": True, "registered": bool(token)})
+
+
 @bp.route("/api/copilot/brief", endpoint="copilot_brief")
 def copilot_brief():
     """Brief diario: métricas calculadas de hoy + narrativa que solo explica."""

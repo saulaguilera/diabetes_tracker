@@ -5,9 +5,10 @@
 //  que manda la web (payload de /api/copilot/drive) en ContentState y maneja el
 //  ciclo de vida de la Live Activity con ActivityKit.
 //
-//  MVP: updates locales (los dispara la web en cada refresco). Sin APNs.
-//  TODO (futuro): ActivityKit push token + APNs para updates en background más
-//  confiables cuando la app no está en foreground.
+//  Updates: locales (web en foreground) + APNs push token para background.
+//  El push token se pide con pushType .token; si el build no tiene el
+//  entitlement de push (cuenta gratis / capability sin agregar) el request
+//  falla → reintenta con pushType nil y todo sigue funcionando como antes.
 
 import ActivityKit
 import Foundation
@@ -18,6 +19,10 @@ enum OrbitDriveActivityManager {
     private static let title = "ORBIT Drive"
     // Si no llega update en este tiempo, iOS marca la actividad como "stale".
     private static let staleAfter: TimeInterval = 15 * 60
+
+    /// Callback al plugin cuando ActivityKit emite un push token (hex).
+    /// El plugin lo reenvía a la web y la web lo registra en el backend.
+    static var onPushToken: ((String) -> Void)?
 
     static func isAvailable() -> Bool {
         ActivityAuthorizationInfo().areActivitiesEnabled
@@ -32,15 +37,36 @@ enum OrbitDriveActivityManager {
     static func start(_ state: OrbitDriveActivityAttributes.ContentState) -> Bool {
         guard isAvailable() else { return false }
         if current() != nil { update(state); return true }
+        let attrs = OrbitDriveActivityAttributes(title: title)
+        let content = ActivityContent(state: state,
+                                      staleDate: Date().addingTimeInterval(staleAfter))
         do {
-            let attrs = OrbitDriveActivityAttributes(title: title)
-            let content = ActivityContent(state: state,
-                                          staleDate: Date().addingTimeInterval(staleAfter))
-            _ = try Activity.request(attributes: attrs, content: content, pushType: nil)
+            // Con push: permite updates por APNs con la app en background.
+            let activity = try Activity.request(attributes: attrs, content: content,
+                                                pushType: .token)
+            observePushToken(activity)
             return true
         } catch {
-            NSLog("OrbitDrive: no se pudo iniciar Live Activity: \(error)")
-            return false
+            // Sin entitlement de push (cuenta gratis) → modo local, como antes.
+            NSLog("OrbitDrive: pushType .token falló (\(error)) — reintento local")
+            do {
+                _ = try Activity.request(attributes: attrs, content: content, pushType: nil)
+                return true
+            } catch {
+                NSLog("OrbitDrive: no se pudo iniciar Live Activity: \(error)")
+                return false
+            }
+        }
+    }
+
+    /// Observa los push tokens de ActivityKit (hex) y los pasa al plugin.
+    private static func observePushToken(_ activity: Activity<OrbitDriveActivityAttributes>) {
+        Task {
+            for await tokenData in activity.pushTokenUpdates {
+                let hex = tokenData.map { String(format: "%02x", $0) }.joined()
+                NSLog("OrbitDrive: push token actualizado (\(hex.prefix(12))…)")
+                onPushToken?(hex)
+            }
         }
     }
 

@@ -3,10 +3,10 @@
 // Modo demo: previsualiza los 6 estados (tocá para ciclar). No usa predicción.
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { apiGet } from '../api.js'
+import { apiGet, apiPost } from '../api.js'
 import DriveModeExpanded from './DriveModeExpanded.jsx'
 import { DEMO_STATES } from './demoStates.js'
-import { startDriveActivity, updateDriveActivity, endDriveActivity } from './liveActivityBridge.js'
+import { startDriveActivity, updateDriveActivity, endDriveActivity, onDrivePushToken } from './liveActivityBridge.js'
 
 const SANS = '"Outfit", -apple-system, system-ui, sans-serif'
 const POLL_MS = 30000
@@ -40,6 +40,17 @@ export default function DriveModeScreen({ onClose, demo = false }) {
       endDriveActivity()          // terminar al salir de Drive Mode
       laStartedRef.current = false
     }
+  }, [demo])
+
+  // push token de ActivityKit → registrarlo en el backend (updates por APNs
+  // en background). En navegador el listener es no-op; si el POST falla no
+  // pasa nada: la Live Activity sigue con updates locales.
+  useEffect(() => {
+    if (demo) return
+    const off = onDrivePushToken(({ token }) => {
+      if (token) apiPost('/drive/push-token', { token }).catch(() => {})
+    })
+    return off
   }, [demo])
 
   // mantener la pantalla encendida mientras se conduce

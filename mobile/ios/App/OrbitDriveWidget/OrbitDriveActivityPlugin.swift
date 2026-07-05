@@ -24,6 +24,16 @@ public class OrbitDriveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "endDriveActivity",        returnType: CAPPluginReturnPromise),
     ]
 
+    // Reenvía el push token de ActivityKit a la web como evento
+    // "drivePushToken" — la web lo registra en el backend (APNs updates).
+    public override func load() {
+        if #available(iOS 16.2, *) {
+            OrbitDriveActivityManager.onPushToken = { [weak self] hex in
+                self?.notifyListeners("drivePushToken", data: ["token": hex])
+            }
+        }
+    }
+
     @objc func isLiveActivityAvailable(_ call: CAPPluginCall) {
         if #available(iOS 16.2, *) {
             call.resolve(["available": OrbitDriveActivityManager.isAvailable()])

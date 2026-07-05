@@ -58,10 +58,35 @@ Copiá los `.swift` al proyecto Xcode.
 - Glucosa nula → **no** muestra número engañoso (solo el estado). `staleDate` en
   ActivityKit hace que iOS la marque vieja si no llega update en 15 min.
 
-## Updates (MVP)
-Updates locales disparados por la web en cada refresco. Sin APNs.
-**TODO (futuro):** ActivityKit push token + APNs para updates confiables en
-background cuando la app no está en foreground.
+## Updates
+Dos caminos, complementarios:
+1. **Local (foreground)**: la web dispara `updateDriveActivity` en cada refresco
+   (~30s) mientras Drive Mode está abierto. Funciona sin cuenta paga.
+2. **APNs (background)** — rama `feat/drive-apns-push`: el backend empuja el
+   nuevo estado en cada sync de Libre, aunque el teléfono esté bloqueado o en
+   CarPlay. Requiere cuenta de Apple Developer paga.
+
+### Flujo APNs (ya cableado, flag OFF)
+nativo: `Activity.request(pushType: .token)` (fallback a `nil` si no hay
+entitlement) → `pushTokenUpdates` → evento `drivePushToken` → web →
+`POST /api/copilot/drive/push-token` → settings `drive_apns_token`.
+backend: hook en el sync de Libre → `drive_mode/apns_push.py` →
+APNs `liveactivity` push con el `content-state` (claves = ContentState Codable).
+
+### Activación (cuando la cuenta esté aprobada)
+1. developer.apple.com → Certificates → **Keys** → crear clave con
+   **Apple Push Notifications service (APNs)** → bajar el `.p8`, anotar
+   **Key ID** y **Team ID**.
+2. Xcode → target **App** → Signing & Capabilities → **+ Push Notifications**
+   (el widget NO la necesita). Team = la cuenta paga, en App y Widget.
+3. Railway → variables:
+   `DRIVE_APNS_ENABLED=1`, `APNS_TEAM_ID`, `APNS_KEY_ID`,
+   `APNS_KEY_P8` (contenido del .p8; admite `\n` escapados o base64),
+   `APNS_ENV=sandbox` (builds de Xcode; `production` para TestFlight/App Store).
+   Topic default: `com.saulaguilera.orbit2026.push-type.liveactivity`.
+4. Rebuild de la app → abrir Drive Mode una vez (registra el token) → los
+   updates siguen solos con el teléfono bloqueado.
+Con `DRIVE_APNS_ENABLED=0` (default) todo el camino APNs es no-op.
 
 ## Probar
 1. Rebuild en Xcode (la Live Activity es nativa — Railway solo actualiza la web).
