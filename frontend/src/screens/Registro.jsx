@@ -41,9 +41,10 @@ export default function Registro({ theme, onDone }) {
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState(null)
 
-  // comida
+  // comida — carbos arrancan en 0: un default arbitrario (30g) que se guarda
+  // sin ajustar es peor que vacío (ensucia la memoria de comidas y el research)
   const [name, setName] = useState('')
-  const [carbs, setCarbs] = useState(30)
+  const [carbs, setCarbs] = useState(0)
   const [protein, setProtein] = useState(0)
   const [fat, setFat] = useState(0)
   const [fiber, setFiber] = useState(0)   // fibra estimada (se descuenta de carbos)

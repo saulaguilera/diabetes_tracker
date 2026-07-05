@@ -46,6 +46,13 @@ def copilot_home():
     if err:
         return err
 
+    # datos viejos → dispara sync en background (la próxima carga los ve frescos)
+    try:
+        from blueprints.sync import maybe_kick_background_sync
+        maybe_kick_background_sync()
+    except Exception:
+        pass
+
     from models import GlucoseReading, Meal, InsulinDose, Activity
     from utils.kinetics import get_kinetics_snapshot
 
@@ -319,6 +326,12 @@ def copilot_drive():
     err = _require_login()
     if err:
         return err
+    # manejando, la frescura importa doble: si el dato está viejo, dispara sync
+    try:
+        from blueprints.sync import maybe_kick_background_sync
+        maybe_kick_background_sync()
+    except Exception:
+        pass
     from drive_mode import build_drive_mode_state, to_live_activity_payload
     state = build_drive_mode_state()
     return jsonify({"ok": True, "drive": to_live_activity_payload(state), "state": state.to_dict()})
