@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from utils.copilot_tools import (
     in_hour_window, detect_hypo_events, slice_stats, delta_after, run_tool,
+    pair_meals_boluses, ratio_bucket,
 )
 
 
@@ -95,6 +96,47 @@ class TestDeltaAfter(unittest.TestCase):
     def test_missing_baseline(self):
         t, v = _series(datetime(2026, 7, 1, 12, 0), 5, [100, 102])
         self.assertIsNone(delta_after(t, v, datetime(2026, 7, 1, 9, 0), 2))
+
+
+class TestPairMealsBoluses(unittest.TestCase):
+    def setUp(self):
+        self.t = datetime(2026, 7, 1, 13, 0)
+
+    def test_pairs_nearest_within_gap(self):
+        meals = [(self.t, 60.0)]
+        boluses = [(self.t - timedelta(minutes=10), 6.0),
+                   (self.t + timedelta(hours=3), 2.0)]
+        pares = pair_meals_boluses(meals, boluses)
+        self.assertEqual(pares, [(self.t, 60.0, 6.0)])
+
+    def test_bolus_used_once(self):
+        # dos comidas cerca de UN solo bolo → solo una se aparea
+        meals = [(self.t, 50.0), (self.t + timedelta(minutes=15), 30.0)]
+        boluses = [(self.t + timedelta(minutes=5), 5.0)]
+        pares = pair_meals_boluses(meals, boluses)
+        self.assertEqual(len(pares), 1)
+        self.assertEqual(pares[0][1], 50.0)   # la más cercana gana
+
+    def test_outside_gap_not_paired(self):
+        pares = pair_meals_boluses([(self.t, 40.0)],
+                                   [(self.t + timedelta(minutes=45), 4.0)])
+        self.assertEqual(pares, [])
+
+    def test_empty(self):
+        self.assertEqual(pair_meals_boluses([], []), [])
+
+
+class TestRatioBucket(unittest.TestCase):
+    def test_buckets(self):
+        self.assertEqual(ratio_bucket(5), "menos de 8 g/U")
+        self.assertEqual(ratio_bucket(10), "8-12 g/U")
+        self.assertEqual(ratio_bucket(14), "12-16 g/U")
+        self.assertEqual(ratio_bucket(20), "16 g/U o más")
+
+    def test_edges(self):
+        self.assertEqual(ratio_bucket(8), "8-12 g/U")
+        self.assertEqual(ratio_bucket(12), "12-16 g/U")
+        self.assertEqual(ratio_bucket(16), "16 g/U o más")
 
 
 class TestRunToolSafety(unittest.TestCase):
