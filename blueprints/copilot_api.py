@@ -813,6 +813,67 @@ def copilot_estimate():
         return jsonify({"ok": False, "error": "No pude estimar la foto. Cargá los datos a mano."}), 502
 
 
+@bp.route("/api/copilot/meals/quick", endpoint="copilot_meals_quick")
+def copilot_meals_quick():
+    """'Mis comidas': las más repetidas (90 días) + la más reciente, con macros
+    medianos — para re-registrar en un tap desde el Registro."""
+    err = _require_login()
+    if err:
+        return err
+    from models import Meal
+    from utils.quick_meals import group_quick_meals
+    since = datetime.now() - timedelta(days=90)
+    rows = [{"name": m.name, "carbs": m.carbs_g, "protein": m.protein_g,
+             "fat": m.fat_g, "ts": m.timestamp}
+            for m in Meal.query.filter(Meal.timestamp >= since).all()]
+    return jsonify({"ok": True, "meals": group_quick_meals(rows)})
+
+
+@bp.route("/api/copilot/food/search", endpoint="copilot_food_search")
+def copilot_food_search():
+    """Autocompletar desde la base nutricional interna (sin APIs externas).
+    Entiende cantidades: '2 tostadas', '200ml leche', '150g arroz'.
+    Devuelve CH NETOS (fibra ya descontada) — mismo criterio que la foto."""
+    err = _require_login()
+    if err:
+        return err
+    from utils.nutrition_db import NUTRITION_DB, estimar
+
+    q = (request.args.get("q") or "").strip().lower()
+    if len(q) < 3:
+        return jsonify({"ok": True, "results": []})
+
+    results, seen = [], set()
+
+    def _add(nombre, est):
+        if not est or est["key"] in seen:
+            return
+        seen.add(est["key"])
+        results.append({
+            "label":   nombre,
+            "carbs":   int(round(est["carbs_g"])),        # netos
+            "fiber":   int(round(est["fibra_g"])),
+            "protein": int(round(est["protein_g"])),
+            "fat":     int(round(est["fat_g"])),
+            "grams":   est.get("grams"),
+            "nota":    est.get("nota") or "",
+        })
+
+    # 1. el texto completo, SOLO si trae cantidad ("200ml leche", "2 tostadas")
+    #    o es un nombre exacto — evita matches raros con palabras a medias
+    if any(ch.isdigit() for ch in q) or q in NUTRITION_DB:
+        _add(q, estimar(q))
+    # 2. claves de la DB que matchean (prefijo primero, luego substring)
+    keys = sorted(NUTRITION_DB.keys())
+    matches = [k for k in keys if k.startswith(q)] + \
+              [k for k in keys if q in k and not k.startswith(q)]
+    for k in matches:
+        if len(results) >= 5:
+            break
+        _add(k, estimar(k))
+    return jsonify({"ok": True, "results": results[:5]})
+
+
 @bp.route("/api/copilot/history", endpoint="copilot_history")
 def copilot_history():
     """Historial de eventos (comida / insulina / ejercicio), ordenado desc."""

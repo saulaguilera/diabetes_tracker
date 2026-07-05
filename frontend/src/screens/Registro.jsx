@@ -1,7 +1,7 @@
 // Registro.jsx — registrar comida / insulina / ejercicio.
 // POST /api/copilot/log → escribe a las mismas tablas que la app actual.
-import { useState, useRef } from 'react'
-import { apiPost } from '../api.js'
+import { useState, useRef, useEffect } from 'react'
+import { apiPost, apiGet } from '../api.js'
 import { PAL, SANS } from '../theme.js'
 import { Card, Eyebrow, Stepper, Segmented, Chips, Field } from '../components/ui.jsx'
 import Historial from '../components/Historial.jsx'
@@ -58,6 +58,39 @@ export default function Registro({ theme, onDone }) {
   const [photo, setPhoto] = useState(null)
   const [scanning, setScanning] = useState(false)
   const [scanned, setScanned] = useState(false)
+  // mis comidas (1 tap) + autocompletar desde la base nutricional interna
+  const [quick, setQuick] = useState([])
+  const [sugg, setSugg] = useState([])
+  const skipSuggRef = useRef(false)   // true cuando el nombre lo puso un chip/foto/sugerencia
+
+  useEffect(() => {
+    apiGet('/meals/quick').then(d => setQuick(d.meals || [])).catch(() => {})
+  }, [])
+
+  // autocompletar con debounce mientras se escribe el nombre
+  useEffect(() => {
+    if (skipSuggRef.current) { skipSuggRef.current = false; setSugg([]); return }
+    const q = name.trim()
+    if (q.length < 3) { setSugg([]); return }
+    const t = setTimeout(() => {
+      apiGet(`/food/search?q=${encodeURIComponent(q)}`)
+        .then(d => setSugg(d.results || []))
+        .catch(() => setSugg([]))
+    }, 350)
+    return () => clearTimeout(t)
+  }, [name])
+
+  const pickQuick = (m) => {
+    skipSuggRef.current = true
+    setName(m.name); setCarbs(m.carbs); setProtein(m.protein); setFat(m.fat)
+    setFiber(0); setScanned(false); setSugg([])
+  }
+  const pickSugg = (s) => {
+    skipSuggRef.current = true
+    setName(s.label.charAt(0).toUpperCase() + s.label.slice(1))
+    setCarbs(s.carbs); setProtein(s.protein); setFat(s.fat)
+    setFiber(s.fiber || 0); setScanned(true); setSugg([])
+  }
 
   const onPickPhoto = async (e) => {
     const file = e.target.files && e.target.files[0]
@@ -67,7 +100,7 @@ export default function Registro({ theme, onDone }) {
       const dataUrl = await fileToDataURL(file)
       setPhoto(dataUrl)
       const r = await apiPost('/estimate', { image: dataUrl })
-      if (r.name) setName(r.name)
+      if (r.name) { skipSuggRef.current = true; setName(r.name) }
       const f = r.fiber || 0
       setFiber(f)
       // Carbos NETOS = totales − fibra (la fibra casi no sube la glucosa).
@@ -114,6 +147,26 @@ export default function Registro({ theme, onDone }) {
 
       {cat === 'comida' && (
         <Card theme={theme} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {/* mis comidas — lo que repetís, en 1 tap */}
+          {quick.length > 0 && (
+            <div>
+              <div style={{ color: theme.inkFaint, fontSize: 10.5, letterSpacing: '0.14em',
+                textTransform: 'uppercase', marginBottom: 8 }}>Tus comidas</div>
+              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2,
+                WebkitOverflowScrolling: 'touch' }}>
+                {quick.map((m, i) => (
+                  <button key={i} onClick={() => pickQuick(m)} style={{
+                    flexShrink: 0, padding: '8px 13px', borderRadius: 100, cursor: 'pointer',
+                    fontFamily: SANS, fontSize: 13, whiteSpace: 'nowrap', maxWidth: 190,
+                    overflow: 'hidden', textOverflow: 'ellipsis',
+                    background: theme.surface, color: theme.ink, border: `0.5px solid ${theme.border}` }}>
+                    {m.name} <span style={{ color, fontWeight: 600 }}>{m.carbs}g</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* escanear con cámara → estima macros (editables) */}
           <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onPickPhoto} style={{ display: 'none' }}/>
           {!photo ? (
@@ -136,7 +189,29 @@ export default function Registro({ theme, onDone }) {
               </div>
             </div>
           )}
-          <Field theme={theme} value={name} onChange={setName} placeholder="¿Qué comiste?"/>
+          <div style={{ position: 'relative' }}>
+            <Field theme={theme} value={name} onChange={setName} placeholder="¿Qué comiste? (ej: 200ml leche)"/>
+            {/* sugerencias desde la base nutricional (CH netos por porción) */}
+            {sugg.length > 0 && (
+              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 40, marginTop: 6,
+                background: theme.dark ? '#101830' : '#fff', borderRadius: 14,
+                border: `0.5px solid ${theme.borderStrong}`, overflow: 'hidden',
+                boxShadow: '0 12px 32px rgba(0,0,0,0.35)' }}>
+                {sugg.map((s, i) => (
+                  <div key={i} onClick={() => pickSugg(s)} style={{ display: 'flex', alignItems: 'center',
+                    gap: 10, padding: '11px 14px', cursor: 'pointer',
+                    borderTop: i ? `0.5px solid ${theme.border}` : 'none' }}>
+                    <span style={{ flex: 1, color: theme.ink, fontSize: 14, whiteSpace: 'nowrap',
+                      overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {s.label.charAt(0).toUpperCase() + s.label.slice(1)}
+                    </span>
+                    <span style={{ color, fontSize: 13, fontWeight: 600, flexShrink: 0 }}>{s.carbs}g CH</span>
+                    {s.grams != null && <span style={{ color: theme.inkFaint, fontSize: 11.5, flexShrink: 0 }}>/{Math.round(s.grams)}g</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <Row theme={theme} label="Carbohidratos"><Stepper theme={theme} value={carbs} setValue={setCarbs} step={5} max={300} unit="g" color={color}/></Row>
           {scanned && fiber > 0 && (
             <div style={{ fontSize: 12, color: theme.inkFaint, lineHeight: 1.5, marginTop: -8 }}>
