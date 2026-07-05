@@ -99,6 +99,37 @@ def delta_after(times: list, values: list, t0: datetime, hours: float) -> int | 
     return int(round(g1 - g0))
 
 
+def pair_meals_boluses(meals: list, boluses: list, max_gap_min: int = 30) -> list:
+    """
+    Aparea cada comida con SU bolo (el más cercano dentro de ±max_gap_min);
+    cada bolo se usa una sola vez. meals=[(ts, carbs)], boluses=[(ts, units)].
+    Devuelve [(meal_ts, carbs, units)].
+    """
+    libres = sorted(boluses)
+    pares = []
+    for m_ts, carbs in sorted(meals):
+        mejor, mejor_dif = None, None
+        for i, (b_ts, _u) in enumerate(libres):
+            dif = abs((b_ts - m_ts).total_seconds()) / 60.0
+            if dif <= max_gap_min and (mejor_dif is None or dif < mejor_dif):
+                mejor, mejor_dif = i, dif
+        if mejor is not None:
+            b_ts, units = libres.pop(mejor)
+            pares.append((m_ts, carbs, units))
+    return pares
+
+
+def ratio_bucket(g_per_u: float) -> str:
+    """Bucket de la relación usada (gramos cubiertos por 1U)."""
+    if g_per_u < 8:
+        return "menos de 8 g/U"
+    if g_per_u < 12:
+        return "8-12 g/U"
+    if g_per_u < 16:
+        return "12-16 g/U"
+    return "16 g/U o más"
+
+
 # ─────────────────────── carga de datos ───────────────────────
 
 def _load_readings(days: int):
@@ -303,6 +334,88 @@ def impacto_de_eventos(tipo: str, days: int = 60, hora_desde=None, hora_hasta=No
     return out
 
 
+def relacion_carbos_insulina(days: int = 90) -> dict:
+    """
+    DESCRIBE cómo resultaron las coberturas de carbohidratos del pasado,
+    agrupadas por la relación usada (g de CH por unidad). NO es un cálculo de
+    dosis: es el espejo retrospectivo de lo que el usuario hizo y cómo terminó.
+    """
+    from models import Meal, InsulinDose
+    days = min(int(days or 90), _MAX_DAYS)
+    since = datetime.now() - timedelta(days=days)
+
+    meals_rows = [(m.timestamp, float(m.carbs_g))
+                  for m in Meal.query.filter(Meal.timestamp >= since).all()
+                  if (m.carbs_g or 0) >= 15]          # coberturas con sustancia
+    bolus_rows = [(d.timestamp, float(d.units))
+                  for d in InsulinDose.query.filter(
+                      InsulinDose.timestamp >= since,
+                      InsulinDose.type == "bolus").all() if (d.units or 0) > 0]
+    pares = pair_meals_boluses(meals_rows, bolus_rows)
+    if not pares:
+        return {"eventos": 0,
+                "nota": f"Sin comidas ≥15g CH apareadas con un bolo (±30 min) en {days} días."}
+
+    # Excluir eventos "contaminados": otro bolo u otra comida grande dentro de
+    # las 2h siguientes → el resultado a las 3h no sería atribuible al par.
+    all_bolus_ts = [b for b, _ in bolus_rows]
+    all_meal_ts = [(m, c) for m, c in meals_rows]
+    limpios, descartados = [], 0
+    for m_ts, carbs, units in pares:
+        fin = m_ts + timedelta(hours=2)
+        otro_bolo = any(m_ts < b <= fin and abs((b - m_ts).total_seconds()) > 1800
+                        for b in all_bolus_ts)
+        otra_comida = any(m_ts < t2 <= fin and c2 >= 10 for t2, c2 in all_meal_ts
+                          if t2 != m_ts)
+        if otro_bolo or otra_comida:
+            descartados += 1
+        else:
+            limpios.append((m_ts, carbs, units))
+    if not limpios:
+        return {"eventos": 0, "descartados_por_solapamiento": descartados,
+                "nota": "Todos los eventos tenían otra comida/bolo encima (no atribuibles)."}
+
+    times, values = _load_readings(days)
+    buckets: dict[str, dict] = {}
+    ratios = []
+    for m_ts, carbs, units in limpios:
+        r = carbs / units
+        ratios.append(r)
+        b = buckets.setdefault(ratio_bucket(r), {"n": 0, "en_rango_3h": 0,
+                                                 "hipo_4h": 0, "deltas_3h": []})
+        b["n"] += 1
+        g3 = reading_near(times, values, m_ts + timedelta(hours=3))
+        if g3 is not None and LOW <= g3 <= HIGH:
+            b["en_rango_3h"] += 1
+        vals_4h = [v for t, v in zip(times, values)
+                   if m_ts < t <= m_ts + timedelta(hours=4)]
+        if vals_4h and min(vals_4h) < LOW:
+            b["hipo_4h"] += 1
+        d3 = delta_after(times, values, m_ts, 3)
+        if d3 is not None:
+            b["deltas_3h"].append(d3)
+
+    resumen = {}
+    for label, b in sorted(buckets.items()):
+        resumen[label] = {
+            "eventos": b["n"],
+            "pct_en_rango_a_las_3h": round(100 * b["en_rango_3h"] / b["n"]),
+            "pct_con_hipo_en_4h": round(100 * b["hipo_4h"] / b["n"]),
+            "delta_3h_mediana": int(median(b["deltas_3h"])) if b["deltas_3h"] else None,
+        }
+    return {
+        "eventos_analizados": len(limpios),
+        "descartados_por_solapamiento": descartados,
+        "ventana_dias": days,
+        "relacion_mediana_usada_g_por_U": round(median(ratios), 1),
+        "resultados_por_relacion_usada": resumen,
+        "nota": ("Espejo RETROSPECTIVO: describe qué relación usaste y cómo terminó "
+                 "(en rango a las 3h / hipos en 4h). NO es una recomendación de dosis. "
+                 "Confundidores no controlados: grasa/proteína de la comida, ejercicio, "
+                 "basal, glucosa de partida."),
+    }
+
+
 # ─────────────────────── schemas Anthropic + dispatcher ───────────────────────
 
 COPILOT_TOOLS = [
@@ -343,6 +456,18 @@ COPILOT_TOOLS = [
             "required": ["nombre"]},
     },
     {
+        "name": "relacion_carbos_insulina",
+        "description": ("Espejo RETROSPECTIVO de las coberturas de carbohidratos: qué "
+                        "relación g-de-CH-por-unidad usó la persona en el pasado y cómo "
+                        "terminó cada grupo (% en rango a las 3h, % con hipo en 4h). "
+                        "USO PERMITIDO: describir resultados pasados. PROHIBIDO: "
+                        "convertirlo en dosis ('para Xg ponete YU') — si piden una "
+                        "dosis se declina igual que siempre y se deriva al equipo "
+                        "médico; solo se puede mostrar la historia."),
+        "input_schema": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Ventana en días (default 90)"}}},
+    },
+    {
         "name": "impacto_de_eventos",
         "description": ("Delta 2h mediano tras un tipo de evento (comida | bolo | "
                         "ejercicio), con franja horaria opcional. Sirve para preguntas "
@@ -361,6 +486,7 @@ _DISPATCH = {
     "estadisticas_periodo":   lambda a: estadisticas_periodo(
         a.get("days", 14), a.get("hora_desde"), a.get("hora_hasta"), a.get("dia_semana")),
     "respuesta_a_comida":     lambda a: respuesta_a_comida(a.get("nombre", ""), a.get("days", 90)),
+    "relacion_carbos_insulina": lambda a: relacion_carbos_insulina(a.get("days", 90)),
     "impacto_de_eventos":     lambda a: impacto_de_eventos(
         a.get("tipo", ""), a.get("days", 60), a.get("hora_desde"), a.get("hora_hasta")),
 }

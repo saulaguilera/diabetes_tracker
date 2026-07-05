@@ -13,6 +13,7 @@ const GREETING = 'Hola 👋 Soy tu copiloto. Puedo explicarte tus datos y acompa
 const SUGGESTIONS = [
   '¿Qué me estuvo afectando?',
   '¿Qué pasa con mi glucosa después del ejercicio?',
+  '¿Cómo me fue cubriendo los carbohidratos?',
   '¿Cómo son mis noches?',
   '¿Cómo estuvo mi semana?',
 ]
