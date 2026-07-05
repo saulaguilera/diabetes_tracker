@@ -27,14 +27,16 @@ Tuning: SOLO la magnitud (SIGMA_MULT_60) en train; validado held-out.
 """
 from __future__ import annotations
 
-# Flag maestro — OFF por defecto. Con OFF el modelo es idéntico a producción.
-INTERVAL_CALIB_ENABLED: bool = False
+# Flag maestro — ON desde ssm_v0_ukf6_basal_ex_r3_cal60 (promoción 5/7/2026).
+# Con OFF el modelo vuelve byte-idéntico a r2_gated_bias (rollback de 1 línea).
+INTERVAL_CALIB_ENABLED: bool = True
 
 # Multiplicadores de σ por horizonte (1.0 = sin cambio). Tunables.
 # El foco del experimento es +60 (donde hay subcobertura). +30 se deja en 1.0.
-# SIGMA_MULT_60=1.64 es el valor CANDIDATO (tuneado solo en train = RMS(z_train),
-# validado held-out: IC90 81→92%, std(z) 1.59→0.97). Queda listo pero el flag
-# arranca OFF (no desplegado). Ver bench/reports/interval_calib/.
+# SIGMA_MULT_60=1.64 tuneado SOLO en train (RMS(z_train)); validado dos veces:
+#   held-out 25-27/6: IC90 81→92%, std(z) 1.59→0.97 (8/8 gates)
+#   semana virgen 28/6–5/7 (n=946): IC90 74→88%, hypo_window 35→82%,
+#   std(z) 1.85→1.13, recall de hipos sin regresión. Ver bench/reports/.
 SIGMA_MULT_30: float = 1.0
 SIGMA_MULT_60: float = 1.64
 

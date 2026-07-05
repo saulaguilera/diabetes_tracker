@@ -25,5 +25,15 @@ Historial
                            mejora en todos los regímenes, hipo preservada. NO toca
                            R ni la calibración de intervalos +60 (experimento
                            aparte). Ver pmm/ssm/basal_bias.py. [Hito 10]
+  ssm_v0_ukf6_basal_ex_r3_cal60 — calibra los intervalos a +60 con un multiplicador
+                           post-hoc de σ (×1.64, tuneado solo en train). La media
+                           g_pred queda intacta (MAE/sesgo sin cambio por
+                           construcción); escala la σ reportada → IC50/IC90 y
+                           p_hypo/p_hyper. Validado held-out 25-27/6 (8/8 gates,
+                           IC90 81→92%) y re-validado en semana virgen 28/6–5/7
+                           (n=946: IC90 74→88%, ventana de hipo 35→82%, std(z)
+                           1.85→1.13, recall de hipos sin regresión). Rollback =
+                           INTERVAL_CALIB_ENABLED=False. Ver
+                           pmm/ssm/interval_calib.py. [Hito 11]
 """
-MODEL_VERSION = "ssm_v0_ukf6_basal_ex_r2_gated_bias"
+MODEL_VERSION = "ssm_v0_ukf6_basal_ex_r3_cal60"
