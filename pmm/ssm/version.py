@@ -35,5 +35,12 @@ Historial
                            1.85→1.13, recall de hipos sin regresión). Rollback =
                            INTERVAL_CALIB_ENABLED=False. Ver
                            pmm/ssm/interval_calib.py. [Hito 11]
+  ssm_v0_ukf6_basal_ex_r4_cal3060 — extiende la calibración de intervalos a +30
+                           (σ×1.68, tuneado solo en train 19-30/6 n=1231).
+                           Held-out 1-5/7 n=625: IC90 75→89%, ventana de hipo
+                           50→71%, std(z) 1.89→1.12, recall sin regresión,
+                           precisión de alarmas 24→30%. Media intacta. Ambos
+                           horizontes ahora calibrados. Rollback =
+                           SIGMA_MULT_30=1.0. [Hito 12]
 """
-MODEL_VERSION = "ssm_v0_ukf6_basal_ex_r3_cal60"
+MODEL_VERSION = "ssm_v0_ukf6_basal_ex_r4_cal3060"
