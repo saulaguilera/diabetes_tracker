@@ -7,7 +7,8 @@ import { Card, Eyebrow, Stepper, Segmented, Chips, Field } from '../components/u
 import Historial from '../components/Historial.jsx'
 
 // Redimensiona la foto en el cliente antes de enviarla (evita subir MB).
-function fileToDataURL(file, max = 768, quality = 0.7) {
+// 1024px: suficiente detalle para identificar componentes sin subir demasiado.
+function fileToDataURL(file, max = 1024, quality = 0.8) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onerror = reject
@@ -92,25 +93,41 @@ export default function Registro({ theme, onDone }) {
     setFiber(s.fiber || 0); setScanned(true); setSugg([])
   }
 
-  const onPickPhoto = async (e) => {
-    const file = e.target.files && e.target.files[0]
-    if (!file) return
+  const [breakdown, setBreakdown] = useState([])   // componentes estimados
+  const [confidence, setConfidence] = useState(null)
+  const lastPhotoRef = useRef(null)                // para re-estimar con pista
+
+  const estimate = async (dataUrl, hint) => {
     setScanning(true); setScanned(false); setErr(null)
     try {
-      const dataUrl = await fileToDataURL(file)
-      setPhoto(dataUrl)
-      const r = await apiPost('/estimate', { image: dataUrl })
+      const r = await apiPost('/estimate', { image: dataUrl, hint: hint || '' })
       if (r.name) { skipSuggRef.current = true; setName(r.name) }
       const f = r.fiber || 0
       setFiber(f)
       // Carbos NETOS = totales − fibra (la fibra casi no sube la glucosa).
       setCarbs(Math.max(0, Math.round((r.carbs || 0) - f)))
       setProtein(r.protein || 0); setFat(r.fat || 0)
+      setBreakdown(r.breakdown || [])
+      setConfidence(r.confidence || null)
       setScanned(true)
     } catch (e2) {
       setErr('No pude estimar la foto. Cargá los datos a mano.')
     } finally {
       setScanning(false)
+    }
+  }
+
+  const onPickPhoto = async (e) => {
+    const file = e.target.files && e.target.files[0]
+    if (!file) return
+    try {
+      const dataUrl = await fileToDataURL(file)
+      setPhoto(dataUrl); lastPhotoRef.current = dataUrl
+      // si el usuario ya escribió qué es, usarlo como pista para identificar
+      await estimate(dataUrl, name)
+    } catch (e2) {
+      setErr('No pude leer la foto.')
+    } finally {
       if (fileRef.current) fileRef.current.value = ''
     }
   }
@@ -181,12 +198,45 @@ export default function Registro({ theme, onDone }) {
               )}
             </button>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <img src={photo} alt="" style={{ width: 56, height: 56, borderRadius: 12, objectFit: 'cover', flexShrink: 0 }}/>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12.5, color: theme.inkSoft }}>{scanning ? 'Estimando…' : 'Estimado por IA · revisá los valores'}</div>
-                <button onClick={() => fileRef.current && fileRef.current.click()} style={{ marginTop: 4, background: 'none', border: 'none', color, fontSize: 12.5, cursor: 'pointer', fontFamily: SANS, padding: 0 }}>Cambiar foto</button>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <img src={photo} alt="" style={{ width: 56, height: 56, borderRadius: 12, objectFit: 'cover', flexShrink: 0 }}/>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12.5, color: theme.inkSoft }}>
+                    {scanning ? 'Analizando componentes…' : 'Estimado por IA · revisá los valores'}
+                  </div>
+                  <div style={{ display: 'flex', gap: 14, marginTop: 4 }}>
+                    <button onClick={() => fileRef.current && fileRef.current.click()} style={{ background: 'none', border: 'none', color, fontSize: 12.5, cursor: 'pointer', fontFamily: SANS, padding: 0 }}>Cambiar foto</button>
+                    {/* corregiste el nombre → re-estima usándolo como pista */}
+                    {!scanning && lastPhotoRef.current && (
+                      <button onClick={() => estimate(lastPhotoRef.current, name)} style={{ background: 'none', border: 'none', color: theme.inkSoft, fontSize: 12.5, cursor: 'pointer', fontFamily: SANS, padding: 0 }}>↻ Re-estimar con el nombre</button>
+                    )}
+                  </div>
+                </div>
               </div>
+              {/* desglose por componente — transparencia de dónde salió cada gramo */}
+              {scanned && breakdown.length > 0 && (
+                <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 12,
+                  background: theme.dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                  border: `0.5px solid ${theme.border}` }}>
+                  {breakdown.map((b, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 8, fontSize: 12.5, padding: '3px 0', color: theme.inkSoft }}>
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
+                      <span style={{ color: theme.inkFaint }}>{b.grams}g</span>
+                      <span style={{ color, fontWeight: 600, width: 52, textAlign: 'right' }}>{b.carbs}g CH</span>
+                      <span title={b.source === 'base' ? 'macros desde la base nutricional' : 'macros estimados por IA'}
+                        style={{ color: b.source === 'base' ? '#5FC6A8' : theme.inkFaint, fontSize: 11 }}>
+                        {b.source === 'base' ? '◈ base' : '◇ IA'}
+                      </span>
+                    </div>
+                  ))}
+                  {confidence === 'baja' && (
+                    <div style={{ marginTop: 6, fontSize: 12, color: '#E0B057' }}>
+                      ⚠︎ Confianza baja — revisá bien antes de guardar (o re-estimá con el nombre correcto).
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
           <div style={{ position: 'relative' }}>
