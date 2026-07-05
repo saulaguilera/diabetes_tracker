@@ -373,7 +373,7 @@ def copilot_log():
     if err:
         return err
 
-    from models import db, Meal, InsulinDose, Activity
+    from models import db, Meal, MealComponent, InsulinDose, Activity
 
     data = request.get_json(silent=True) or {}
     cat = data.get("cat")
@@ -393,6 +393,29 @@ def copilot_log():
                 carbs_g=_f("carbs"), fat_g=_f("fat"), protein_g=_f("protein"),
                 calories=_f("calories"), notes=(data.get("notes") or None),
             )
+            # ingredientes (del desglose de la foto) → MealComponent, con ÍG
+            # de la base si está. Enriquecen el historial y el research.
+            for comp in (data.get("components") or [])[:12]:
+                cname = (comp.get("name") or "").strip()[:200]
+                if not cname:
+                    continue
+                gi = None
+                try:
+                    from utils.nutrition_db import get_gi
+                    gi = get_gi(cname)
+                except Exception:
+                    pass
+                def _cf(k):
+                    try:
+                        return max(0.0, float(comp.get(k) or 0))
+                    except (TypeError, ValueError):
+                        return 0.0
+                row.components.append(MealComponent(
+                    name=cname, grams=_cf("grams") or None,
+                    carbs_g=_cf("carbs"), fiber_g=_cf("fiber"),
+                    protein_g=_cf("protein"), fat_g=_cf("fat"),
+                    calories=_cf("calories"), glycemic_index=gi,
+                ))
         elif cat == "insulina":
             units = _f("units")
             if units <= 0:
@@ -821,9 +844,13 @@ def copilot_estimate():
             "confidence": parsed.get("confidence") or "media",
             "carbs": tot["carbs"], "fiber": tot["fiber"],
             "protein": tot["protein"], "fat": tot["fat"], "calories": tot["calories"],
-            # desglose para transparencia en la UI (nombre, gramos, CH, fuente)
+            # desglose completo: la UI lo muestra y lo manda a /log para que la
+            # comida se guarde CON sus ingredientes (MealComponent)
             "breakdown": [{"name": c["name"], "grams": c["grams"],
-                           "carbs": c["carbs"], "source": c["source"]} for c in comps],
+                           "carbs": c["carbs"], "fiber": c["fiber"],
+                           "protein": c["protein"], "fat": c["fat"],
+                           "calories": c["calories"], "source": c["source"]}
+                          for c in comps],
         })
     except Exception:
         return jsonify({"ok": False, "error": "No pude estimar la foto. Cargá los datos a mano."}), 502

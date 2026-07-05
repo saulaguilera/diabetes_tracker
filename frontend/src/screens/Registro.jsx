@@ -59,14 +59,9 @@ export default function Registro({ theme, onDone }) {
   const [photo, setPhoto] = useState(null)
   const [scanning, setScanning] = useState(false)
   const [scanned, setScanned] = useState(false)
-  // mis comidas (1 tap) + autocompletar desde la base nutricional interna
-  const [quick, setQuick] = useState([])
+  // autocompletar desde la base nutricional interna
   const [sugg, setSugg] = useState([])
-  const skipSuggRef = useRef(false)   // true cuando el nombre lo puso un chip/foto/sugerencia
-
-  useEffect(() => {
-    apiGet('/meals/quick').then(d => setQuick(d.meals || [])).catch(() => {})
-  }, [])
+  const skipSuggRef = useRef(false)   // true cuando el nombre lo puso la foto/sugerencia
 
   // autocompletar con debounce mientras se escribe el nombre
   useEffect(() => {
@@ -81,11 +76,6 @@ export default function Registro({ theme, onDone }) {
     return () => clearTimeout(t)
   }, [name])
 
-  const pickQuick = (m) => {
-    skipSuggRef.current = true
-    setName(m.name); setCarbs(m.carbs); setProtein(m.protein); setFat(m.fat)
-    setFiber(0); setScanned(false); setSugg([])
-  }
   const pickSugg = (s) => {
     skipSuggRef.current = true
     setName(s.label.charAt(0).toUpperCase() + s.label.slice(1))
@@ -135,7 +125,12 @@ export default function Registro({ theme, onDone }) {
   const color = CATS.find(c => c.id === cat).color
 
   const payload = () => {
-    if (cat === 'comida') return { cat, name: name || 'Comida', carbs, protein, fat }
+    if (cat === 'comida') {
+      const p = { cat, name: name || 'Comida', carbs, protein, fat }
+      // ingredientes del desglose de la foto → se guardan como componentes
+      if (scanned && breakdown.length > 0) p.components = breakdown
+      return p
+    }
     if (cat === 'insulina') return { cat, units, type: insType === 'Basal' ? 'basal' : 'bolus' }
     return { cat, activity_type: actType, duration_min: dur, intensity }
   }
@@ -164,37 +159,22 @@ export default function Registro({ theme, onDone }) {
 
       {cat === 'comida' && (
         <Card theme={theme} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          {/* mis comidas — lo que repetís, en 1 tap */}
-          {quick.length > 0 && (
-            <div>
-              <div style={{ color: theme.inkFaint, fontSize: 10.5, letterSpacing: '0.14em',
-                textTransform: 'uppercase', marginBottom: 8 }}>Tus comidas</div>
-              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2,
-                WebkitOverflowScrolling: 'touch' }}>
-                {quick.map((m, i) => (
-                  <button key={i} onClick={() => pickQuick(m)} style={{
-                    flexShrink: 0, padding: '8px 13px', borderRadius: 100, cursor: 'pointer',
-                    fontFamily: SANS, fontSize: 13, whiteSpace: 'nowrap', maxWidth: 190,
-                    overflow: 'hidden', textOverflow: 'ellipsis',
-                    background: theme.surface, color: theme.ink, border: `0.5px solid ${theme.border}` }}>
-                    {m.name} <span style={{ color, fontWeight: 600 }}>{m.carbs}g</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* escanear con cámara → estima macros (editables) */}
+          {/* escanear con cámara → protagonista del flujo (grande, arriba) */}
           <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onPickPhoto} style={{ display: 'none' }}/>
           {!photo ? (
             <button onClick={() => fileRef.current && fileRef.current.click()} disabled={scanning} style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '14px', borderRadius: 16,
-              cursor: scanning ? 'default' : 'pointer', fontFamily: SANS, fontSize: 14,
-              background: theme.surface, border: `1px dashed ${theme.borderStrong}`, color: theme.inkSoft }}>
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10,
+              padding: '26px 14px', borderRadius: 18,
+              cursor: scanning ? 'default' : 'pointer', fontFamily: SANS, fontSize: 15,
+              background: theme.surface, border: `1.5px dashed ${theme.borderStrong}`, color: theme.inkSoft }}>
               {scanning ? (
-                <><span className="ai-orbit" style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${color}44`, borderTopColor: color }}/> Estimando…</>
+                <><span className="ai-orbit" style={{ width: 22, height: 22, borderRadius: '50%', border: `2.5px solid ${color}44`, borderTopColor: color }}/> Estimando…</>
               ) : (
-                <><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Escanear comida con cámara</>
+                <>
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                  <span>Escanear comida con cámara</span>
+                  <span style={{ fontSize: 12, color: theme.inkFaint }}>identifica ingredientes y estima carbos</span>
+                </>
               )}
             </button>
           ) : (
