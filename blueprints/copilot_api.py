@@ -373,7 +373,7 @@ def copilot_log():
     if err:
         return err
 
-    from models import db, Meal, InsulinDose, Activity
+    from models import db, Meal, MealComponent, InsulinDose, Activity
 
     data = request.get_json(silent=True) or {}
     cat = data.get("cat")
@@ -393,6 +393,29 @@ def copilot_log():
                 carbs_g=_f("carbs"), fat_g=_f("fat"), protein_g=_f("protein"),
                 calories=_f("calories"), notes=(data.get("notes") or None),
             )
+            # ingredientes (del desglose de la foto) → MealComponent, con ÍG
+            # de la base si está. Enriquecen el historial y el research.
+            for comp in (data.get("components") or [])[:12]:
+                cname = (comp.get("name") or "").strip()[:200]
+                if not cname:
+                    continue
+                gi = None
+                try:
+                    from utils.nutrition_db import get_gi
+                    gi = get_gi(cname)
+                except Exception:
+                    pass
+                def _cf(k):
+                    try:
+                        return max(0.0, float(comp.get(k) or 0))
+                    except (TypeError, ValueError):
+                        return 0.0
+                row.components.append(MealComponent(
+                    name=cname, grams=_cf("grams") or None,
+                    carbs_g=_cf("carbs"), fiber_g=_cf("fiber"),
+                    protein_g=_cf("protein"), fat_g=_cf("fat"),
+                    calories=_cf("calories"), glycemic_index=gi,
+                ))
         elif cat == "insulina":
             units = _f("units")
             if units <= 0:
@@ -415,6 +438,16 @@ def copilot_log():
 
         db.session.add(row)
         db.session.commit()
+
+        # medir el sesgo de la estimación por foto: si esta comida vino de una
+        # estimación reciente, registrar (estimado vs lo que el usuario guardó)
+        if cat == "comida":
+            try:
+                from utils.photo_estimate import log_saved_meal
+                log_saved_meal(row.name, row.carbs_g)
+            except Exception:
+                pass
+
         return jsonify({"ok": True, "id": row.id})
     except Exception as exc:
         db.session.rollback()
@@ -752,32 +785,29 @@ def copilot_chat():
         return jsonify({"ok": False, "error": "No pude responder ahora. Intentá de nuevo."}), 502
 
 
-# ── Estimación de macros desde foto (Claude visión) ──────────────────────────
+# ── Estimación de macros desde foto (v2: componentes + grounding en la base) ──
 # Estimación APROXIMADA para registrar; el usuario revisa/edita antes de guardar.
 # No alimenta ninguna dosis (el producto no calcula bolo).
-_ESTIMATE_PROMPT = (
-    "Sos un asistente nutricional. Mirá la foto de la comida y ESTIMÁ sus "
-    "macronutrientes. 'carbs' son los carbohidratos TOTALES y 'fiber' la fibra "
-    "que contienen (la fibra es parte de los carbohidratos totales). Respondé SOLO "
-    "con un JSON válido, sin texto extra, con esta forma exacta:\n"
-    '{"name": "nombre corto del plato", "carbs": <g carbohidratos totales>, '
-    '"fiber": <g fibra>, "protein": <g proteína>, "fat": <g grasa>, "calories": <kcal>}\n'
-    "Los valores numéricos son enteros aproximados. Si no se distingue comida, "
-    'devolvé {"name": "", "carbs": 0, "fiber": 0, "protein": 0, "fat": 0, "calories": 0}.'
-)
+# El modelo identifica componentes y porciones (razonando); los macros se anclan
+# en utils/nutrition_db cuando el alimento está en la base. Ver utils/photo_estimate.
 
 
 @bp.route("/api/copilot/estimate", methods=["POST"], endpoint="copilot_estimate")
 def copilot_estimate():
-    """Recibe una foto (data URL base64) y devuelve macros estimados."""
+    """Recibe una foto (data URL base64) + pista opcional → macros por componente."""
     err = _require_login()
     if err:
         return err
 
-    import os, json, re
+    import os, re
+    from utils.photo_estimate import (
+        DEFAULT_VISION_MODEL, build_prompt, parse_response,
+        ground_components, totals, remember_estimate,
+    )
+
     data = request.get_json(silent=True) or {}
     image = data.get("image") or ""
-    # data URL → media_type + base64
+    hint = (data.get("hint") or "").strip()
     m = re.match(r"data:(image/[a-zA-Z0-9.+-]+);base64,(.*)$", image, re.DOTALL)
     if not m:
         return jsonify({"ok": False, "error": "Imagen inválida"}), 400
@@ -791,30 +821,36 @@ def copilot_estimate():
         import anthropic
         client = anthropic.Anthropic(api_key=api_key)
         resp = client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=200,
+            model=os.environ.get("COPILOT_VISION_MODEL", DEFAULT_VISION_MODEL),
+            max_tokens=900,   # deja lugar al razonamiento por pasos + JSON
             messages=[{
                 "role": "user",
                 "content": [
                     {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
-                    {"type": "text", "text": _ESTIMATE_PROMPT},
+                    {"type": "text", "text": build_prompt(hint)},
                 ],
             }],
         )
         txt = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
-        mjson = re.search(r"\{.*\}", txt, re.DOTALL)
-        parsed = json.loads(mjson.group(0)) if mjson else {}
-
-        def _i(k):
-            try:
-                return max(0, int(round(float(parsed.get(k) or 0))))
-            except (TypeError, ValueError):
-                return 0
+        parsed = parse_response(txt) or {}
+        comps = ground_components(parsed.get("components") or [])
+        tot = totals(comps)
+        name = (parsed.get("name") or "").strip()[:200]
+        remember_estimate(name, tot["carbs"], tot["fiber"])
 
         return jsonify({
             "ok": True,
-            "name": (parsed.get("name") or "").strip()[:200],
-            "carbs": _i("carbs"), "fiber": _i("fiber"), "protein": _i("protein"), "fat": _i("fat"), "calories": _i("calories"),
+            "name": name,
+            "confidence": parsed.get("confidence") or "media",
+            "carbs": tot["carbs"], "fiber": tot["fiber"],
+            "protein": tot["protein"], "fat": tot["fat"], "calories": tot["calories"],
+            # desglose completo: la UI lo muestra y lo manda a /log para que la
+            # comida se guarde CON sus ingredientes (MealComponent)
+            "breakdown": [{"name": c["name"], "grams": c["grams"],
+                           "carbs": c["carbs"], "fiber": c["fiber"],
+                           "protein": c["protein"], "fat": c["fat"],
+                           "calories": c["calories"], "source": c["source"]}
+                          for c in comps],
         })
     except Exception:
         return jsonify({"ok": False, "error": "No pude estimar la foto. Cargá los datos a mano."}), 502
