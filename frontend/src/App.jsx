@@ -10,6 +10,7 @@ import Registro from './screens/Registro.jsx'
 import Patrones from './screens/Patrones.jsx'
 import Copiloto from './screens/Copiloto.jsx'
 import Perfil from './screens/Perfil.jsx'
+import DriveModeScreen from './drive_mode/DriveModeScreen.jsx'
 
 // Alto del viewport visible (se achica al abrir el teclado en móvil). Permite
 // que el chat del Copiloto deje el input sobre el teclado, sin mover el resto.
@@ -98,8 +99,8 @@ function PullToRefresh({ theme, onRefresh, children }) {
   )
 }
 
-// Barra superior global de marca: logo Orbit + wordmark.
-function TopBar({ theme }) {
+// Barra superior global de marca: logo Orbit + wordmark + acceso a Drive Mode.
+function TopBar({ theme, onDrive }) {
   return (
     <div style={{
       position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30,
@@ -112,6 +113,21 @@ function TopBar({ theme }) {
     }}>
       <OrbitLogo size={26}/>
       <span style={{ fontFamily: SANS, fontSize: 20, fontWeight: 300, letterSpacing: '0.01em', color: theme.ink }}>Orbit</span>
+      <div style={{ flex: 1 }}/>
+      {/* Drive Mode — siempre a mano, arriba a la derecha */}
+      <button onClick={onDrive} aria-label="Modo conducción" style={{
+        pointerEvents: 'auto', width: 36, height: 36, borderRadius: 18, cursor: 'pointer',
+        display: 'grid', placeItems: 'center', padding: 0,
+        border: `0.5px solid ${theme.border}`,
+        background: theme.dark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.6)',
+      }}>
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={theme.inkSoft}
+          strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11"/>
+          <path d="M5 11h14a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1z"/>
+          <circle cx="7.5" cy="14.5" r="1"/><circle cx="16.5" cy="14.5" r="1"/>
+        </svg>
+      </button>
     </div>
   )
 }
@@ -139,6 +155,7 @@ export default function App() {
   const theme = makeTheme(dark)
   const [tab, setTab] = useState('hoy')
   const [refreshKey, setRefreshKey] = useState(0)
+  const [showDrive, setShowDrive] = useState(false)
 
   // recarga la pantalla activa; el spinner queda ~650ms mientras refetchea
   const onRefresh = () => {
@@ -164,7 +181,7 @@ export default function App() {
         <div className="ambient-drift-2" style={{ position: 'absolute', inset: '-15%', pointerEvents: 'none',
           background: `radial-gradient(50% 30% at 80% 12%, rgba(${PAL.pancreas.rgb},0.10) 0%, transparent 70%), radial-gradient(55% 32% at 12% 78%, rgba(${PAL.ritmo.rgb},0.10) 0%, transparent 70%)` }}/>
         <Starfield count={46} opacity={0.55} seed={3}/>
-        <TopBar theme={theme}/>
+        <TopBar theme={theme} onDrive={() => setShowDrive(true)}/>
 
         {tab === 'copiloto' ? (
           <div style={{ position: 'absolute', inset: 0, paddingTop: 'calc(52px + env(safe-area-inset-top))' }}>{screen}</div>
@@ -181,6 +198,7 @@ export default function App() {
         )}
 
         <BottomNav theme={theme} current={tab} onChange={setTab}/>
+        {showDrive && <DriveModeScreen onClose={() => setShowDrive(false)}/>}
       </div>
     </div>
   )

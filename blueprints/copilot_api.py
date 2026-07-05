@@ -77,6 +77,26 @@ def copilot_home():
 
     trend = "Subiendo" if roc > 1 else "Bajando" if roc < -1 else "Estable"
 
+    # ── basal — para que el contexto de hoy la tenga en cuenta ───────────
+    # Muestra la última aplicada y si la de hoy ya está registrada (recordatorio
+    # amable, no alarma). La pauta esperada sale de settings si está cargada.
+    basal = None
+    try:
+        from helpers import _get_setting
+        last_basal = (InsulinDose.query.filter(InsulinDose.type == "basal")
+                      .order_by(InsulinDose.timestamp.desc()).first())
+        hoy0 = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        expected = _get_setting("basal_dose_u")
+        basal = {
+            "last_units": last_basal.units if last_basal else None,
+            "last_ago": _hace(last_basal.timestamp) if last_basal else None,
+            "logged_today": bool(last_basal and last_basal.timestamp >= hoy0),
+            "expected_units": float(expected) if expected not in (None, "") else None,
+            "tipo": _get_setting("basal_tipo") or None,
+        }
+    except Exception:
+        basal = None
+
     # ── tiempo en rango — últimas 24h ─────────────────────────────────────
     since = datetime.now() - timedelta(hours=24)
     reads = (GlucoseReading.query
@@ -119,7 +139,7 @@ def copilot_home():
     return jsonify({
         "ok": True,
         "glucose": glucose,
-        "context": {"iob": iob, "cob": cob, "trend": trend},
+        "context": {"iob": iob, "cob": cob, "trend": trend, "basal": basal},
         "tir_today": tir,
         "series": series,
         "recent": recent,
@@ -154,6 +174,39 @@ def _today_stats():
     doses = InsulinDose.query.filter(InsulinDose.timestamp >= start).all()
     acts = Activity.query.filter(Activity.timestamp >= start).all()
 
+    # ── comparación: TIR de ayer (día completo) ──────────────────────────
+    ayer0 = start - timedelta(days=1)
+    vals_ayer = [r.value_mgdl for r in GlucoseReading.query.filter(
+        GlucoseReading.timestamp >= ayer0,
+        GlucoseReading.timestamp < start).all()]
+    tir_ayer = (round(100 * sum(1 for v in vals_ayer if LOW <= v <= HIGH) / len(vals_ayer))
+                if len(vals_ayer) >= 24 else None)
+
+    # ── respuesta 2h de las comidas de HOY (retrospectivo, ya ocurrió) ────
+    meal_responses = []
+    if reads:
+        try:
+            from utils.copilot_memory import reading_near
+            times = [r.timestamp for r in reads]
+            vals = [r.value_mgdl for r in reads]
+            for m in meals:
+                if (now - m.timestamp).total_seconds() < 2.2 * 3600:
+                    continue   # aún no pasaron 2h → no hay respuesta que contar
+                g0 = reading_near(times, vals, m.timestamp)
+                g2 = reading_near(times, vals, m.timestamp + timedelta(hours=2))
+                if g0 is not None and g2 is not None:
+                    meal_responses.append({
+                        "name": m.name or "comida",
+                        "time": m.timestamp.strftime("%H:%M"),
+                        "carbs": int(m.carbs_g or 0),
+                        "delta_2h": int(round(g2 - g0)),
+                    })
+        except Exception:
+            pass
+
+    # ── basal de hoy ──────────────────────────────────────────────────────
+    basal_hoy = next((d for d in doses if d.type == "basal"), None)
+
     return {
         **g,
         "carbs_total": int(round(sum(m.carbs_g or 0 for m in meals))),
@@ -163,6 +216,11 @@ def _today_stats():
         "basal_total": round(sum(d.units or 0 for d in doses if d.type == "basal"), 1),
         "activity_n": len(acts),
         "activity_min": int(sum(a.duration_min or 0 for a in acts)),
+        "tir_ayer": tir_ayer,
+        "meal_responses": meal_responses,
+        "basal_today": ({"units": basal_hoy.units,
+                         "time": basal_hoy.timestamp.strftime("%H:%M")}
+                        if basal_hoy else None),
     }
 
 
@@ -187,12 +245,32 @@ def _brief_context(s):
             L.append(f"{s['high_pct']}% del tiempo por encima de 180.")
     else:
         L.append("Todavía no hay lecturas de glucosa hoy.")
+    if s.get("tir_ayer") is not None:
+        L.append(f"Ayer el tiempo en rango fue {s['tir_ayer']}%.")
     if s["meals_n"]:
         L.append(f"Comidas: {s['meals_n']} ({s['carbs_total']} g de carbohidratos en total).")
+    for mr in (s.get("meal_responses") or [])[:4]:
+        sign = "+" if mr["delta_2h"] >= 0 else ""
+        L.append(f"Tras {mr['name']} ({mr['time']}, {mr['carbs']}g CH) la glucosa "
+                 f"cambió {sign}{mr['delta_2h']} mg/dL a las 2h.")
     if s["insulin_total"]:
-        L.append(f"Insulina: {s['insulin_total']} U en total.")
+        L.append(f"Insulina: {s['insulin_total']} U en total "
+                 f"({s['bolus_total']} rápida, {s['basal_total']} basal).")
+    if s.get("basal_today"):
+        L.append(f"Basal de hoy: {s['basal_today']['units']:g}U a las {s['basal_today']['time']}.")
+    else:
+        L.append("La basal de hoy todavía no está registrada.")
     if s["activity_min"]:
         L.append(f"Actividad: {s['activity_n']} sesión/es, {s['activity_min']} min.")
+
+    # evolución 7/30 días (memoria) — para que el brief pueda poner el día en contexto
+    try:
+        from utils.copilot_memory import get_trends
+        d7 = (get_trends() or {}).get("d7")
+        if d7:
+            L.append(f"Última semana: TIR {d7['tir']}%, promedio {d7['avg']} mg/dL.")
+    except Exception:
+        pass
     return " ".join(L)
 
 
@@ -217,8 +295,17 @@ REGLAS ESTRICTAS E INVIOLABLES:
 - Solo DESCRIBÍS y ACOMPAÑÁS con lo que muestran los datos de hoy.
 - NUNCA recomiendes dosis, correcciones, qué comer o hacer, ni des indicaciones médicas.
 - NUNCA predigas la glucosa futura ni afirmes qué va a pasar.
-- 2 a 3 frases, en segunda persona, tono humano, cálido y tranquilo. Sin listas ni emojis.
+- 3 a 4 frases, en segunda persona, tono humano, cálido y tranquilo. Sin listas ni emojis.
 - No inventes datos que no estén abajo.
+
+CÓMO ESCRIBIRLO (en este orden, todo en prosa):
+1. Cómo viene el día en una mirada honesta y humana (no repitas todos los números:
+   elegí lo que importa).
+2. Algo positivo CONCRETO del día (una comida que salió bien, una recuperación,
+   estabilidad nocturna, comparación favorable con ayer o con la semana).
+3. Si hay algo notable (una hipo, una comida que subió mucho, la basal sin
+   registrar), mencionalo con suavidad y SIN decir qué hacer — describir no es
+   indicar. Si no hay nada notable, cerrá con calma.
 
 DATOS DE HOY:
 {context}"""
@@ -459,6 +546,12 @@ REGLAS ESTRICTAS E INVIOLABLES:
 - Solo explicás lo que muestran sus datos (presente y pasado) y acompañás.
 - Respondé SIEMPRE en español, en segunda persona, cálido y breve (2 a 4 frases).
 - No inventes datos que no estén en el contexto.
+- Tenés MEMORIA: contexto de hoy, evolución de 7/30 días, la respuesta histórica
+  a comidas repetidas y notas que la persona te pidió recordar. Usala con
+  naturalidad ("la última vez que comiste pizza…"), siempre en pasado
+  descriptivo, nunca como predicción.
+- Si la persona te pide que recuerdes algo, la nota SE GUARDA AUTOMÁTICAMENTE:
+  confirmalo con calidez ("Listo, lo voy a tener presente").
 
 CONTEXTO ACTUAL DE LA PERSONA:
 {context}"""
@@ -488,6 +581,26 @@ def _chat_context():
     roc = snap.get("roc") or 0.0
     cur.append("tendencia " + ("subiendo" if roc > 1 else "bajando" if roc < -1 else "estable"))
     L.append("ESTADO ACTUAL: " + ", ".join(cur) + ".")
+
+    # ── basal (antes no se tenía en cuenta en el contexto) ────────────────
+    try:
+        from helpers import _get_setting
+        last_basal = (InsulinDose.query.filter(InsulinDose.type == "basal")
+                      .order_by(InsulinDose.timestamp.desc()).first())
+        btipo = _get_setting("basal_tipo") or ""
+        bdose = _get_setting("basal_dose_u") or ""
+        seg = []
+        if btipo or bdose:
+            seg.append(f"pauta {btipo} {bdose}U/día".strip())
+        if last_basal:
+            seg.append(f"última aplicada {last_basal.units:g}U hace {_hace(last_basal.timestamp)}")
+            hoy0 = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            seg.append("hoy " + ("ya registrada" if last_basal.timestamp >= hoy0
+                                 else "todavía sin registrar"))
+        if seg:
+            L.append("BASAL: " + ", ".join(seg) + ".")
+    except Exception:
+        pass
 
     # ── glucosa últimas 24h ───────────────────────────────────────────────
     since = now - timedelta(hours=24)
@@ -537,6 +650,13 @@ def _chat_context():
     except Exception:
         pass
 
+    # ── memoria del copiloto: evolución 7/30d, comidas aprendidas, notas ──
+    try:
+        from utils.copilot_memory import memory_context_lines
+        L.extend(memory_context_lines())
+    except Exception:
+        pass
+
     return "\n".join(L) if L else "Sin datos recientes disponibles."
 
 
@@ -555,6 +675,16 @@ def copilot_chat():
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         return jsonify({"ok": True, "reply": "El copiloto no está disponible ahora mismo."})
+
+    # ¿pidió recordar algo? → guardar la nota ANTES de armar el contexto,
+    # así el modelo la ve ya guardada y la confirma.
+    try:
+        from utils.copilot_memory import extract_remember_request, add_note
+        note = extract_remember_request(message)
+        if note:
+            add_note(note)
+    except Exception:
+        pass
 
     # historial (multi-turno), acotado
     history = data.get("history") or []
@@ -693,7 +823,9 @@ def copilot_history():
 
 @bp.route("/api/copilot/meal/<int:meal_id>", methods=["PUT"], endpoint="copilot_meal_edit")
 def copilot_meal_edit(meal_id):
-    """Editar una comida del historial (nombre + macros)."""
+    """Editar una comida del historial (nombre + macros + fecha/hora).
+    La fecha/hora es editable porque muchas veces se registra tarde — y el
+    horario real importa para entender la respuesta glucémica."""
     err = _require_login()
     if err:
         return err
@@ -715,6 +847,25 @@ def copilot_meal_edit(meal_id):
         m.carbs_g = _f("carbs", m.carbs_g)
         m.protein_g = _f("protein", m.protein_g)
         m.fat_g = _f("fat", m.fat_g)
+
+        # fecha/hora: "date" (YYYY-MM-DD) y/o "time" (HH:MM) — hora local
+        if data.get("date") or data.get("time"):
+            try:
+                base = m.timestamp
+                d = (datetime.strptime(data["date"], "%Y-%m-%d").date()
+                     if data.get("date") else base.date())
+                t = (datetime.strptime(data["time"], "%H:%M").time()
+                     if data.get("time") else base.time())
+                nuevo = datetime.combine(d, t)
+                now = datetime.now()
+                if nuevo > now + timedelta(minutes=5):
+                    return jsonify({"ok": False, "error": "La hora no puede ser futura"}), 400
+                if nuevo < now - timedelta(days=365):
+                    return jsonify({"ok": False, "error": "Fecha demasiado antigua"}), 400
+                m.timestamp = nuevo
+            except ValueError:
+                return jsonify({"ok": False, "error": "Fecha u hora inválida"}), 400
+
         db.session.commit()
         return jsonify({"ok": True})
     except Exception:
