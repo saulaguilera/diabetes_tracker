@@ -18,6 +18,7 @@ const CAT_COLOR = {
   comida: PAL.metabolismo.key,
   insulina: PAL.insulina.key,
   ejercicio: PAL.glucosa.key,
+  contexto: PAL.ritmo.key,
 }
 
 function Centered({ theme, children }) {

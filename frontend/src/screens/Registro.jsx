@@ -33,6 +33,17 @@ const CATS = [
   { id: 'comida',    label: 'Comida',    color: PAL.metabolismo.key },
   { id: 'insulina',  label: 'Insulina',  color: PAL.insulina.key },
   { id: 'ejercicio', label: 'Ejercicio', color: PAL.glucosa.key },
+  { id: 'contexto',  label: 'Contexto',  color: PAL.ritmo.key },
+]
+
+// etiquetas de contexto: cosas que mueven la glucosa fuera de comida/insulina/ejercicio
+const CONTEXT_TAGS = [
+  { id: 'estres',    label: 'Estrés',      emoji: '😰' },
+  { id: 'enfermo',   label: 'Enfermedad',  emoji: '🤒' },
+  { id: 'mal_sueno', label: 'Dormí mal',   emoji: '😴' },
+  { id: 'viaje',     label: 'Viaje',       emoji: '✈️' },
+  { id: 'alcohol',   label: 'Alcohol',     emoji: '🍷' },
+  { id: 'otro',      label: 'Otro',        emoji: '📍' },
 ]
 
 export default function Registro({ theme, onDone }) {
@@ -55,6 +66,9 @@ export default function Registro({ theme, onDone }) {
   const [actType, setActType] = useState('Caminar')
   const [dur, setDur] = useState(30)
   const [intensity, setIntensity] = useState('Ligera')
+  // contexto
+  const [ctxTag, setCtxTag] = useState('estres')
+  const [ctxNotes, setCtxNotes] = useState('')
   // foto / estimación
   const fileRef = useRef(null)
   const [photo, setPhoto] = useState(null)
@@ -133,6 +147,7 @@ export default function Registro({ theme, onDone }) {
       return p
     }
     if (cat === 'insulina') return { cat, units, type: insType === 'Basal' ? 'basal' : 'bolus' }
+    if (cat === 'contexto') return { cat, tag: ctxTag, notes: ctxNotes }
     return { cat, activity_type: actType, duration_min: dur, intensity }
   }
 
@@ -266,6 +281,26 @@ export default function Registro({ theme, onDone }) {
           <Chips theme={theme} options={['Caminar', 'Correr', 'Bici', 'Fuerza', 'Otro']} value={actType} onChange={setActType} color={color}/>
           <Row theme={theme} label="Duración"><Stepper theme={theme} value={dur} setValue={setDur} step={5} max={300} unit="min" color={color}/></Row>
           <Chips theme={theme} options={['Ligera', 'Moderada', 'Intensa']} value={intensity} onChange={setIntensity} color={color}/>
+        </Card>
+      )}
+
+      {cat === 'contexto' && (
+        <Card theme={theme} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ color: theme.inkSoft, fontSize: 13, lineHeight: 1.5 }}>
+            ¿Algo que hoy pueda estar moviendo tu glucosa? Marcalo y el copiloto lo tiene en cuenta.
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {CONTEXT_TAGS.map(t => (
+              <button key={t.id} onClick={() => setCtxTag(t.id)} style={{
+                padding: '10px 14px', borderRadius: 100, cursor: 'pointer', fontFamily: SANS, fontSize: 13.5,
+                border: `0.5px solid ${ctxTag === t.id ? color : theme.border}`,
+                background: ctxTag === t.id ? `${color}22` : 'transparent',
+                color: ctxTag === t.id ? theme.ink : theme.inkSoft, fontWeight: ctxTag === t.id ? 600 : 400 }}>
+                {t.emoji} {t.label}
+              </button>
+            ))}
+          </div>
+          <Field theme={theme} value={ctxNotes} onChange={setCtxNotes} placeholder="Nota opcional (ej: resfrío, reunión difícil…)"/>
         </Card>
       )}
 

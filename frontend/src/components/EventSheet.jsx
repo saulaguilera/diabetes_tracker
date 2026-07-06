@@ -13,6 +13,7 @@ export const META = {
   comida:    { color: PAL.metabolismo.key, label: 'Comida' },
   insulina:  { color: PAL.insulina.key,    label: 'Insulina' },
   ejercicio: { color: PAL.glucosa.key,     label: 'Ejercicio' },
+  contexto:  { color: PAL.ritmo.key,       label: 'Contexto' },
 }
 
 export function dayLabel(dateStr) {
@@ -42,6 +43,7 @@ export default function EventSheet({ theme, ev, onClose, onChanged }) {
 
   const noun = isMeal ? 'este alimento'
     : ev.cat === 'insulina' ? 'este registro de insulina'
+    : ev.cat === 'contexto' ? 'esta marca de contexto'
     : 'esta actividad'
 
   const save = async () => {
@@ -115,6 +117,10 @@ export default function EventSheet({ theme, ev, onClose, onChanged }) {
               <Info theme={theme} k="Actividad" v={d.activity_type}/>
               <Info theme={theme} k="Duración" v={d.duration_min ? `${d.duration_min} min` : '—'}/>
               {d.intensity && <Info theme={theme} k="Intensidad" v={d.intensity}/>}
+            </>}
+            {ev.cat === 'contexto' && <>
+              <Info theme={theme} k="Contexto" v={ev.title}/>
+              {d.notes && <Info theme={theme} k="Nota" v={d.notes}/>}
             </>}
           </div>
         )}
