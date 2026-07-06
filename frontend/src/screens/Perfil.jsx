@@ -1,5 +1,6 @@
 // Perfil.jsx — datos del usuario, sensor, terapia (editable), médico y tema.
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { apiGet, apiPut } from '../api.js'
 import { PAL, SANS } from '../theme.js'
 import { Card, Eyebrow, Stepper, Field, useSheetClose, backdropAnim, sheetAnim } from '../components/ui.jsx'
@@ -135,17 +136,21 @@ export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleThe
         Orbit · copiloto metabólico
       </div>
 
-      {editing && <EditSheet theme={theme} name={data.name} config={c}
+      {editing && <EditSheet theme={theme} name={data.name} config={c} obs={obs}
         onClose={() => setEditing(false)} onSaved={() => { setEditing(false); setReloadKey(k => k + 1) }}/>}
     </div>
   )
 }
 
-function EditSheet({ theme, name: name0, config, onClose, onSaved }) {
+function EditSheet({ theme, name: name0, config, obs = {}, onClose, onSaved }) {
   const [name, setName] = useState(name0 || '')
   const [objetivo, setObjetivo] = useState(Math.round(config.objetivo ?? 100))
-  const [isf, setIsf] = useState(Math.round(config.isf ?? 40))
-  const [icr, setIcr] = useState(Math.round(config.icr ?? 10))
+  // ISF/ICR: 'auto' = sin override manual (la app usa lo aprendido de tus
+  // datos); 'manual' = valor fijo elegido con el equipo médico.
+  const [isfMode, setIsfMode] = useState(config.isf == null ? 'auto' : 'manual')
+  const [icrMode, setIcrMode] = useState(config.icr == null ? 'auto' : 'manual')
+  const [isf, setIsf] = useState(Math.round(config.isf ?? (obs.isf ? obs.isf.mu : 40)))
+  const [icr, setIcr] = useState(Math.round(config.icr ?? (obs.icr ? obs.icr.mu : 10)))
   // basal: dosis diaria, tipo y hora habitual (alimenta modelo + recordatorio)
   const [basalDose, setBasalDose] = useState(Math.round(config.basal_dose ?? 15))
   const [basalTipo, setBasalTipo] = useState(config.basal_tipo || '')
@@ -157,29 +162,75 @@ function EditSheet({ theme, name: name0, config, onClose, onSaved }) {
 
   const save = async () => {
     setBusy(true); setErr(null)
-    try {
-      await apiPut('/profile', { name, objetivo, isf, icr,
-        basal_dose: basalDose, basal_tipo: basalTipo, basal_hora: basalHora })
-      onSaved()
-    } catch (e) { setErr('No se pudo guardar.'); setBusy(false) }
+    const body = { name, objetivo,
+      basal_dose: basalDose, basal_tipo: basalTipo, basal_hora: basalHora }
+    if (isfMode === 'auto') body.isf_auto = true; else body.isf = isf
+    if (icrMode === 'auto') body.icr_auto = true; else body.icr = icr
+    try { await apiPut('/profile', body); onSaved() }
+    catch (e) { setErr('No se pudo guardar.'); setBusy(false) }
   }
 
-  return (
-    <div onClick={requestClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', animation: backdropAnim(closing) }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, background: theme.dark ? '#0E1426' : '#fff',
-        borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: '22px 22px calc(28px + env(safe-area-inset-bottom))',
-        animation: sheetAnim(closing), maxHeight: '88%', overflowY: 'auto' }}>
-        <div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border, margin: '0 auto 18px' }}/>
-        <div style={{ color: theme.ink, fontSize: 18, fontWeight: 500, marginBottom: 18 }}>Editar perfil</div>
+  // segmento Auto/Manual para ISF e ICR
+  const ModeSwitch = ({ mode, setMode }) => (
+    <div style={{ display: 'flex', gap: 6 }}>
+      {['auto', 'manual'].map(m => (
+        <button key={m} onClick={() => setMode(m)} style={{
+          padding: '6px 12px', borderRadius: 100, fontSize: 12, fontFamily: SANS, cursor: 'pointer',
+          border: `0.5px solid ${mode === m ? theme.accent : theme.border}`,
+          background: mode === m ? `${theme.accent}22` : 'transparent',
+          color: mode === m ? theme.accent : theme.inkSoft, fontWeight: mode === m ? 600 : 400 }}>
+          {m === 'auto' ? 'Automático' : 'Manual'}
+        </button>
+      ))}
+    </div>
+  )
 
+  return createPortal((
+    <div onClick={requestClose} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', animation: backdropAnim(closing) }}>
+      {/* panel = columna: header fijo + contenido scrolleable + Guardar fijo */}
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, background: theme.dark ? '#0E1426' : '#fff',
+        borderTopLeftRadius: 26, borderTopRightRadius: 26,
+        animation: sheetAnim(closing), maxHeight: '88%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ padding: '22px 22px 0', flexShrink: 0 }}>
+          <div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border, margin: '0 auto 18px' }}/>
+          <div style={{ color: theme.ink, fontSize: 18, fontWeight: 500, marginBottom: 14 }}>Editar perfil</div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '4px 22px 8px', WebkitOverflowScrolling: 'touch' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
             <div style={{ color: theme.inkFaint, fontSize: 11, marginBottom: 7 }}>Nombre</div>
             <Field theme={theme} value={name} onChange={setName} placeholder="Tu nombre"/>
           </div>
           <FieldRow theme={theme} label="Objetivo (mg/dL)"><Stepper theme={theme} value={objetivo} setValue={setObjetivo} step={5} min={70} max={180} unit="" color={theme.accent}/></FieldRow>
-          <FieldRow theme={theme} label="Sensibilidad ISF"><Stepper theme={theme} value={isf} setValue={setIsf} step={1} min={5} max={200} unit="" color={theme.ink}/></FieldRow>
-          <FieldRow theme={theme} label="Ratio ICR"><Stepper theme={theme} value={icr} setValue={setIcr} step={1} min={2} max={40} unit="" color={theme.ink}/></FieldRow>
+
+          {/* ISF: automático (aprendido de tus datos) o manual (acordado con tu médico) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <FieldRow theme={theme} label="Sensibilidad ISF"><ModeSwitch mode={isfMode} setMode={setIsfMode}/></FieldRow>
+            {isfMode === 'manual' ? (
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Stepper theme={theme} value={isf} setValue={setIsf} step={1} min={5} max={200} unit="" color={theme.ink}/>
+              </div>
+            ) : (
+              <div style={{ color: theme.inkFaint, fontSize: 12, textAlign: 'right' }}>
+                {obs.isf ? `usa lo aprendido de tus datos (~${obs.isf.mu} mg/dL/U, ${obs.isf.n} obs.)` : 'usa lo aprendido de tus datos'}
+              </div>
+            )}
+          </div>
+
+          {/* ICR: idem */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <FieldRow theme={theme} label="Ratio ICR"><ModeSwitch mode={icrMode} setMode={setIcrMode}/></FieldRow>
+            {icrMode === 'manual' ? (
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Stepper theme={theme} value={icr} setValue={setIcr} step={1} min={2} max={40} unit="" color={theme.ink}/>
+              </div>
+            ) : (
+              <div style={{ color: theme.inkFaint, fontSize: 12, textAlign: 'right' }}>
+                {obs.icr ? `usa lo aprendido de tus datos (~${obs.icr.mu} g/U, ${obs.icr.n} obs.)` : 'usa lo aprendido de tus datos'}
+              </div>
+            )}
+          </div>
 
           <div style={{ borderTop: `0.5px solid ${theme.border}`, paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ color: theme.inkFaint, fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Basal</div>
@@ -196,12 +247,18 @@ function EditSheet({ theme, name: name0, config, onClose, onSaved }) {
           La basal alimenta el modelo, el contexto del copiloto y el recordatorio diario.
         </div>
         {err && <div style={{ color: '#D98A6A', fontSize: 13, marginTop: 10 }}>{err}</div>}
+        </div>
 
-        <button onClick={save} disabled={busy} style={{ width: '100%', marginTop: 18, padding: '14px', borderRadius: 14, border: 'none',
-          background: theme.accent, color: '#0A0C1E', fontSize: 15, fontWeight: 600, fontFamily: SANS, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
-          {busy ? 'Guardando…' : 'Guardar'}
-        </button>
+        {/* Guardar SIEMPRE visible: footer fijo fuera del área scrolleable */}
+        <div style={{ flexShrink: 0, padding: '12px 22px calc(16px + env(safe-area-inset-bottom))',
+          borderTop: `0.5px solid ${theme.border}`,
+          background: theme.dark ? '#0E1426' : '#fff' }}>
+          <button onClick={save} disabled={busy} style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none',
+            background: theme.accent, color: '#0A0C1E', fontSize: 15, fontWeight: 600, fontFamily: SANS, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
+            {busy ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
       </div>
     </div>
-  )
+  ), document.body)
 }

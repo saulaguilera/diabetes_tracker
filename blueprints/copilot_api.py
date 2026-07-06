@@ -1208,6 +1208,12 @@ def copilot_profile_edit():
                 val = _numstr(key)
                 if val is not None:
                     _set_setting(setting, val)
+        # modo automático: vaciar el override manual → la app usa lo aprendido
+        # (PMM/circadiano). El valor observado se muestra como referencia.
+        if data.get("isf_auto"):
+            _set_setting("isf_manual", "")
+        if data.get("icr_auto"):
+            _set_setting("icr", "")
         # basal: tipo (texto) y hora habitual (0-23) — alimentan el modelo,
         # el contexto del copiloto y el recordatorio de Hoy
         if "basal_tipo" in data:
