@@ -17,6 +17,12 @@ bp = Blueprint("copilot_api", __name__)
 
 LOW, HIGH = 70, 180
 
+# etiquetas de contexto: clave canónica → etiqueta visible
+TAG_LABELS = {
+    "estres": "😰 Estrés", "enfermo": "🤒 Enfermedad", "mal_sueno": "😴 Dormí mal",
+    "viaje": "✈️ Viaje", "alcohol": "🍷 Alcohol", "otro": "📍 Contexto",
+}
+
 
 def _require_login():
     if not session.get("logged_in"):
@@ -402,7 +408,7 @@ def copilot_log():
     if err:
         return err
 
-    from models import db, Meal, MealComponent, InsulinDose, Activity
+    from models import db, Meal, MealComponent, InsulinDose, Activity, ContextTag
 
     data = request.get_json(silent=True) or {}
     cat = data.get("cat")
@@ -462,6 +468,12 @@ def copilot_log():
                 intensity=(data.get("intensity") or None),
                 notes=(data.get("notes") or None),
             )
+        elif cat == "contexto":
+            tag = (data.get("tag") or "").strip().lower()[:40]
+            if not tag:
+                return jsonify({"ok": False, "error": "Falta la etiqueta"}), 400
+            row = ContextTag(timestamp=now, tag=tag,
+                             notes=(data.get("notes") or "").strip()[:300] or None)
         else:
             return jsonify({"ok": False, "error": "Categoría no soportada"}), 400
 
@@ -619,6 +631,25 @@ def _observed_params():
 _CHAT_SYSTEM = """Sos el copiloto de Orbit, una app para una persona con diabetes tipo 1.
 Tu ÚNICO rol es EXPLICAR los datos de la persona y ACOMPAÑARLA con calidez y claridad.
 
+TU FORMACIÓN: razonás con DOS miradas expertas y complementarias, y cuando
+ayuda a entender, ofrecés las dos:
+- NUTRICIÓN: índice glucémico y carga glucémica, fibra, cómo la grasa y la
+  proteína retrasan y prolongan la absorción (el "efecto pizza"), alcohol e
+  hipoglucemias tardías, tamaño de porción.
+- ENDOCRINOLOGÍA / diabetología: fenómeno del alba, cortisol y estrés,
+  ejercicio aeróbico (baja) vs fuerza (puede subir), sensibilidad a la
+  insulina, resistencia transitoria por enfermedad, hormonas de
+  contrarregulación.
+CÓMO usar esa formación: para EXPLICAR EL PORQUÉ conectando SUS datos con el
+mecanismo ("desde lo nutricional, la grasa de la pizza retrasó el vaciado
+gástrico; desde lo hormonal, además cenaste tarde y el cortisol nocturno pudo
+sumar — por eso la subida llegó recién 3 horas después"). RAZONÁS, no recetás:
+explicás mecanismos, nunca indicás qué hacer.
+SIMPLICIDAD ante todo: lenguaje llano, sin jerga innecesaria; si usás un
+término técnico, explicalo en la misma frase con palabras simples ("el vaciado
+gástrico, o sea qué tan rápido la comida sale del estómago"). Mejor una
+explicación clara que suene humana que uuna clase magistral.
+
 REGLAS ESTRICTAS E INVIOLABLES:
 - NUNCA recomiendes dosis de insulina, correcciones, ni cuánto comer o hacer.
 - NUNCA des indicaciones médicas ni de tratamiento.
@@ -638,9 +669,12 @@ REGLAS ESTRICTAS E INVIOLABLES:
 - Si la persona te pide que recuerdes algo, la nota SE GUARDA AUTOMÁTICAMENTE:
   confirmalo con calidez ("Listo, lo voy a tener presente").
 - Tenés CONSULTAS a los datos reales (ejercicio, hipos, franjas horarias,
-  comidas, impacto de eventos, relación carbos-insulina). Cuando la pregunta
-  lo amerite, usalas y respondé con los NÚMEROS que devuelven — nada de
-  sensaciones vagas.
+  comidas, impacto de eventos, relación carbos-insulina, impacto de contexto
+  como estrés/enfermedad/mal sueño). Cuando la pregunta lo amerite, usalas y
+  respondé con los NÚMEROS que devuelven — nada de sensaciones vagas. Lo ideal:
+  el NÚMERO (de la consulta) + el PORQUÉ (de tu formación). Ej: "los días que
+  marcaste estrés tu promedio fue 12 mg/dL más alto — tiene sentido, el
+  cortisol que libera el estrés reduce la sensibilidad a la insulina".
 - CASO ESPECIAL relación carbos-insulina: podés contar qué relación usó la
   persona en el pasado y cómo terminó ("cuando cubriste ~1U:10g terminaste en
   rango el 75% de las veces"), pero JAMÁS la conviertas en dosis para una
@@ -742,6 +776,26 @@ def _chat_context():
         L.append("ACTIVIDAD (48h): " + _fmt(acts, lambda a:
                  f"{a.timestamp.strftime('%d/%m %H:%M')} {a.activity_type or 'ejercicio'} "
                  f"{a.duration_min or 0}min"))
+
+    # ── contexto marcado por la persona (estrés, enfermedad, viaje…) ──────
+    from models import ContextTag
+    tags = ContextTag.query.filter(ContextTag.timestamp >= since48).order_by(ContextTag.timestamp.desc()).limit(6).all()
+    if tags:
+        L.append("CONTEXTO (48h): " + _fmt(tags, lambda t:
+                 f"{t.timestamp.strftime('%d/%m %H:%M')} {t.tag}"
+                 + (f" ({t.notes})" if t.notes else "")))
+
+    # ── etiquetas de contexto (7 días): estrés/enfermedad/sueño/viaje ─────
+    try:
+        from models import ContextTag
+        tags = (ContextTag.query.filter(ContextTag.timestamp >= now - timedelta(days=7))
+                .order_by(ContextTag.timestamp.desc()).limit(10).all())
+        if tags:
+            L.append("CONTEXTO ETIQUETADO (7 días): " + "; ".join(
+                f"{t.timestamp.strftime('%d/%m %H:%M')} {t.tag}"
+                + (f" ({t.notes[:60]})" if t.notes else "") for t in tags))
+    except Exception:
+        pass
 
     # ── patrones + resumen 14 días ────────────────────────────────────────
     try:
@@ -985,10 +1039,15 @@ def copilot_history():
     if err:
         return err
 
-    from models import Meal, InsulinDose, Activity
+    from models import Meal, InsulinDose, Activity, ContextTag
     days = min(int(request.args.get("days", 14)), 90)
     since = datetime.now() - timedelta(days=days)
     events = []
+
+    for t in ContextTag.query.filter(ContextTag.timestamp >= since).order_by(ContextTag.timestamp.desc()).limit(100).all():
+        events.append({"cat": "contexto", "id": t.id, "title": TAG_LABELS.get(t.tag, t.tag),
+                       "badge": "", "ts": t.timestamp,
+                       "data": {"tag": t.tag, "notes": t.notes or ""}})
 
     for m in Meal.query.filter(Meal.timestamp >= since).order_by(Meal.timestamp.desc()).limit(150).all():
         events.append({"cat": "comida", "id": m.id, "title": m.name or "Comida",
@@ -1081,8 +1140,9 @@ def copilot_entry_delete(cat, entry_id):
     err = _require_login()
     if err:
         return err
-    from models import db, Meal, InsulinDose, Activity
-    model = {"comida": Meal, "insulina": InsulinDose, "ejercicio": Activity}.get(cat)
+    from models import db, Meal, InsulinDose, Activity, ContextTag
+    model = {"comida": Meal, "insulina": InsulinDose, "ejercicio": Activity,
+             "contexto": ContextTag}.get(cat)
     if not model:
         return jsonify({"ok": False, "error": "Categoría inválida"}), 400
     row = model.query.get(entry_id)

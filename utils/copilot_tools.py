@@ -416,6 +416,55 @@ def relacion_carbos_insulina(days: int = 90) -> dict:
     }
 
 
+def impacto_de_contexto(tag: str | None = None, days: int = 90) -> dict:
+    """
+    Compara la glucosa de los DÍAS con una etiqueta de contexto (estrés,
+    enfermedad, mal sueño…) contra los días sin ella. Retrospectivo.
+    """
+    from models import ContextTag
+    days = min(int(days or 90), _MAX_DAYS)
+    since = datetime.now() - timedelta(days=days)
+    q = ContextTag.query.filter(ContextTag.timestamp >= since)
+    if tag:
+        q = q.filter(ContextTag.tag == tag.strip().lower())
+    tags = q.all()
+    if not tags:
+        return {"eventos": 0,
+                "nota": f"Sin contexto '{tag or 'ninguno'}' registrado en {days} días."}
+
+    times, values = _load_readings(days)
+    if not times:
+        return {"eventos": len(tags), "nota": "Sin lecturas para comparar."}
+
+    # días marcados (por tipo de etiqueta)
+    por_tag: dict[str, set] = {}
+    for t in tags:
+        por_tag.setdefault(t.tag, set()).add(t.timestamp.date())
+
+    def _stats_de_dias(dias_set):
+        vals = [v for tt, v in zip(times, values) if tt.date() in dias_set]
+        if len(vals) < 12:
+            return None
+        n = len(vals)
+        return {"lecturas": n, "promedio": int(round(sum(vals) / n)),
+                "tir_pct": round(100 * sum(1 for v in vals if LOW <= v <= HIGH) / n),
+                "pct_bajo_70": round(100 * sum(1 for v in vals if v < LOW) / n, 1),
+                "pct_sobre_180": round(100 * sum(1 for v in vals if v > HIGH) / n, 1)}
+
+    todos_marcados = set().union(*por_tag.values())
+    baseline = _stats_de_dias(set(t.date() for t in times) - todos_marcados)
+
+    out = {"ventana_dias": days, "dias_normales": baseline, "por_contexto": {}}
+    for tg, dias in por_tag.items():
+        st = _stats_de_dias(dias)
+        if st:
+            st["dias_marcados"] = len(dias)
+            out["por_contexto"][tg] = st
+    out["nota"] = ("Compara días CON cada contexto vs días normales. Observacional: "
+                   "el contexto se marcó a mano y puede coincidir con otras cosas.")
+    return out
+
+
 # ─────────────────────── schemas Anthropic + dispatcher ───────────────────────
 
 COPILOT_TOOLS = [
@@ -468,6 +517,17 @@ COPILOT_TOOLS = [
             "days": {"type": "integer", "description": "Ventana en días (default 90)"}}},
     },
     {
+        "name": "impacto_de_contexto",
+        "description": ("Compara la glucosa de los días CON una etiqueta de contexto "
+                        "(estres | enfermo | mal_sueno | viaje | alcohol) contra los "
+                        "días normales: TIR, promedio, % bajo/alto. Para '¿cómo me "
+                        "afecta el estrés / dormir mal / estar enfermo?'. Si no se pasa "
+                        "tag, compara todos los contextos registrados."),
+        "input_schema": {"type": "object", "properties": {
+            "tag": {"type": "string", "description": "estres|enfermo|mal_sueno|viaje|alcohol (opcional)"},
+            "days": {"type": "integer", "description": "Ventana en días (default 90)"}}},
+    },
+    {
         "name": "impacto_de_eventos",
         "description": ("Delta 2h mediano tras un tipo de evento (comida | bolo | "
                         "ejercicio), con franja horaria opcional. Sirve para preguntas "
@@ -487,6 +547,7 @@ _DISPATCH = {
         a.get("days", 14), a.get("hora_desde"), a.get("hora_hasta"), a.get("dia_semana")),
     "respuesta_a_comida":     lambda a: respuesta_a_comida(a.get("nombre", ""), a.get("days", 90)),
     "relacion_carbos_insulina": lambda a: relacion_carbos_insulina(a.get("days", 90)),
+    "impacto_de_contexto":    lambda a: impacto_de_contexto(a.get("tag"), a.get("days", 90)),
     "impacto_de_eventos":     lambda a: impacto_de_eventos(
         a.get("tipo", ""), a.get("days", 60), a.get("hora_desde"), a.get("hora_hasta")),
 }

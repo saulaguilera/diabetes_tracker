@@ -125,6 +125,22 @@ class Activity(db.Model):
         return f"<Actividad {self.activity_type} {self.duration_min}min>"
 
 
+class ContextTag(db.Model):
+    """Etiqueta de contexto: estrés, enfermedad, mal sueño, viaje…
+    Cosas que mueven la glucosa pero no son comida/insulina/ejercicio.
+    Alimentan el contexto del copiloto y el análisis de excursiones."""
+    __tablename__ = "context_tags"
+
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    tag = db.Column(db.String(40), nullable=False)     # estres | enfermo | mal_sueno | viaje | alcohol | otro
+    notes = db.Column(db.Text)                          # detalle libre opcional
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<Contexto {self.tag} @ {self.timestamp:%d/%m %H:%M}>"
+
+
 class FoodItem(db.Model):
     """Alimentos frecuentes con sus valores nutricionales."""
     __tablename__ = "food_items"
