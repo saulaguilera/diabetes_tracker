@@ -1,5 +1,25 @@
 // ui.jsx — primitivos visuales compartidos.
+import { useState } from 'react'
 import { SANS } from '../theme.js'
+
+// Cierre animado de sheets/overlays: en vez de desmontar de golpe, anima la
+// salida y recién entonces llama a onClose. [closing, requestClose]
+export function useSheetClose(onClose, ms = 260) {
+  const [closing, setClosing] = useState(false)
+  const requestClose = () => {
+    if (closing) return
+    setClosing(true)
+    setTimeout(onClose, ms)
+  }
+  return [closing, requestClose]
+}
+
+// estilos listos para backdrop + panel de sheet (entrada y salida suaves)
+export const backdropAnim = (closing) =>
+  closing ? 'fadeOut 0.24s ease forwards' : 'fadeIn 0.24s ease'
+export const sheetAnim = (closing) =>
+  closing ? 'slideDown 0.26s cubic-bezier(.4,0,.7,.4) forwards'
+          : 'slideUp 0.32s cubic-bezier(.2,.8,.2,1)'
 
 export function Eyebrow({ theme, children, style }) {
   return (

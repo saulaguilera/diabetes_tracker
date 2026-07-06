@@ -7,7 +7,7 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { apiPut, apiDelete } from '../api.js'
 import { PAL, SANS } from '../theme.js'
-import { Stepper, Field } from './ui.jsx'
+import { Stepper, Field, useSheetClose, backdropAnim, sheetAnim } from './ui.jsx'
 
 export const META = {
   comida:    { color: PAL.metabolismo.key, label: 'Comida' },
@@ -58,12 +58,14 @@ export default function EventSheet({ theme, ev, onClose, onChanged }) {
     catch (e) { setBusy(false) }
   }
 
+  const [closing, requestClose] = useSheetClose(onClose)
+
   return createPortal((
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.5)',
-      display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+    <div onClick={requestClose} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: 'flex-end', justifyContent: 'center', animation: backdropAnim(closing) }}>
       <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, background: theme.dark ? '#0E1426' : '#fff',
         borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: '22px 22px calc(28px + env(safe-area-inset-bottom))',
-        animation: 'slideUp 0.32s cubic-bezier(.2,.8,.2,1)', maxHeight: '85%', overflowY: 'auto' }}>
+        animation: sheetAnim(closing), maxHeight: '85%', overflowY: 'auto' }}>
         <div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border, margin: '0 auto 18px' }}/>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>

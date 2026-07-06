@@ -43,6 +43,21 @@ body::after {
 @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
 @keyframes slideUp { from{transform:translateY(60px); opacity:0} to{transform:translateY(0); opacity:1} }
 
+/* ── transiciones de entrada/salida (que nada aparezca ni muera de golpe) ── */
+@keyframes fadeOut   { from{opacity:1} to{opacity:0} }
+@keyframes slideDown { from{transform:translateY(0); opacity:1} to{transform:translateY(60px); opacity:0} }
+@keyframes scaleIn   { from{opacity:0; transform:scale(1.03)} to{opacity:1; transform:scale(1)} }
+@keyframes scaleOut  { from{opacity:1; transform:scale(1)} to{opacity:0; transform:scale(1.03)} }
+@keyframes msgIn     { from{opacity:0; transform:translateY(10px)} to{opacity:1; transform:translateY(0)} }
+@keyframes riseIn    { from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:translateY(0)} }
+.msg-in  { animation: msgIn 0.32s cubic-bezier(.2,.8,.2,1); }
+.rise-in { animation: riseIn 0.28s ease-out; }
+
+/* respetar la preferencia de reducir movimiento */
+@media (prefers-reduced-motion: reduce) {
+  .msg-in, .rise-in { animation: none; }
+}
+
 @keyframes aiSpin { to { transform: rotate(360deg); } }
 .ai-orbit { animation: aiSpin 0.9s linear infinite; }
 
