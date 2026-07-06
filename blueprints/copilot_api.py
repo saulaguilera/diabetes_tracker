@@ -251,6 +251,13 @@ def _greeting(hour):
 def _brief_context(s):
     """Texto compacto de los datos de hoy para alimentar la narrativa."""
     L = []
+    try:
+        from helpers import _get_setting as _gs
+        nombre = (_gs("user_name") or "").strip()
+        if nombre:
+            L.append(f"La persona se llama {nombre} (podés usar su nombre con calidez).")
+    except Exception:
+        pass
     if s["readings_n"]:
         L.append(f"Tiempo en rango hoy: {s['tir']}% ({s['readings_n']} lecturas).")
         L.append(f"Glucosa promedio: {s['avg']} mg/dL. Mínima {s['min']['v']} a las "
@@ -621,6 +628,9 @@ REGLAS ESTRICTAS E INVIOLABLES:
 - Solo explicás lo que muestran sus datos (presente y pasado) y acompañás.
 - Respondé SIEMPRE en español, en segunda persona, cálido y breve (2 a 4 frases).
 - No inventes datos que no estén en el contexto.
+- Si el contexto trae el NOMBRE de la persona, usalo con naturalidad y de vez
+  en cuando (un saludo, un momento de ánimo) — no en cada mensaje, que no
+  suene a telemarketing.
 - Tenés MEMORIA: contexto de hoy, evolución de 7/30 días, la respuesta histórica
   a comidas repetidas y notas que la persona te pidió recordar. Usala con
   naturalidad ("la última vez que comiste pizza…"), siempre en pasado
@@ -653,6 +663,15 @@ def _chat_context():
     from models import GlucoseReading, Meal, InsulinDose, Activity
     now = datetime.now()
     L = []
+
+    # ── quién es (nombre del perfil) ──────────────────────────────────────
+    try:
+        from helpers import _get_setting as _gs
+        nombre = (_gs("user_name") or "").strip()
+        if nombre:
+            L.append(f"NOMBRE: la persona se llama {nombre}.")
+    except Exception:
+        pass
 
     # ── estado actual ─────────────────────────────────────────────────────
     try:
