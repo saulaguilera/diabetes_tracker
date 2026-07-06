@@ -585,7 +585,27 @@ def copilot_profile():
             "basal_hora": _get_setting("basal_hora"),
             "basal_tipo": _get_setting("basal_tipo"),
         },
+        # Valores OBSERVADOS en los datos (PMM bayesiano, research). Solo se
+        # muestran como referencia descriptiva — jamás se auto-aplican a la
+        # terapia: ese ajuste es una decisión con el equipo médico.
+        "observed": _observed_params(),
     })
+
+
+def _observed_params():
+    """ISF/ICR aprendidos por el PMM (si tienen datos reales). Nunca levanta."""
+    out = {}
+    try:
+        from pmm.core.parameter_store import get_isf_now, get_icr_now
+        isf = get_isf_now()
+        icr = get_icr_now()
+        if isf.get("source") != "prior" and isf.get("n_obs", 0) >= 3:
+            out["isf"] = {"mu": round(isf["mu"], 1), "n": isf["n_obs"]}
+        if icr.get("source") != "prior" and icr.get("n_obs", 0) >= 3:
+            out["icr"] = {"mu": round(icr["mu"], 1), "n": icr["n_obs"]}
+    except Exception:
+        pass
+    return out
 
 
 # ── Copiloto (chat) — SOLO explica y acompaña. NUNCA recomienda ni predice. ────
@@ -1182,11 +1202,23 @@ def copilot_profile_edit():
     try:
         if "name" in data:
             _set_setting("user_name", (data.get("name") or "").strip()[:60])
-        for key, setting in (("objetivo", "objetivo"), ("isf", "isf_manual"), ("icr", "icr")):
+        for key, setting in (("objetivo", "objetivo"), ("isf", "isf_manual"), ("icr", "icr"),
+                             ("basal_dose", "basal_dose_u")):
             if key in data:
                 val = _numstr(key)
                 if val is not None:
                     _set_setting(setting, val)
+        # basal: tipo (texto) y hora habitual (0-23) — alimentan el modelo,
+        # el contexto del copiloto y el recordatorio de Hoy
+        if "basal_tipo" in data:
+            _set_setting("basal_tipo", (data.get("basal_tipo") or "").strip().lower()[:40])
+        if "basal_hora" in data:
+            try:
+                h = int(float(data["basal_hora"]))
+                if 0 <= h <= 23:
+                    _set_setting("basal_hora", str(h))
+            except (TypeError, ValueError):
+                pass
         return jsonify({"ok": True})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
