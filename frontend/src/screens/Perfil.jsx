@@ -8,11 +8,14 @@ function Centered({ theme, children }) {
   return <div style={{ minHeight: '50%', display: 'grid', placeItems: 'center', textAlign: 'center', padding: '0 32px', color: theme.inkSoft, fontSize: 14, fontFamily: SANS }}>{children}</div>
 }
 
-function Row({ theme, label, value, color }) {
+function Row({ theme, label, value, color, sub }) {
   return (
     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '11px 0', borderTop: `0.5px solid ${theme.border}` }}>
       <span style={{ color: theme.inkSoft, fontSize: 14 }}>{label}</span>
-      <span style={{ color: color || theme.ink, fontSize: 14, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+      <span style={{ textAlign: 'right' }}>
+        <span style={{ color: color || theme.ink, fontSize: 14, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+        {sub && <div style={{ color: theme.inkFaint, fontSize: 11, marginTop: 2 }}>{sub}</div>}
+      </span>
     </div>
   )
 }
@@ -57,6 +60,7 @@ export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleThe
 
   const s = data.sensor || {}
   const c = data.config || {}
+  const obs = data.observed || {}
   const fmt = (v, unit) => (v == null ? '—' : `${v}${unit || ''}`)
   const basalHora = c.basal_hora != null ? Math.round(parseFloat(c.basal_hora)) : null
   const basalTxt = c.basal_dose != null
@@ -81,16 +85,26 @@ export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleThe
         <Row theme={theme} label="Fuente" value={s.source === 'cgm_libre' ? 'FreeStyle Libre' : (s.source || '—')}/>
       </Card>
 
-      {/* terapia */}
+      {/* terapia — configurado + observado en tus datos (referencia, no auto-aplica) */}
       <Card theme={theme}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
           <Eyebrow theme={theme} style={{ fontSize: 10 }}>Tu terapia</Eyebrow>
           <button onClick={() => setEditing(true)} style={{ background: 'none', border: 'none', color: theme.accent, fontSize: 12.5, fontFamily: SANS, cursor: 'pointer' }}>Editar</button>
         </div>
         <Row theme={theme} label="Objetivo" value={fmt(c.objetivo, ' mg/dL')}/>
-        <Row theme={theme} label="Sensibilidad (ISF)" value={c.isf != null ? `${c.isf} mg/dL/U` : 'auto'}/>
-        <Row theme={theme} label="Ratio (ICR)" value={c.icr != null ? `${c.icr} g/U` : 'auto'}/>
+        <Row theme={theme} label="Sensibilidad (ISF)"
+          value={c.isf != null ? `${c.isf} mg/dL/U` : 'auto'}
+          sub={obs.isf ? `en tus datos: ~${obs.isf.mu} (${obs.isf.n} obs.)` : null}/>
+        <Row theme={theme} label="Ratio (ICR)"
+          value={c.icr != null ? `${c.icr} g/U` : 'auto'}
+          sub={obs.icr ? `en tus datos: ~${obs.icr.mu} (${obs.icr.n} obs.)` : null}/>
         <Row theme={theme} label="Basal" value={basalTxt}/>
+        {(obs.isf || obs.icr) && (
+          <div style={{ color: theme.inkFaint, fontSize: 11, lineHeight: 1.5, marginTop: 10 }}>
+            "En tus datos" es lo que Orbit observó (aprendizaje bayesiano por franjas).
+            Es referencia para conversar con tu equipo médico — no se aplica solo.
+          </div>
+        )}
       </Card>
 
       {/* equipo médico — reporte PDF descriptivo para llevar a la consulta */}
@@ -132,14 +146,22 @@ function EditSheet({ theme, name: name0, config, onClose, onSaved }) {
   const [objetivo, setObjetivo] = useState(Math.round(config.objetivo ?? 100))
   const [isf, setIsf] = useState(Math.round(config.isf ?? 40))
   const [icr, setIcr] = useState(Math.round(config.icr ?? 10))
+  // basal: dosis diaria, tipo y hora habitual (alimenta modelo + recordatorio)
+  const [basalDose, setBasalDose] = useState(Math.round(config.basal_dose ?? 15))
+  const [basalTipo, setBasalTipo] = useState(config.basal_tipo || '')
+  const [basalHora, setBasalHora] = useState(
+    config.basal_hora != null && config.basal_hora !== '' ? Math.round(parseFloat(config.basal_hora)) : 10)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
   const [closing, requestClose] = useSheetClose(onClose)
 
   const save = async () => {
     setBusy(true); setErr(null)
-    try { await apiPut('/profile', { name, objetivo, isf, icr }); onSaved() }
-    catch (e) { setErr('No se pudo guardar.'); setBusy(false) }
+    try {
+      await apiPut('/profile', { name, objetivo, isf, icr,
+        basal_dose: basalDose, basal_tipo: basalTipo, basal_hora: basalHora })
+      onSaved()
+    } catch (e) { setErr('No se pudo guardar.'); setBusy(false) }
   }
 
   return (
@@ -158,10 +180,20 @@ function EditSheet({ theme, name: name0, config, onClose, onSaved }) {
           <FieldRow theme={theme} label="Objetivo (mg/dL)"><Stepper theme={theme} value={objetivo} setValue={setObjetivo} step={5} min={70} max={180} unit="" color={theme.accent}/></FieldRow>
           <FieldRow theme={theme} label="Sensibilidad ISF"><Stepper theme={theme} value={isf} setValue={setIsf} step={1} min={5} max={200} unit="" color={theme.ink}/></FieldRow>
           <FieldRow theme={theme} label="Ratio ICR"><Stepper theme={theme} value={icr} setValue={setIcr} step={1} min={2} max={40} unit="" color={theme.ink}/></FieldRow>
+
+          <div style={{ borderTop: `0.5px solid ${theme.border}`, paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ color: theme.inkFaint, fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Basal</div>
+            <FieldRow theme={theme} label="Dosis diaria"><Stepper theme={theme} value={basalDose} setValue={setBasalDose} step={1} min={0} max={80} unit="U" color={theme.ink}/></FieldRow>
+            <FieldRow theme={theme} label="Hora habitual"><Stepper theme={theme} value={basalHora} setValue={setBasalHora} step={1} min={0} max={23} unit="h" color={theme.ink}/></FieldRow>
+            <div>
+              <div style={{ color: theme.inkFaint, fontSize: 11, marginBottom: 7 }}>Tipo (toujeo, glargina, degludec…)</div>
+              <Field theme={theme} value={basalTipo} onChange={setBasalTipo} placeholder="toujeo"/>
+            </div>
+          </div>
         </div>
 
         <div style={{ color: theme.inkFaint, fontSize: 11.5, marginTop: 14, lineHeight: 1.5 }}>
-          La basal y el sensor se configuran en la app principal.
+          La basal alimenta el modelo, el contexto del copiloto y el recordatorio diario.
         </div>
         {err && <div style={{ color: '#D98A6A', fontSize: 13, marginTop: 10 }}>{err}</div>}
 
