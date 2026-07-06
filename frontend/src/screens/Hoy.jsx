@@ -40,12 +40,21 @@ function Metric({ theme, label, value, unit, color }) {
   )
 }
 
-export default function Hoy({ theme, refreshKey = 0 }) {
+export default function Hoy({ theme, refreshKey = 0, onGoRegistro }) {
   const [data, setData] = useState(null)
   const [err, setErr] = useState(null)
   const [sel, setSel] = useState(null)     // evento abierto para editar/borrar
   const [reload, setReload] = useState(0)
   const [showBrief, setShowBrief] = useState(false)
+  // recordatorio de basal: descartable por hoy (persistido en localStorage)
+  const todayKey = new Date().toISOString().slice(0, 10)
+  const [basalDismissed, setBasalDismissed] = useState(() => {
+    try { return localStorage.getItem('orbit_basal_dismiss') === todayKey } catch { return false }
+  })
+  const dismissBasal = () => {
+    setBasalDismissed(true)
+    try { localStorage.setItem('orbit_basal_dismiss', todayKey) } catch {}
+  }
 
   useEffect(() => {
     let alive = true
@@ -66,8 +75,37 @@ export default function Hoy({ theme, refreshKey = 0 }) {
   const hello = hour < 12 ? 'Buenos días' : hour < 20 ? 'Buenas tardes' : 'Buenas noches'
   const briefTeaser = data.tir_today != null ? `${hello} · ${data.tir_today}% en rango hoy` : 'Tu resumen del día'
 
+  // recordatorio amable: basal de hoy sin registrar, pasada tu hora habitual
+  const basal = data.context && data.context.basal
+  const showBasalReminder = basal && !basal.logged_today && basal.expected_units != null
+    && basal.hora != null && hour >= basal.hora && !basalDismissed
+
   return (
     <div style={{ padding: '4px 22px 120px', fontFamily: SANS, display: 'flex', flexDirection: 'column', gap: 22 }}>
+      {/* recordatorio de basal — amable, descartable por hoy, jamás alarmista */}
+      {showBasalReminder && (
+        <Card theme={theme} className="rise-in" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px',
+          border: '0.5px solid rgba(224,176,87,0.4)' }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+            background: '#E0B057', boxShadow: '0 0 10px #E0B057' }}/>
+          <div style={{ flex: 1 }}>
+            <div style={{ color: theme.ink, fontSize: 14, lineHeight: 1.4 }}>
+              Tu basal de hoy todavía no está registrada
+            </div>
+            <div style={{ color: theme.inkFaint, fontSize: 12, marginTop: 2 }}>
+              Solés aplicarla a las {basal.hora}:00{basal.tipo ? ` (${basal.tipo} ${basal.expected_units}U)` : ''}
+            </div>
+          </div>
+          {onGoRegistro && (
+            <button onClick={onGoRegistro} style={{ padding: '8px 13px', borderRadius: 100, border: 'none', cursor: 'pointer',
+              background: 'rgba(224,176,87,0.16)', color: '#E0B057', fontSize: 12.5, fontWeight: 600, fontFamily: SANS }}>
+              Registrar
+            </button>
+          )}
+          <button onClick={dismissBasal} aria-label="Descartar por hoy" style={{ background: 'none', border: 'none',
+            color: theme.inkFaint, fontSize: 16, cursor: 'pointer', padding: '4px 2px', fontFamily: SANS }}>✕</button>
+        </Card>
+      )}
       {/* hero — glucosa actual */}
       <div>
         <div style={{ color: theme.inkSoft, fontSize: 14, marginBottom: 10 }}>Ahora</div>

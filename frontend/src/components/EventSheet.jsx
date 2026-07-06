@@ -77,6 +77,22 @@ export default function EventSheet({ theme, ev, onClose, onChanged }) {
         {isMeal ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <Field theme={theme} value={name} onChange={setName} placeholder="¿Qué comiste?"/>
+            {/* ingredientes (si la comida se registró con desglose de foto) */}
+            {d.components && d.components.length > 0 && (
+              <div style={{ padding: '10px 12px', borderRadius: 12,
+                background: theme.dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                border: `0.5px solid ${theme.border}` }}>
+                <div style={{ color: theme.inkFaint, fontSize: 10.5, letterSpacing: '0.12em',
+                  textTransform: 'uppercase', marginBottom: 5 }}>Ingredientes</div>
+                {d.components.map((cp, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, fontSize: 12.5, padding: '2px 0', color: theme.inkSoft }}>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cp.name}</span>
+                    {cp.grams != null && <span style={{ color: theme.inkFaint }}>{Math.round(cp.grams)}g</span>}
+                    <span style={{ color: m.color, fontWeight: 600 }}>{cp.carbs}g CH</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <Row theme={theme} label="Carbohidratos"><Stepper theme={theme} value={carbs} setValue={setCarbs} step={5} max={300} unit="g" color={m.color}/></Row>
             <Row theme={theme} label="Proteína"><Stepper theme={theme} value={protein} setValue={setProtein} step={5} max={200} unit="g" color={theme.ink}/></Row>
             <Row theme={theme} label="Grasa"><Stepper theme={theme} value={fat} setValue={setFat} step={5} max={200} unit="g" color={theme.ink}/></Row>

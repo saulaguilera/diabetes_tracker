@@ -28,9 +28,9 @@ export function Eyebrow({ theme, children, style }) {
   )
 }
 
-export function Card({ theme, children, onClick, glow, style }) {
+export function Card({ theme, children, onClick, glow, style, className }) {
   return (
-    <div onClick={onClick} style={{
+    <div onClick={onClick} className={className} style={{
       background: theme.surface, border: `0.5px solid ${theme.border}`, borderRadius: 24,
       padding: 18, cursor: onClick ? 'pointer' : 'default',
       boxShadow: glow ? `0 0 40px ${glow}` : 'none', ...style }}>{children}</div>

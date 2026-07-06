@@ -94,12 +94,18 @@ def copilot_home():
                       .order_by(InsulinDose.timestamp.desc()).first())
         hoy0 = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         expected = _get_setting("basal_dose_u")
+        hora_raw = _get_setting("basal_hora")
+        try:
+            hora = int(round(float(hora_raw))) if hora_raw not in (None, "") else None
+        except (TypeError, ValueError):
+            hora = None
         basal = {
             "last_units": last_basal.units if last_basal else None,
             "last_ago": _hace(last_basal.timestamp) if last_basal else None,
             "logged_today": bool(last_basal and last_basal.timestamp >= hoy0),
             "expected_units": float(expected) if expected not in (None, "") else None,
             "tipo": _get_setting("basal_tipo") or None,
+            "hora": hora,   # hora habitual de aplicación (para el recordatorio)
         }
     except Exception:
         basal = None
@@ -126,7 +132,10 @@ def copilot_home():
         events.append({"cat": "comida", "id": m.id, "title": m.name or "Comida",
                        "badge": f"{int(m.carbs_g)}g" if m.carbs_g else "", "ts": m.timestamp,
                        "data": {"name": m.name or "", "carbs": m.carbs_g or 0,
-                                "protein": m.protein_g or 0, "fat": m.fat_g or 0}})
+                                "protein": m.protein_g or 0, "fat": m.fat_g or 0,
+                                "components": [{"name": cp.name, "grams": cp.grams,
+                                                "carbs": round(cp.carbs_g or 0)}
+                                               for cp in (m.components or [])]}})
     for d in InsulinDose.query.order_by(InsulinDose.timestamp.desc()).limit(4).all():
         label = {"bolus": "Rápida", "basal": "Basal"}.get(d.type, (d.type or "").capitalize())
         events.append({"cat": "insulina", "id": d.id, "title": f"Insulina {label}".strip(),
@@ -947,7 +956,10 @@ def copilot_history():
                        "badge": f"{int(m.carbs_g)}g" if m.carbs_g else "", "ts": m.timestamp,
                        "data": {"name": m.name or "", "carbs": m.carbs_g or 0,
                                 "protein": m.protein_g or 0, "fat": m.fat_g or 0,
-                                "calories": m.calories or 0, "notes": m.notes or ""}})
+                                "calories": m.calories or 0, "notes": m.notes or "",
+                                "components": [{"name": cp.name, "grams": cp.grams,
+                                                "carbs": round(cp.carbs_g or 0)}
+                                               for cp in (m.components or [])]}})
     for d in InsulinDose.query.filter(InsulinDose.timestamp >= since).order_by(InsulinDose.timestamp.desc()).limit(150).all():
         label = {"bolus": "Rápida", "basal": "Basal"}.get(d.type, (d.type or "").capitalize())
         events.append({"cat": "insulina", "id": d.id, "title": f"Insulina {label}".strip(),
@@ -1044,6 +1056,109 @@ def copilot_entry_delete(cat, entry_id):
     except Exception:
         db.session.rollback()
         return jsonify({"ok": False, "error": "No se pudo eliminar"}), 400
+
+
+@bp.route("/api/copilot/report.pdf", endpoint="copilot_report_pdf")
+def copilot_report_pdf():
+    """Reporte PDF para el equipo médico — 100% DESCRIPTIVO (datos, no
+    recomendaciones). Reusa los mismos análisis del copiloto analista."""
+    err = _require_login()
+    if err:
+        return err
+
+    import io
+    from flask import send_file
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table,
+                                    TableStyle)
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from utils.copilot_tools import (estadisticas_periodo, hipos_recientes,
+                                     relacion_carbos_insulina)
+    from helpers import _get_setting
+
+    days = min(int(request.args.get("days", 30)), 90)
+    hoy = datetime.now()
+
+    glob = estadisticas_periodo(days=days)
+    noches = estadisticas_periodo(days=days, hora_desde=22, hora_hasta=6)
+    dias_franja = estadisticas_periodo(days=days, hora_desde=6, hora_hasta=22)
+    hipos = hipos_recientes(days=days)
+    cobert = relacion_carbos_insulina(days=days)
+
+    styles = getSampleStyleSheet()
+    h1 = ParagraphStyle("h1", parent=styles["Title"], fontSize=17, spaceAfter=2)
+    sub = ParagraphStyle("sub", parent=styles["Normal"], fontSize=9.5,
+                         textColor=colors.HexColor("#666677"), spaceAfter=10)
+    h2 = ParagraphStyle("h2", parent=styles["Heading2"], fontSize=12, spaceBefore=12,
+                        spaceAfter=4, textColor=colors.HexColor("#23233A"))
+    small = ParagraphStyle("small", parent=styles["Normal"], fontSize=8.5,
+                           textColor=colors.HexColor("#888899"), spaceBefore=14)
+
+    def tabla(rows, widths=None):
+        t = Table(rows, colWidths=widths)
+        t.setStyle(TableStyle([
+            ("FONTSIZE", (0, 0), (-1, -1), 9.5),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#44445A")),
+            ("LINEBELOW", (0, 0), (-1, 0), 0.6, colors.HexColor("#CCCCDD")),
+            ("LINEBELOW", (0, 1), (-1, -1), 0.25, colors.HexColor("#E8E8F0")),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        return t
+
+    nombre = _get_setting("user_name") or ""
+    story = [
+        Paragraph("Orbit — Reporte para el equipo médico", h1),
+        Paragraph(f"{nombre + ' · ' if nombre else ''}Últimos {days} días · "
+                  f"generado el {hoy.strftime('%d/%m/%Y %H:%M')} · "
+                  f"FreeStyle Libre vía LibreLinkUp", sub),
+        Paragraph("Glucosa", h2),
+    ]
+    if "tir_pct" in glob:
+        filas = [["", "TIR", "Promedio", "CV", "<70", ">180", "Hipos (eventos)"]]
+        for etiqueta, st in [("Global", glob), ("Día (6-22h)", dias_franja),
+                             ("Noche (22-6h)", noches)]:
+            if st and "tir_pct" in st:
+                filas.append([etiqueta, f"{st['tir_pct']}%", f"{st['promedio']} mg/dL",
+                              f"{st['cv_pct']}%", f"{st['pct_bajo_70']}%",
+                              f"{st['pct_sobre_180']}%", str(st["hipo_eventos"])])
+        story.append(tabla(filas, [70, 45, 70, 45, 40, 40, 80]))
+    else:
+        story.append(Paragraph("Sin lecturas suficientes en el período.", styles["Normal"]))
+
+    if hipos.get("hipo_eventos"):
+        story.append(Paragraph("Hipoglucemias por franja horaria", h2))
+        b = hipos.get("por_franja_horaria") or {}
+        story.append(tabla([list(b.keys()), [str(v) for v in b.values()]]))
+
+    if cobert.get("eventos_analizados"):
+        story.append(Paragraph("Coberturas de carbohidratos — resultados observados", h2))
+        filas = [["Relación usada", "Eventos", "En rango a 3h", "Con hipo en 4h", "Δ3h mediana"]]
+        for label, r in (cobert.get("resultados_por_relacion_usada") or {}).items():
+            filas.append([label, str(r["eventos"]), f"{r['pct_en_rango_a_las_3h']}%",
+                          f"{r['pct_con_hipo_en_4h']}%",
+                          f"{r['delta_3h_mediana']:+d} mg/dL" if r["delta_3h_mediana"] is not None else "—"])
+        story.append(tabla(filas, [110, 55, 85, 85, 80]))
+        story.append(Paragraph(
+            f"Relación mediana usada: 1U : {cobert['relacion_mediana_usada_g_por_U']}g. "
+            "Describe lo que el paciente HIZO y cómo resultó — no es una recomendación de dosis.",
+            small))
+
+    story.append(Paragraph(
+        "Este reporte es descriptivo y generado automáticamente por Orbit a partir de los "
+        "registros del paciente (CGM, comidas, insulina, actividad). No contiene "
+        "recomendaciones de tratamiento. Confundidores no controlados: composición de "
+        "comidas, ejercicio, estrés, calidad del registro manual.", small))
+
+    buf = io.BytesIO()
+    SimpleDocTemplate(buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm,
+                      topMargin=16 * mm, bottomMargin=16 * mm).build(story)
+    buf.seek(0)
+    return send_file(buf, mimetype="application/pdf", as_attachment=True,
+                     download_name=f"orbit_reporte_{hoy.strftime('%Y%m%d')}.pdf")
 
 
 @bp.route("/api/copilot/profile", methods=["PUT"], endpoint="copilot_profile_edit")

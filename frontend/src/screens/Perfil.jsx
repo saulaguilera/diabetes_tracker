@@ -93,17 +93,18 @@ export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleThe
         <Row theme={theme} label="Basal" value={basalTxt}/>
       </Card>
 
-      {/* equipo médico */}
+      {/* equipo médico — reporte PDF descriptivo para llevar a la consulta */}
       <Card theme={theme} glow={PAL.glucosa.soft}>
         <Eyebrow theme={theme} style={{ fontSize: 10, marginBottom: 10 }}>Tu equipo médico</Eyebrow>
-        <div style={{ color: theme.ink, fontSize: 15, marginBottom: 4 }}>Conectá con tu médico</div>
+        <div style={{ color: theme.ink, fontSize: 15, marginBottom: 4 }}>Reporte para tu consulta</div>
         <div style={{ color: theme.inkSoft, fontSize: 13, lineHeight: 1.5, marginBottom: 14 }}>
-          Compartí tus reportes y patrones con tu equipo de forma segura.
+          TIR, noches, hipos y coberturas observadas de los últimos 30 días — datos, no opiniones.
         </div>
-        <button disabled style={{
-          width: '100%', padding: '12px', borderRadius: 14, border: `0.5px solid ${theme.border}`,
-          background: theme.surface, color: theme.inkFaint, fontSize: 14, fontFamily: SANS, cursor: 'default' }}>
-          Próximamente
+        <button onClick={() => window.open('/api/copilot/report.pdf?days=30', '_blank')} style={{
+          width: '100%', padding: '12px', borderRadius: 14, border: 'none',
+          background: PAL.glucosa.key, color: '#0A0C1E', fontSize: 14, fontWeight: 600,
+          fontFamily: SANS, cursor: 'pointer' }}>
+          Descargar reporte (PDF)
         </button>
       </Card>
 
