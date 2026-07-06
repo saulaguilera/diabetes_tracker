@@ -17,6 +17,9 @@ export default function DriveModeScreen({ onClose, demo = false }) {
   const [demoIdx, setDemoIdx] = useState(0)
   const wakeRef = useRef(null)
   const laStartedRef = useRef(false)   // Live Activity ya iniciada?
+  // salida suave: anima el fade-out antes de desmontar
+  const [closing, setClosing] = useState(false)
+  const requestClose = () => { if (!closing) { setClosing(true); setTimeout(onClose, 240) } }
 
   // datos en vivo (no en demo) + puente a la Live Activity nativa (si existe)
   useEffect(() => {
@@ -66,8 +69,9 @@ export default function DriveModeScreen({ onClose, demo = false }) {
   let body
   if (data) {
     body = (
-      <div onClick={demo ? cycleDemo : undefined} style={{ position: 'absolute', inset: 0 }}>
-        <DriveModeExpanded data={data} onClose={onClose}/>
+      <div onClick={demo ? cycleDemo : undefined} style={{ position: 'absolute', inset: 0,
+        animation: closing ? 'scaleOut 0.24s ease forwards' : 'scaleIn 0.3s cubic-bezier(.2,.8,.2,1)' }}>
+        <DriveModeExpanded data={data} onClose={requestClose}/>
         {demo && (
           <div style={{ position: 'absolute', bottom: 'max(54px, env(safe-area-inset-bottom))', left: 0, right: 0,
             textAlign: 'center', fontSize: 12, letterSpacing: '0.12em', color: 'rgba(234,242,248,0.4)',
@@ -80,9 +84,10 @@ export default function DriveModeScreen({ onClose, demo = false }) {
   } else {
     body = (
       <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: '#04060C', color: 'rgba(234,242,248,0.6)',
-        display: 'grid', placeItems: 'center', fontFamily: SANS, fontSize: 15 }}>
+        display: 'grid', placeItems: 'center', fontFamily: SANS, fontSize: 15,
+        animation: closing ? 'scaleOut 0.24s ease forwards' : 'scaleIn 0.3s cubic-bezier(.2,.8,.2,1)' }}>
         {err ? 'No se pudo cargar el estado.' : 'Cargando…'}
-        <button onClick={onClose} style={{ position: 'absolute', top: 'max(20px,env(safe-area-inset-top))', right: 24,
+        <button onClick={requestClose} style={{ position: 'absolute', top: 'max(20px,env(safe-area-inset-top))', right: 24,
           width: 40, height: 40, borderRadius: 20, border: '1px solid rgba(255,255,255,0.12)',
           background: 'transparent', color: 'inherit', fontSize: 20, cursor: 'pointer' }}>✕</button>
       </div>

@@ -128,7 +128,7 @@ export default function Copiloto({ theme }) {
 function Bubble({ theme, role, text, usedData }) {
   const isUser = role === 'user'
   return (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexDirection: isUser ? 'row-reverse' : 'row' }}>
+    <div className="msg-in" style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexDirection: isUser ? 'row-reverse' : 'row' }}>
       {!isUser && (
         <div style={{ flexShrink: 0, width: 34, height: 34, marginBottom: 2 }}>
           <NebulaGuide kind="insulina" size={34} breathe={false}/>

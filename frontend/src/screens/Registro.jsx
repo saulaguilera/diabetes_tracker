@@ -197,7 +197,7 @@ export default function Registro({ theme, onDone }) {
               </div>
               {/* desglose por componente — transparencia de dónde salió cada gramo */}
               {scanned && breakdown.length > 0 && (
-                <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 12,
+                <div className="rise-in" style={{ marginTop: 10, padding: '10px 12px', borderRadius: 12,
                   background: theme.dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
                   border: `0.5px solid ${theme.border}` }}>
                   {breakdown.map((b, i) => (
@@ -224,7 +224,7 @@ export default function Registro({ theme, onDone }) {
             <Field theme={theme} value={name} onChange={setName} placeholder="¿Qué comiste? (ej: 200ml leche)"/>
             {/* sugerencias desde la base nutricional (CH netos por porción) */}
             {sugg.length > 0 && (
-              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 40, marginTop: 6,
+              <div className="rise-in" style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 40, marginTop: 6,
                 background: theme.dark ? '#101830' : '#fff', borderRadius: 14,
                 border: `0.5px solid ${theme.borderStrong}`, overflow: 'hidden',
                 boxShadow: '0 12px 32px rgba(0,0,0,0.35)' }}>

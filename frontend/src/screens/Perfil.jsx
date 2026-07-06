@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { apiGet, apiPut } from '../api.js'
 import { PAL, SANS } from '../theme.js'
-import { Card, Eyebrow, Stepper, Field } from '../components/ui.jsx'
+import { Card, Eyebrow, Stepper, Field, useSheetClose, backdropAnim, sheetAnim } from '../components/ui.jsx'
 
 function Centered({ theme, children }) {
   return <div style={{ minHeight: '50%', display: 'grid', placeItems: 'center', textAlign: 'center', padding: '0 32px', color: theme.inkSoft, fontSize: 14, fontFamily: SANS }}>{children}</div>
@@ -133,6 +133,7 @@ function EditSheet({ theme, name: name0, config, onClose, onSaved }) {
   const [icr, setIcr] = useState(Math.round(config.icr ?? 10))
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
+  const [closing, requestClose] = useSheetClose(onClose)
 
   const save = async () => {
     setBusy(true); setErr(null)
@@ -141,10 +142,10 @@ function EditSheet({ theme, name: name0, config, onClose, onSaved }) {
   }
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+    <div onClick={requestClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', animation: backdropAnim(closing) }}>
       <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, background: theme.dark ? '#0E1426' : '#fff',
         borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: '22px 22px calc(28px + env(safe-area-inset-bottom))',
-        animation: 'slideUp 0.32s cubic-bezier(.2,.8,.2,1)', maxHeight: '88%', overflowY: 'auto' }}>
+        animation: sheetAnim(closing), maxHeight: '88%', overflowY: 'auto' }}>
         <div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border, margin: '0 auto 18px' }}/>
         <div style={{ color: theme.ink, fontSize: 18, fontWeight: 500, marginBottom: 18 }}>Editar perfil</div>
 
