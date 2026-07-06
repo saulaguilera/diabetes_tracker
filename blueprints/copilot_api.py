@@ -1111,10 +1111,11 @@ def copilot_report_pdf():
     from reportlab.lib.units import mm
     from reportlab.lib import colors
     from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table,
-                                    TableStyle)
+                                    TableStyle, Image)
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from utils.copilot_tools import (estadisticas_periodo, hipos_recientes,
                                      relacion_carbos_insulina)
+    from utils.agp import agp_chart_png, tir_bar_png, agp_summary
     from helpers import _get_setting
 
     days = min(int(request.args.get("days", 30)), 90)
@@ -1154,8 +1155,27 @@ def copilot_report_pdf():
         Paragraph(f"{nombre + ' · ' if nombre else ''}Últimos {days} días · "
                   f"generado el {hoy.strftime('%d/%m/%Y %H:%M')} · "
                   f"FreeStyle Libre vía LibreLinkUp", sub),
-        Paragraph("Glucosa", h2),
     ]
+
+    # ── AGP (Ambulatory Glucose Profile) — el formato estándar clínico ──
+    agp_days = min(days, 14)   # consenso: el AGP se lee mejor a 14 días
+    agp_m = agp_summary(agp_days)
+    agp_png = agp_chart_png(agp_days)
+    tir_png = tir_bar_png(agp_days)
+    if agp_png and agp_m.get("n"):
+        story.append(Paragraph(f"AGP — Perfil Ambulatorio de Glucosa ({agp_days} días)", h2))
+        story.append(Paragraph(
+            f"{agp_m['dias_con_datos']} días con datos · sensor activo {agp_m['sensor_activo_pct']}% · "
+            f"glucosa promedio <b>{agp_m['promedio']} mg/dL</b> · GMI <b>{agp_m['gmi']}%</b> · "
+            f"CV <b>{agp_m['cv']}%</b>", styles["Normal"]))
+        story.append(Spacer(1, 4))
+        story.append(Image(io.BytesIO(agp_png), width=170 * mm, height=67 * mm))
+        if tir_png:
+            story.append(Spacer(1, 2))
+            story.append(Paragraph("Tiempo en rangos", h2))
+            story.append(Image(io.BytesIO(tir_png), width=170 * mm, height=26 * mm))
+
+    story.append(Paragraph("Glucosa por franjas", h2))
     if "tir_pct" in glob:
         filas = [["", "TIR", "Promedio", "CV", "<70", ">180", "Hipos (eventos)"]]
         for etiqueta, st in [("Global", glob), ("Día (6-22h)", dias_franja),
