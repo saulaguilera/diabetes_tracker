@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { apiPost } from '../api.js'
 import { PAL, SANS } from '../theme.js'
 import { useLang } from '../i18n.jsx'
+import { Typewriter } from '../components/ui.jsx'
 import NebulaGuide from '../components/NebulaGuide.jsx'
 
 const SUGG_KEYS = ['cop.s1', 'cop.s2', 'cop.s3', 'cop.s4', 'cop.s5']
@@ -38,13 +39,17 @@ export default function Copiloto({ theme }) {
   const [kb, setKb] = useState(0)   // alto del teclado (visualViewport)
   const listRef = useRef(null)
 
-  // persistir la conversación (no guardamos solo el saludo)
+  // persistir la conversación (no guardamos solo el saludo; sin el flag de animación)
   useEffect(() => {
     try {
-      if (messages.length > 1)
-        localStorage.setItem(CHAT_KEY, JSON.stringify({ startedAt: startedAtRef.current, messages }))
+      if (messages.length > 1) {
+        const clean = messages.map(({ justArrived, ...rest }) => rest)
+        localStorage.setItem(CHAT_KEY, JSON.stringify({ startedAt: startedAtRef.current, messages: clean }))
+      }
     } catch {}
   }, [messages])
+
+  const scrollToBottom = () => { const el = listRef.current; if (el) el.scrollTop = el.scrollHeight }
 
   // empezar una conversación nueva (manual o cuando venció el día)
   const resetChat = () => {
@@ -82,9 +87,9 @@ export default function Copiloto({ theme }) {
     try {
       const r = await apiPost('/chat', { message: text, history })
       setMessages(m => [...m, { role: 'assistant', content: r.reply || '…',
-        usedData: (r.used_data || []).length > 0 }])
+        usedData: (r.used_data || []).length > 0, justArrived: true }])
     } catch (e) {
-      setMessages(m => [...m, { role: 'assistant', content: t('cop.error') }])
+      setMessages(m => [...m, { role: 'assistant', content: t('cop.error'), justArrived: true }])
     } finally {
       setSending(false)
     }
@@ -116,7 +121,8 @@ export default function Copiloto({ theme }) {
       {/* mensajes */}
       <div ref={listRef} style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', padding: '8px 18px 8px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         {messages.map((m, i) => (
-          <Bubble key={i} theme={theme} role={m.role} text={m.content} usedData={m.usedData}/>
+          <Bubble key={i} theme={theme} role={m.role} text={m.content} usedData={m.usedData}
+            animate={m.justArrived} onScroll={scrollToBottom}/>
         ))}
         {sending && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: theme.inkFaint, fontSize: 12.5, paddingLeft: 44 }}>
@@ -166,7 +172,7 @@ export default function Copiloto({ theme }) {
   )
 }
 
-function Bubble({ theme, role, text, usedData }) {
+function Bubble({ theme, role, text, usedData, animate, onScroll }) {
   const { t } = useLang()
   const isUser = role === 'user'
   return (
@@ -183,7 +189,10 @@ function Bubble({ theme, role, text, usedData }) {
           color: isUser ? '#0A0C1E' : theme.ink,
           borderBottomRightRadius: isUser ? 6 : 18, borderBottomLeftRadius: isUser ? 18 : 6,
           border: isUser ? 'none' : `0.5px solid ${theme.border}`, whiteSpace: 'pre-wrap' }}>
-          {text}
+          {/* el copiloto "escribe" su respuesta recién llegada; lo demás va directo */}
+          {animate && !isUser
+            ? <Typewriter text={text} onProgress={onScroll} onDone={onScroll} total={2000}/>
+            : text}
         </div>
         {/* transparencia: esta respuesta salió de consultar tus datos reales */}
         {usedData && !isUser && (

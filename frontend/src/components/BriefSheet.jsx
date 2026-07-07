@@ -8,7 +8,7 @@ import { apiGet } from '../api.js'
 import { PAL, SANS } from '../theme.js'
 import { useLang } from '../i18n.jsx'
 import NebulaGuide from './NebulaGuide.jsx'
-import { useSheetClose, backdropAnim, sheetAnim, Loading } from './ui.jsx'
+import { useSheetClose, backdropAnim, sheetAnim, Loading, Typewriter } from './ui.jsx'
 
 function fmtDate(dateStr, lang = 'es') {
   if (!dateStr) return ''
@@ -98,8 +98,9 @@ export default function BriefSheet({ theme, onClose }) {
             {/* narrativa del copiloto — aparece como si se escribiera, tranquila */}
             <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', padding: '14px 0 18px' }}>
               <div style={{ flexShrink: 0, marginTop: -2 }}><NebulaGuide kind="pancreas" size={44} light={!theme.dark}/></div>
-              <Typewriter text={data.narrative} onDone={() => setTyped(true)}
-                style={{ margin: 0, color: theme.ink, fontSize: 15.5, lineHeight: 1.55 }}/>
+              <p style={{ margin: 0, color: theme.ink, fontSize: 15.5, lineHeight: 1.55 }}>
+                <Typewriter text={data.narrative} onDone={() => setTyped(true)}/>
+              </p>
             </div>
 
             {/* métricas de hoy — se revelan suave cuando termina de escribir */}
@@ -142,30 +143,3 @@ export default function BriefSheet({ theme, onClose }) {
   ), document.body)
 }
 
-// Revela el texto como si se escribiera (calmo). Respeta prefers-reduced-motion.
-function Typewriter({ text, style, onDone }) {
-  const [n, setN] = useState(0)
-  useEffect(() => {
-    if (!text) { onDone && onDone(); return }
-    let reduce = false
-    try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch {}
-    if (reduce) { setN(text.length); onDone && onDone(); return }
-    setN(0)
-    // ritmo tranquilo: ~2.6s en total, sin bajar de 10ms/carácter
-    const step = Math.max(10, Math.round(2600 / text.length))
-    let i = 0
-    const id = setInterval(() => {
-      i += 1
-      setN(i)
-      if (i >= text.length) { clearInterval(id); onDone && onDone() }
-    }, step)
-    return () => clearInterval(id)
-  }, [text])
-  const done = !text || n >= text.length
-  return (
-    <p style={style}>
-      {text ? text.slice(0, n) : ''}
-      {!done && <span className="tw-caret" aria-hidden="true">▍</span>}
-    </p>
-  )
-}

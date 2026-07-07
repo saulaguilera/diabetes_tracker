@@ -114,7 +114,12 @@ function TopBar({ theme, onDrive }) {
       backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)',
     }}>
       <OrbitLogo size={26}/>
-      <span style={{ fontFamily: SANS, fontSize: 20, fontWeight: 300, letterSpacing: '0.01em', color: theme.ink }}>Orbit</span>
+      {/* wordmark: Orbit (blanco) · Copilot (acento) · AI (badge) */}
+      <span style={{ fontFamily: SANS, fontSize: 19, fontWeight: 300, letterSpacing: '0.01em', color: theme.ink, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span>Orbit <span style={{ color: theme.accent, fontWeight: 500 }}>Copilot</span></span>
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', padding: '2px 6px',
+          borderRadius: 6, color: theme.accent, background: `${theme.accent}1F`, border: `0.5px solid ${theme.accent}55` }}>AI</span>
+      </span>
       <div style={{ flex: 1 }}/>
       {/* Drive Mode — siempre a mano, arriba a la derecha */}
       <button onClick={onDrive} aria-label={t('app.driveAria')} style={{

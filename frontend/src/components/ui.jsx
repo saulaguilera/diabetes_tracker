@@ -1,7 +1,36 @@
 // ui.jsx — primitivos visuales compartidos.
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { SANS } from '../theme.js'
 import OrbitLogo from './OrbitLogo.jsx'
+
+// Revela el texto como si se escribiera (calmo). Respeta prefers-reduced-motion.
+// onProgress se llama en cada carácter (p.ej. para seguir el scroll en el chat).
+export function Typewriter({ text, style, onDone, onProgress, total = 2600, minStep = 10 }) {
+  const [n, setN] = useState(0)
+  useEffect(() => {
+    if (!text) { onDone && onDone(); return }
+    let reduce = false
+    try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch {}
+    if (reduce) { setN(text.length); onDone && onDone(); return }
+    setN(0)
+    const step = Math.max(minStep, Math.round(total / text.length))
+    let i = 0
+    const id = setInterval(() => {
+      i += 1
+      setN(i)
+      onProgress && onProgress()
+      if (i >= text.length) { clearInterval(id); onDone && onDone() }
+    }, step)
+    return () => clearInterval(id)
+  }, [text])
+  const done = !text || n >= text.length
+  return (
+    <span style={style}>
+      {text ? text.slice(0, n) : ''}
+      {!done && <span className="tw-caret" aria-hidden="true">▍</span>}
+    </span>
+  )
+}
 
 // Estado de carga: el logo de Orbit con el satélite orbitando (más rápido).
 // Reemplaza el texto "Cargando…" en todas las pantallas.
