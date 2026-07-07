@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { apiGet, apiPut } from '../api.js'
 import { PAL, SANS } from '../theme.js'
 import { Card, Eyebrow, Stepper, Field, useSheetClose, backdropAnim, sheetAnim } from '../components/ui.jsx'
+import { useLang, LANGS } from '../i18n.jsx'
 
 function Centered({ theme, children }) {
   return <div style={{ minHeight: '50%', display: 'grid', placeItems: 'center', textAlign: 'center', padding: '0 32px', color: theme.inkSoft, fontSize: 14, fontFamily: SANS }}>{children}</div>
@@ -42,6 +43,7 @@ function Toggle({ on, onChange, color }) {
 }
 
 export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleTheme }) {
+  const { t, lang, setLang } = useLang()
   const [data, setData] = useState(null)
   const [err, setErr] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
@@ -56,8 +58,8 @@ export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleThe
     return () => { alive = false }
   }, [refreshKey, reloadKey])
 
-  if (err) return <Centered theme={theme}>No se pudo cargar tu perfil ahora.</Centered>
-  if (!data) return <Centered theme={theme}>Cargando…</Centered>
+  if (err) return <Centered theme={theme}>{t('perfil.loadError')}</Centered>
+  if (!data) return <Centered theme={theme}>{t('common.loading')}</Centered>
 
   const s = data.sensor || {}
   const c = data.config || {}
@@ -72,68 +74,83 @@ export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleThe
     <div style={{ padding: '4px 22px 120px', fontFamily: SANS, display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
         <div>
-          <Eyebrow theme={theme}>Perfil</Eyebrow>
-          {data.name && <div style={{ fontSize: 26, fontWeight: 300, color: theme.ink, marginTop: 8, letterSpacing: '-0.02em' }}>Hola, {data.name}</div>}
+          <Eyebrow theme={theme}>{t('perfil.title')}</Eyebrow>
+          {data.name && <div style={{ fontSize: 26, fontWeight: 300, color: theme.ink, marginTop: 8, letterSpacing: '-0.02em' }}>{t('perfil.hi', { name: data.name })}</div>}
         </div>
-        <button onClick={() => setEditing(true)} style={{ background: 'none', border: 'none', color: theme.accent, fontSize: 14, fontFamily: SANS, cursor: 'pointer', padding: '4px 0' }}>Editar</button>
+        <button onClick={() => setEditing(true)} style={{ background: 'none', border: 'none', color: theme.accent, fontSize: 14, fontFamily: SANS, cursor: 'pointer', padding: '4px 0' }}>{t('common.edit')}</button>
       </div>
 
       {/* sensor */}
       <Card theme={theme}>
-        <Eyebrow theme={theme} style={{ fontSize: 10, marginBottom: 4 }}>Tu sensor</Eyebrow>
-        <Row theme={theme} label="Última lectura" value={s.last_reading != null ? `${s.last_reading} mg/dL · ${s.last_reading_ago}` : '—'}/>
-        <Row theme={theme} label="Sincronización" value={s.last_sync_ago || '—'}/>
-        <Row theme={theme} label="Fuente" value={s.source === 'cgm_libre' ? 'FreeStyle Libre' : (s.source || '—')}/>
+        <Eyebrow theme={theme} style={{ fontSize: 10, marginBottom: 4 }}>{t('perfil.sensor')}</Eyebrow>
+        <Row theme={theme} label={t('perfil.lastReading')} value={s.last_reading != null ? `${s.last_reading} mg/dL · ${s.last_reading_ago}` : '—'}/>
+        <Row theme={theme} label={t('perfil.sync')} value={s.last_sync_ago || '—'}/>
+        <Row theme={theme} label={t('perfil.source')} value={s.source === 'cgm_libre' ? 'FreeStyle Libre' : (s.source || '—')}/>
       </Card>
 
       {/* terapia — configurado + observado en tus datos (referencia, no auto-aplica) */}
       <Card theme={theme}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <Eyebrow theme={theme} style={{ fontSize: 10 }}>Tu terapia</Eyebrow>
-          <button onClick={() => setEditing(true)} style={{ background: 'none', border: 'none', color: theme.accent, fontSize: 12.5, fontFamily: SANS, cursor: 'pointer' }}>Editar</button>
+          <Eyebrow theme={theme} style={{ fontSize: 10 }}>{t('perfil.therapy')}</Eyebrow>
+          <button onClick={() => setEditing(true)} style={{ background: 'none', border: 'none', color: theme.accent, fontSize: 12.5, fontFamily: SANS, cursor: 'pointer' }}>{t('common.edit')}</button>
         </div>
-        <Row theme={theme} label="Objetivo" value={fmt(c.objetivo, ' mg/dL')}/>
-        <Row theme={theme} label="Sensibilidad (ISF)"
+        <Row theme={theme} label={t('perfil.target')} value={fmt(c.objetivo, ' mg/dL')}/>
+        <Row theme={theme} label={t('perfil.isf')}
           value={c.isf != null ? `${c.isf} mg/dL/U` : 'auto'}
-          sub={obs.isf ? `en tus datos: ~${obs.isf.mu} (${obs.isf.n} obs.)` : null}/>
-        <Row theme={theme} label="Ratio (ICR)"
+          sub={obs.isf ? t('perfil.inYourData', { v: obs.isf.mu, n: obs.isf.n }) : null}/>
+        <Row theme={theme} label={t('perfil.icr')}
           value={c.icr != null ? `${c.icr} g/U` : 'auto'}
-          sub={obs.icr ? `en tus datos: ~${obs.icr.mu} (${obs.icr.n} obs.)` : null}/>
-        <Row theme={theme} label="Basal" value={basalTxt}/>
+          sub={obs.icr ? t('perfil.inYourData', { v: obs.icr.mu, n: obs.icr.n }) : null}/>
+        <Row theme={theme} label={t('perfil.basal')} value={basalTxt}/>
         {(obs.isf || obs.icr) && (
           <div style={{ color: theme.inkFaint, fontSize: 11, lineHeight: 1.5, marginTop: 10 }}>
-            "En tus datos" es lo que Orbit observó (aprendizaje bayesiano por franjas).
-            Es referencia para conversar con tu equipo médico — no se aplica solo.
+            {t('perfil.observedNote')}
           </div>
         )}
       </Card>
 
       {/* equipo médico — reporte PDF descriptivo para llevar a la consulta */}
       <Card theme={theme} glow={PAL.glucosa.soft}>
-        <Eyebrow theme={theme} style={{ fontSize: 10, marginBottom: 10 }}>Tu equipo médico</Eyebrow>
-        <div style={{ color: theme.ink, fontSize: 15, marginBottom: 4 }}>Reporte para tu consulta</div>
+        <Eyebrow theme={theme} style={{ fontSize: 10, marginBottom: 10 }}>{t('perfil.team')}</Eyebrow>
+        <div style={{ color: theme.ink, fontSize: 15, marginBottom: 4 }}>{t('perfil.reportTitle')}</div>
         <div style={{ color: theme.inkSoft, fontSize: 13, lineHeight: 1.5, marginBottom: 14 }}>
-          TIR, noches, hipos y coberturas observadas de los últimos 30 días — datos, no opiniones.
+          {t('perfil.reportDesc')}
         </div>
         <button onClick={() => window.open('/api/copilot/report.pdf?days=30', '_blank')} style={{
           width: '100%', padding: '12px', borderRadius: 14, border: 'none',
           background: PAL.glucosa.key, color: '#0A0C1E', fontSize: 14, fontWeight: 600,
           fontFamily: SANS, cursor: 'pointer' }}>
-          Descargar reporte (PDF)
+          {t('perfil.downloadPdf')}
         </button>
+      </Card>
+
+      {/* idioma */}
+      <Card theme={theme}>
+        <Eyebrow theme={theme} style={{ fontSize: 10, marginBottom: 12 }}>{t('perfil.language')}</Eyebrow>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {LANGS.map(l => (
+            <button key={l.id} onClick={() => setLang(l.id)} style={{
+              flex: 1, padding: '11px', borderRadius: 12, cursor: 'pointer', fontFamily: SANS, fontSize: 14,
+              border: `0.5px solid ${lang === l.id ? theme.accent : theme.border}`,
+              background: lang === l.id ? `${theme.accent}22` : 'transparent',
+              color: lang === l.id ? theme.ink : theme.inkSoft, fontWeight: lang === l.id ? 600 : 400 }}>
+              {l.label}
+            </button>
+          ))}
+        </div>
       </Card>
 
       {/* apariencia */}
       <Card theme={theme} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <Eyebrow theme={theme} style={{ fontSize: 10 }}>Apariencia</Eyebrow>
-          <div style={{ color: theme.ink, fontSize: 15, marginTop: 6 }}>Tema oscuro</div>
+          <Eyebrow theme={theme} style={{ fontSize: 10 }}>{t('perfil.appearance')}</Eyebrow>
+          <div style={{ color: theme.ink, fontSize: 15, marginTop: 6 }}>{t('perfil.darkTheme')}</div>
         </div>
         <Toggle on={dark} onChange={onToggleTheme} color={theme.accent}/>
       </Card>
 
       <div style={{ color: theme.inkFaint, fontSize: 11, textAlign: 'center', lineHeight: 1.5 }}>
-        Orbit · copiloto metabólico
+        {t('perfil.footer')}
       </div>
 
       {editing && <EditSheet theme={theme} name={data.name} config={c} obs={obs}
@@ -143,6 +160,7 @@ export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleThe
 }
 
 function EditSheet({ theme, name: name0, config, obs = {}, onClose, onSaved }) {
+  const { t } = useLang()
   const [name, setName] = useState(name0 || '')
   const [objetivo, setObjetivo] = useState(Math.round(config.objetivo ?? 100))
   // ISF/ICR: 'auto' = sin override manual (la app usa lo aprendido de tus
@@ -167,7 +185,7 @@ function EditSheet({ theme, name: name0, config, obs = {}, onClose, onSaved }) {
     if (isfMode === 'auto') body.isf_auto = true; else body.isf = isf
     if (icrMode === 'auto') body.icr_auto = true; else body.icr = icr
     try { await apiPut('/profile', body); onSaved() }
-    catch (e) { setErr('No se pudo guardar.'); setBusy(false) }
+    catch (e) { setErr(t('perfil.saveError')); setBusy(false) }
   }
 
   // segmento Auto/Manual para ISF e ICR
@@ -179,7 +197,7 @@ function EditSheet({ theme, name: name0, config, obs = {}, onClose, onSaved }) {
           border: `0.5px solid ${mode === m ? theme.accent : theme.border}`,
           background: mode === m ? `${theme.accent}22` : 'transparent',
           color: mode === m ? theme.accent : theme.inkSoft, fontWeight: mode === m ? 600 : 400 }}>
-          {m === 'auto' ? 'Automático' : 'Manual'}
+          {m === 'auto' ? t('perfil.auto') : t('perfil.manual')}
         </button>
       ))}
     </div>
@@ -193,58 +211,58 @@ function EditSheet({ theme, name: name0, config, obs = {}, onClose, onSaved }) {
         animation: sheetAnim(closing), maxHeight: '88%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ padding: '22px 22px 0', flexShrink: 0 }}>
           <div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border, margin: '0 auto 18px' }}/>
-          <div style={{ color: theme.ink, fontSize: 18, fontWeight: 500, marginBottom: 14 }}>Editar perfil</div>
+          <div style={{ color: theme.ink, fontSize: 18, fontWeight: 500, marginBottom: 14 }}>{t('perfil.editTitle')}</div>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '4px 22px 8px', WebkitOverflowScrolling: 'touch' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
-            <div style={{ color: theme.inkFaint, fontSize: 11, marginBottom: 7 }}>Nombre</div>
-            <Field theme={theme} value={name} onChange={setName} placeholder="Tu nombre"/>
+            <div style={{ color: theme.inkFaint, fontSize: 11, marginBottom: 7 }}>{t('perfil.name')}</div>
+            <Field theme={theme} value={name} onChange={setName} placeholder={t('perfil.namePh')}/>
           </div>
-          <FieldRow theme={theme} label="Objetivo (mg/dL)"><Stepper theme={theme} value={objetivo} setValue={setObjetivo} step={5} min={70} max={180} unit="" color={theme.accent}/></FieldRow>
+          <FieldRow theme={theme} label={t('perfil.targetField')}><Stepper theme={theme} value={objetivo} setValue={setObjetivo} step={5} min={70} max={180} unit="" color={theme.accent}/></FieldRow>
 
           {/* ISF: automático (aprendido de tus datos) o manual (acordado con tu médico) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <FieldRow theme={theme} label="Sensibilidad ISF"><ModeSwitch mode={isfMode} setMode={setIsfMode}/></FieldRow>
+            <FieldRow theme={theme} label={t('perfil.isf')}><ModeSwitch mode={isfMode} setMode={setIsfMode}/></FieldRow>
             {isfMode === 'manual' ? (
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <Stepper theme={theme} value={isf} setValue={setIsf} step={1} min={5} max={200} unit="" color={theme.ink}/>
               </div>
             ) : (
               <div style={{ color: theme.inkFaint, fontSize: 12, textAlign: 'right' }}>
-                {obs.isf ? `usa lo aprendido de tus datos (~${obs.isf.mu} mg/dL/U, ${obs.isf.n} obs.)` : 'usa lo aprendido de tus datos'}
+                {obs.isf ? t('perfil.usesLearnedIsf', { v: obs.isf.mu, n: obs.isf.n }) : t('perfil.usesLearned')}
               </div>
             )}
           </div>
 
           {/* ICR: idem */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <FieldRow theme={theme} label="Ratio ICR"><ModeSwitch mode={icrMode} setMode={setIcrMode}/></FieldRow>
+            <FieldRow theme={theme} label={t('perfil.icr')}><ModeSwitch mode={icrMode} setMode={setIcrMode}/></FieldRow>
             {icrMode === 'manual' ? (
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <Stepper theme={theme} value={icr} setValue={setIcr} step={1} min={2} max={40} unit="" color={theme.ink}/>
               </div>
             ) : (
               <div style={{ color: theme.inkFaint, fontSize: 12, textAlign: 'right' }}>
-                {obs.icr ? `usa lo aprendido de tus datos (~${obs.icr.mu} g/U, ${obs.icr.n} obs.)` : 'usa lo aprendido de tus datos'}
+                {obs.icr ? t('perfil.usesLearnedIcr', { v: obs.icr.mu, n: obs.icr.n }) : t('perfil.usesLearned')}
               </div>
             )}
           </div>
 
           <div style={{ borderTop: `0.5px solid ${theme.border}`, paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ color: theme.inkFaint, fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Basal</div>
-            <FieldRow theme={theme} label="Dosis diaria"><Stepper theme={theme} value={basalDose} setValue={setBasalDose} step={1} min={0} max={80} unit="U" color={theme.ink}/></FieldRow>
-            <FieldRow theme={theme} label="Hora habitual"><Stepper theme={theme} value={basalHora} setValue={setBasalHora} step={1} min={0} max={23} unit="h" color={theme.ink}/></FieldRow>
+            <div style={{ color: theme.inkFaint, fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase' }}>{t('perfil.basal')}</div>
+            <FieldRow theme={theme} label={t('perfil.basalDose')}><Stepper theme={theme} value={basalDose} setValue={setBasalDose} step={1} min={0} max={80} unit="U" color={theme.ink}/></FieldRow>
+            <FieldRow theme={theme} label={t('perfil.basalHour')}><Stepper theme={theme} value={basalHora} setValue={setBasalHora} step={1} min={0} max={23} unit="h" color={theme.ink}/></FieldRow>
             <div>
-              <div style={{ color: theme.inkFaint, fontSize: 11, marginBottom: 7 }}>Tipo (toujeo, glargina, degludec…)</div>
+              <div style={{ color: theme.inkFaint, fontSize: 11, marginBottom: 7 }}>{t('perfil.basalType')}</div>
               <Field theme={theme} value={basalTipo} onChange={setBasalTipo} placeholder="toujeo"/>
             </div>
           </div>
         </div>
 
         <div style={{ color: theme.inkFaint, fontSize: 11.5, marginTop: 14, lineHeight: 1.5 }}>
-          La basal alimenta el modelo, el contexto del copiloto y el recordatorio diario.
+          {t('perfil.basalNote')}
         </div>
         {err && <div style={{ color: '#D98A6A', fontSize: 13, marginTop: 10 }}>{err}</div>}
         </div>
@@ -255,7 +273,7 @@ function EditSheet({ theme, name: name0, config, obs = {}, onClose, onSaved }) {
           background: theme.dark ? '#0E1426' : '#fff' }}>
           <button onClick={save} disabled={busy} style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none',
             background: theme.accent, color: '#0A0C1E', fontSize: 15, fontWeight: 600, fontFamily: SANS, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
-            {busy ? 'Guardando…' : 'Guardar'}
+            {busy ? t('common.saving') : t('common.save')}
           </button>
         </div>
       </div>

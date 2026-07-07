@@ -17,6 +17,17 @@ bp = Blueprint("copilot_api", __name__)
 
 LOW, HIGH = 70, 180
 
+# idioma de respuesta del copiloto (según el setting ui_lang)
+_LANG_NAME = {"es": "español (neutro, latinoamericano)", "en": "English", "pt": "português"}
+
+
+def _copilot_lang():
+    try:
+        from helpers import _get_setting as _gs
+        return _LANG_NAME.get((_gs("ui_lang") or "es").strip().lower(), _LANG_NAME["es"])
+    except Exception:
+        return _LANG_NAME["es"]
+
 # etiquetas de contexto: clave canónica → etiqueta visible
 TAG_LABELS = {
     "estres": "😰 Estrés", "enfermo": "🤒 Enfermedad", "mal_sueno": "😴 Dormí mal",
@@ -247,11 +258,18 @@ def _today_stats():
 
 
 def _greeting(hour):
-    if hour < 12:
-        return "Buenos días"
-    if hour < 20:
-        return "Buenas tardes"
-    return "Buenas noches"
+    lang = "es"
+    try:
+        from helpers import _get_setting as _gs
+        lang = (_gs("ui_lang") or "es").strip().lower()
+    except Exception:
+        pass
+    G = {
+        "es": ("Buenos días", "Buenas tardes", "Buenas noches"),
+        "en": ("Good morning", "Good afternoon", "Good evening"),
+        "pt": ("Bom dia", "Boa tarde", "Boa noite"),
+    }.get(lang, ("Buenos días", "Buenas tardes", "Buenas noches"))
+    return G[0] if hour < 12 else G[1] if hour < 20 else G[2]
 
 
 def _brief_context(s):
@@ -325,6 +343,7 @@ REGLAS ESTRICTAS E INVIOLABLES:
 - NUNCA recomiendes dosis, correcciones, qué comer o hacer, ni des indicaciones médicas.
 - NUNCA predigas la glucosa futura ni afirmes qué va a pasar.
 - 3 a 4 frases, en segunda persona, tono humano, cálido y tranquilo. Sin listas ni emojis.
+- Escribí SIEMPRE en {IDIOMA}.
 - No inventes datos que no estén abajo.
 
 CÓMO ESCRIBIRLO (en este orden, todo en prosa):
@@ -380,7 +399,7 @@ def copilot_brief():
             resp = client.messages.create(
                 model="claude-haiku-4-5",
                 max_tokens=200,
-                system=_BRIEF_SYSTEM.format(context=ctx),
+                system=_BRIEF_SYSTEM.format(context=ctx, IDIOMA=_copilot_lang()),
                 messages=[{"role": "user", "content": "Escribí mi resumen del día."}],
             )
             txt = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
@@ -657,7 +676,7 @@ REGLAS ESTRICTAS E INVIOLABLES:
 - Si te piden una dosis, una corrección o "qué hago", decliná con amabilidad y sugerí
   consultarlo con su equipo médico. No es tu rol decidir.
 - Solo explicás lo que muestran sus datos (presente y pasado) y acompañás.
-- Respondé SIEMPRE en español, en segunda persona, cálido y breve (2 a 4 frases).
+- Respondé SIEMPRE en {IDIOMA}, en segunda persona, cálido y breve (2 a 4 frases).
 - No inventes datos que no estén en el contexto.
 - Si el contexto trae el NOMBRE de la persona, usalo con naturalidad y de vez
   en cuando (un saludo, un momento de ánimo) — no en cada mensaje, que no
@@ -865,7 +884,7 @@ def copilot_chat():
         from utils.copilot_tools import COPILOT_TOOLS, run_tool
 
         client = anthropic.Anthropic(api_key=api_key)
-        system = _CHAT_SYSTEM.format(context=_chat_context())
+        system = _CHAT_SYSTEM.format(context=_chat_context(), IDIOMA=_copilot_lang())
         # Sonnet para calidad analítica (las consultas requieren razonar sobre
         # números). Override por env si algún día hay que bajar costo.
         model = os.environ.get("COPILOT_CHAT_MODEL", "claude-sonnet-5")
@@ -1324,6 +1343,11 @@ def copilot_profile_edit():
                     _set_setting("basal_hora", str(h))
             except (TypeError, ValueError):
                 pass
+        # idioma de la UI → el copiloto responde en el mismo idioma
+        if "ui_lang" in data:
+            lang = (data.get("ui_lang") or "").strip().lower()[:5]
+            if lang in ("es", "en", "pt"):
+                _set_setting("ui_lang", lang)
         return jsonify({"ok": True})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400

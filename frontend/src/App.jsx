@@ -11,6 +11,7 @@ import Patrones from './screens/Patrones.jsx'
 import Copiloto from './screens/Copiloto.jsx'
 import Perfil from './screens/Perfil.jsx'
 import DriveModeScreen from './drive_mode/DriveModeScreen.jsx'
+import { useLang } from './i18n.jsx'
 
 // Alto del viewport visible (se achica al abrir el teclado en móvil). Permite
 // que el chat del Copiloto deje el input sobre el teclado, sin mover el resto.
@@ -101,6 +102,7 @@ function PullToRefresh({ theme, onRefresh, children }) {
 
 // Barra superior global de marca: logo Orbit + wordmark + acceso a Drive Mode.
 function TopBar({ theme, onDrive }) {
+  const { t } = useLang()
   return (
     <div style={{
       position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30,
@@ -115,7 +117,7 @@ function TopBar({ theme, onDrive }) {
       <span style={{ fontFamily: SANS, fontSize: 20, fontWeight: 300, letterSpacing: '0.01em', color: theme.ink }}>Orbit</span>
       <div style={{ flex: 1 }}/>
       {/* Drive Mode — siempre a mano, arriba a la derecha */}
-      <button onClick={onDrive} aria-label="Modo conducción" style={{
+      <button onClick={onDrive} aria-label={t('app.driveAria')} style={{
         pointerEvents: 'auto', width: 36, height: 36, borderRadius: 18, cursor: 'pointer',
         display: 'grid', placeItems: 'center', padding: 0,
         border: `0.5px solid ${theme.border}`,

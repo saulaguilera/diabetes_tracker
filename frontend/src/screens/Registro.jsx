@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { apiPost, apiGet } from '../api.js'
 import { PAL, SANS } from '../theme.js'
+import { useLang } from '../i18n.jsx'
 import { Card, Eyebrow, Stepper, Segmented, Chips, Field } from '../components/ui.jsx'
 import Historial from '../components/Historial.jsx'
 
@@ -30,23 +31,27 @@ function fileToDataURL(file, max = 1024, quality = 0.8) {
 }
 
 const CATS = [
-  { id: 'comida',    label: 'Comida',    color: PAL.metabolismo.key },
-  { id: 'insulina',  label: 'Insulina',  color: PAL.insulina.key },
-  { id: 'ejercicio', label: 'Ejercicio', color: PAL.glucosa.key },
-  { id: 'contexto',  label: 'Contexto',  color: PAL.ritmo.key },
+  { id: 'comida',    key: 'reg.cat.comida',    color: PAL.metabolismo.key },
+  { id: 'insulina',  key: 'reg.cat.insulina',  color: PAL.insulina.key },
+  { id: 'ejercicio', key: 'reg.cat.ejercicio', color: PAL.glucosa.key },
+  { id: 'contexto',  key: 'reg.cat.contexto',  color: PAL.ritmo.key },
 ]
 
 // etiquetas de contexto: cosas que mueven la glucosa fuera de comida/insulina/ejercicio
 const CONTEXT_TAGS = [
-  { id: 'estres',    label: 'Estrés',      emoji: '😰' },
-  { id: 'enfermo',   label: 'Enfermedad',  emoji: '🤒' },
-  { id: 'mal_sueno', label: 'Dormí mal',   emoji: '😴' },
-  { id: 'viaje',     label: 'Viaje',       emoji: '✈️' },
-  { id: 'alcohol',   label: 'Alcohol',     emoji: '🍷' },
-  { id: 'otro',      label: 'Otro',        emoji: '📍' },
+  { id: 'estres',    key: 'reg.tag.estres',    emoji: '😰' },
+  { id: 'enfermo',   key: 'reg.tag.enfermo',   emoji: '🤒' },
+  { id: 'mal_sueno', key: 'reg.tag.mal_sueno', emoji: '😴' },
+  { id: 'viaje',     key: 'reg.tag.viaje',     emoji: '✈️' },
+  { id: 'alcohol',   key: 'reg.tag.alcohol',   emoji: '🍷' },
+  { id: 'otro',      key: 'reg.tag.otro',      emoji: '📍' },
 ]
+// opciones de ejercicio/intensidad (id estable para backend + clave i18n)
+const EX_TYPES = [['Caminar','reg.ex.walk'],['Correr','reg.ex.run'],['Bici','reg.ex.bike'],['Fuerza','reg.ex.strength'],['Otro','reg.ex.other']]
+const INTENSITIES = [['Ligera','reg.int.light'],['Moderada','reg.int.moderate'],['Intensa','reg.int.intense']]
 
 export default function Registro({ theme, onDone }) {
+  const { t } = useLang()
   const [mode, setMode] = useState('registrar')
   const [cat, setCat] = useState('comida')
   const [saving, setSaving] = useState(false)
@@ -157,7 +162,7 @@ export default function Registro({ theme, onDone }) {
       await apiPost('/log', payload())
       onDone && onDone()
     } catch (e) {
-      setErr('No se pudo guardar. Intentá de nuevo.')
+      setErr(t('reg.saveError'))
     } finally {
       setSaving(false)
     }
@@ -165,13 +170,13 @@ export default function Registro({ theme, onDone }) {
 
   return (
     <div style={{ padding: '4px 22px 120px', fontFamily: SANS, display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <Eyebrow theme={theme}>Registro</Eyebrow>
+      <Eyebrow theme={theme}>{t('reg.title')}</Eyebrow>
 
-      <Segmented theme={theme} options={[{ id: 'registrar', label: 'Registrar' }, { id: 'historial', label: 'Historial' }]} value={mode} onChange={setMode} color={theme.accent}/>
+      <Segmented theme={theme} options={[{ id: 'registrar', label: t('reg.tabLog') }, { id: 'historial', label: t('reg.tabHistory') }]} value={mode} onChange={setMode} color={theme.accent}/>
 
       {mode === 'historial' ? <Historial theme={theme}/> : (
       <>
-      <Segmented theme={theme} options={CATS} value={cat} onChange={setCat} color={color}/>
+      <Segmented theme={theme} options={CATS.map(c => ({ id: c.id, label: t(c.key) }))} value={cat} onChange={setCat} color={color}/>
 
       {cat === 'comida' && (
         <Card theme={theme} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -184,12 +189,12 @@ export default function Registro({ theme, onDone }) {
               cursor: scanning ? 'default' : 'pointer', fontFamily: SANS, fontSize: 15,
               background: theme.surface, border: `1.5px dashed ${theme.borderStrong}`, color: theme.inkSoft }}>
               {scanning ? (
-                <><span className="ai-orbit" style={{ width: 22, height: 22, borderRadius: '50%', border: `2.5px solid ${color}44`, borderTopColor: color }}/> Estimando…</>
+                <><span className="ai-orbit" style={{ width: 22, height: 22, borderRadius: '50%', border: `2.5px solid ${color}44`, borderTopColor: color }}/> {t('reg.estimating')}</>
               ) : (
                 <>
                   <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                  <span>Escanear comida con cámara</span>
-                  <span style={{ fontSize: 12, color: theme.inkFaint }}>identifica ingredientes y estima carbos</span>
+                  <span>{t('reg.scan')}</span>
+                  <span style={{ fontSize: 12, color: theme.inkFaint }}>{t('reg.scanHint')}</span>
                 </>
               )}
             </button>
@@ -199,13 +204,13 @@ export default function Registro({ theme, onDone }) {
                 <img src={photo} alt="" style={{ width: 56, height: 56, borderRadius: 12, objectFit: 'cover', flexShrink: 0 }}/>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 12.5, color: theme.inkSoft }}>
-                    {scanning ? 'Analizando componentes…' : 'Estimado por IA · revisá los valores'}
+                    {scanning ? t('reg.analyzing') : t('reg.estimatedBy')}
                   </div>
                   <div style={{ display: 'flex', gap: 14, marginTop: 4 }}>
-                    <button onClick={() => fileRef.current && fileRef.current.click()} style={{ background: 'none', border: 'none', color, fontSize: 12.5, cursor: 'pointer', fontFamily: SANS, padding: 0 }}>Cambiar foto</button>
+                    <button onClick={() => fileRef.current && fileRef.current.click()} style={{ background: 'none', border: 'none', color, fontSize: 12.5, cursor: 'pointer', fontFamily: SANS, padding: 0 }}>{t('reg.changePhoto')}</button>
                     {/* corregiste el nombre → re-estima usándolo como pista */}
                     {!scanning && lastPhotoRef.current && (
-                      <button onClick={() => estimate(lastPhotoRef.current, name)} style={{ background: 'none', border: 'none', color: theme.inkSoft, fontSize: 12.5, cursor: 'pointer', fontFamily: SANS, padding: 0 }}>↻ Re-estimar con el nombre</button>
+                      <button onClick={() => estimate(lastPhotoRef.current, name)} style={{ background: 'none', border: 'none', color: theme.inkSoft, fontSize: 12.5, cursor: 'pointer', fontFamily: SANS, padding: 0 }}>{t('reg.reestimate')}</button>
                     )}
                   </div>
                 </div>
@@ -228,7 +233,7 @@ export default function Registro({ theme, onDone }) {
                   ))}
                   {confidence === 'baja' && (
                     <div style={{ marginTop: 6, fontSize: 12, color: '#E0B057' }}>
-                      ⚠︎ Confianza baja — revisá bien antes de guardar (o re-estimá con el nombre correcto).
+                      {t('reg.lowConfidence')}
                     </div>
                   )}
                 </div>
@@ -236,7 +241,7 @@ export default function Registro({ theme, onDone }) {
             </div>
           )}
           <div style={{ position: 'relative' }}>
-            <Field theme={theme} value={name} onChange={setName} placeholder="¿Qué comiste? (ej: 200ml leche)"/>
+            <Field theme={theme} value={name} onChange={setName} placeholder={t('reg.whatAte')}/>
             {/* sugerencias desde la base nutricional (CH netos por porción) */}
             {sugg.length > 0 && (
               <div className="rise-in" style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 40, marginTop: 6,
@@ -258,49 +263,44 @@ export default function Registro({ theme, onDone }) {
               </div>
             )}
           </div>
-          <Row theme={theme} label="Carbohidratos"><Stepper theme={theme} value={carbs} setValue={setCarbs} step={5} max={300} unit="g" color={color}/></Row>
-          {scanned && fiber > 0 && (
-            <div style={{ fontSize: 12, color: theme.inkFaint, lineHeight: 1.5, marginTop: -8 }}>
-              Carbos <b style={{ color: theme.inkSoft }}>netos</b>: estimamos {carbs + fiber}g de carbos − {fiber}g de fibra = {carbs}g (la fibra casi no sube la glucosa).
-            </div>
-          )}
-          <Row theme={theme} label="Proteína"><Stepper theme={theme} value={protein} setValue={setProtein} step={5} max={200} unit="g" color={theme.ink}/></Row>
-          <Row theme={theme} label="Grasa"><Stepper theme={theme} value={fat} setValue={setFat} step={5} max={200} unit="g" color={theme.ink}/></Row>
+          <Row theme={theme} label={t('reg.carbs')}><Stepper theme={theme} value={carbs} setValue={setCarbs} step={5} max={300} unit="g" color={color}/></Row>
+          <Row theme={theme} label={t('reg.protein')}><Stepper theme={theme} value={protein} setValue={setProtein} step={5} max={200} unit="g" color={theme.ink}/></Row>
+          <Row theme={theme} label={t('reg.fat')}><Stepper theme={theme} value={fat} setValue={setFat} step={5} max={200} unit="g" color={theme.ink}/></Row>
         </Card>
       )}
 
       {cat === 'insulina' && (
         <Card theme={theme} style={{ display: 'flex', flexDirection: 'column', gap: 22, alignItems: 'center' }}>
           <Stepper theme={theme} value={units} setValue={setUnits} step={0.5} max={50} unit="U" color={color} big/>
-          <Chips theme={theme} options={['Rápida', 'Basal']} value={insType} onChange={setInsType} color={color}/>
+          <Chips theme={theme} options={[{ id: 'Rápida', label: t('reg.rapid') }, { id: 'Basal', label: t('reg.basal') }]} value={insType} onChange={setInsType} color={color}/>
         </Card>
       )}
 
       {cat === 'ejercicio' && (
         <Card theme={theme} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          <Chips theme={theme} options={['Caminar', 'Correr', 'Bici', 'Fuerza', 'Otro']} value={actType} onChange={setActType} color={color}/>
-          <Row theme={theme} label="Duración"><Stepper theme={theme} value={dur} setValue={setDur} step={5} max={300} unit="min" color={color}/></Row>
-          <Chips theme={theme} options={['Ligera', 'Moderada', 'Intensa']} value={intensity} onChange={setIntensity} color={color}/>
+          <Chips theme={theme} options={EX_TYPES.map(([id, k]) => ({ id, label: t(k) }))} value={actType} onChange={setActType} color={color}/>
+          <Row theme={theme} label={t('reg.duration')}><Stepper theme={theme} value={dur} setValue={setDur} step={5} max={300} unit="min" color={color}/></Row>
+          <Chips theme={theme} options={INTENSITIES.map(([id, k]) => ({ id, label: t(k) }))} value={intensity} onChange={setIntensity} color={color}/>
         </Card>
       )}
 
       {cat === 'contexto' && (
         <Card theme={theme} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ color: theme.inkSoft, fontSize: 13, lineHeight: 1.5 }}>
-            ¿Algo que hoy pueda estar moviendo tu glucosa? Marcalo y el copiloto lo tiene en cuenta.
+            {t('reg.ctxPrompt')}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {CONTEXT_TAGS.map(t => (
-              <button key={t.id} onClick={() => setCtxTag(t.id)} style={{
+            {CONTEXT_TAGS.map(ct => (
+              <button key={ct.id} onClick={() => setCtxTag(ct.id)} style={{
                 padding: '10px 14px', borderRadius: 100, cursor: 'pointer', fontFamily: SANS, fontSize: 13.5,
-                border: `0.5px solid ${ctxTag === t.id ? color : theme.border}`,
-                background: ctxTag === t.id ? `${color}22` : 'transparent',
-                color: ctxTag === t.id ? theme.ink : theme.inkSoft, fontWeight: ctxTag === t.id ? 600 : 400 }}>
-                {t.emoji} {t.label}
+                border: `0.5px solid ${ctxTag === ct.id ? color : theme.border}`,
+                background: ctxTag === ct.id ? `${color}22` : 'transparent',
+                color: ctxTag === ct.id ? theme.ink : theme.inkSoft, fontWeight: ctxTag === ct.id ? 600 : 400 }}>
+                {ct.emoji} {t(ct.key)}
               </button>
             ))}
           </div>
-          <Field theme={theme} value={ctxNotes} onChange={setCtxNotes} placeholder="Nota opcional (ej: resfrío, reunión difícil…)"/>
+          <Field theme={theme} value={ctxNotes} onChange={setCtxNotes} placeholder={t('reg.ctxNote')}/>
         </Card>
       )}
 
@@ -310,7 +310,7 @@ export default function Registro({ theme, onDone }) {
         marginTop: 4, padding: '15px', borderRadius: 16, border: 'none', cursor: saving ? 'default' : 'pointer',
         background: color, color: '#0A0C1E', fontSize: 15, fontWeight: 600, fontFamily: SANS,
         opacity: saving ? 0.6 : 1, transition: 'opacity 0.2s' }}>
-        {saving ? 'Guardando…' : 'Registrar'}
+        {saving ? t('common.saving') : t('reg.register')}
       </button>
       </>
       )}

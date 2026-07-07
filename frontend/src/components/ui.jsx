@@ -90,17 +90,20 @@ export function Segmented({ theme, options, value, onChange, color }) {
   )
 }
 
+// options: array de strings, o de { id, label } (id = valor estable, label = texto visible)
 export function Chips({ theme, options, value, onChange, color }) {
   const c = color || theme.accent
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
       {options.map(o => {
-        const on = value === o
+        const id = typeof o === 'string' ? o : o.id
+        const label = typeof o === 'string' ? o : o.label
+        const on = value === id
         return (
-          <button key={o} onClick={() => onChange(o)} style={{
+          <button key={id} onClick={() => onChange(id)} style={{
             padding: '8px 14px', borderRadius: 100, cursor: 'pointer', fontFamily: SANS, fontSize: 13,
             background: on ? `${c}22` : theme.surface, color: on ? c : theme.inkSoft,
-            border: `0.5px solid ${on ? c + '88' : theme.border}`, transition: 'all 0.2s' }}>{o}</button>
+            border: `0.5px solid ${on ? c + '88' : theme.border}`, transition: 'all 0.2s' }}>{label}</button>
         )
       })}
     </div>
