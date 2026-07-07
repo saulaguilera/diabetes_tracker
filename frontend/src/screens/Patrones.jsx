@@ -50,7 +50,7 @@ function Stat({ theme, label, value, unit, color }) {
 }
 
 export default function Patrones({ theme, refreshKey = 0 }) {
-  const { t } = useLang()
+  const { t, gVal, gUnit } = useLang()
   const [data, setData] = useState(null)
   const [err, setErr] = useState(null)
   const [expanded, setExpanded] = useState(false)
@@ -91,10 +91,11 @@ export default function Patrones({ theme, refreshKey = 0 }) {
         {expanded && (() => {
           const bajo = r.hipo_pct || 0, alto = r.hiper_pct || 0
           const rango = r.tir != null ? r.tir : Math.max(0, 100 - bajo - alto)
+          const thr = { hi: gVal(180), lo: gVal(70) }
           const dist = [
-            { label: t('pat.distHigh'), val: alto, color: '#E0B057' },
-            { label: t('pat.distRange'), val: rango, color: '#5FC6A8' },
-            { label: t('pat.distLow'), val: bajo, color: '#D98A6A' },
+            { label: t('pat.distHigh', thr), val: alto, color: '#E0B057' },
+            { label: t('pat.distRange', thr), val: rango, color: '#5FC6A8' },
+            { label: t('pat.distLow', thr), val: bajo, color: '#D98A6A' },
           ]
           return (
             <div style={{ marginTop: 18, paddingTop: 16, borderTop: `0.5px solid ${theme.border}` }} onClick={e => e.stopPropagation()}>
@@ -126,7 +127,7 @@ export default function Patrones({ theme, refreshKey = 0 }) {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 14, marginTop: 12 }}>
-                <span style={{ color: theme.inkSoft, fontSize: 13 }}>{t('pat.average')} <b style={{ color: theme.ink, fontWeight: 500 }}>{r.avg ?? '—'}</b> mg/dL</span>
+                <span style={{ color: theme.inkSoft, fontSize: 13 }}>{t('pat.average')} <b style={{ color: theme.ink, fontWeight: 500 }}>{r.avg != null ? gVal(r.avg) : '—'}</b> {gUnit}</span>
                 <span style={{ color: theme.inkSoft, fontSize: 13 }}>{t('pat.variability')} <b style={{ color: theme.ink, fontWeight: 500 }}>{r.cv ?? '—'}%</b></span>
               </div>
             </div>
@@ -138,7 +139,7 @@ export default function Patrones({ theme, refreshKey = 0 }) {
       <Card theme={theme} style={{ padding: '16px 20px' }}>
         <Eyebrow theme={theme} style={{ fontSize: 10 }}>{t('pat.summary', { n: r.days || 14 })}</Eyebrow>
         <div style={{ display: 'flex', gap: 12, marginTop: 14 }}>
-          <Stat theme={theme} label={t('pat.average')} value={r.avg} unit="mg/dL"/>
+          <Stat theme={theme} label={t('pat.average')} value={r.avg != null ? gVal(r.avg) : null} unit={gUnit}/>
           {div}
           <Stat theme={theme} label={t('pat.variability')} value={r.cv} unit="%" color={r.cv != null && r.cv > 36 ? '#E0B057' : theme.ink}/>
           {div}

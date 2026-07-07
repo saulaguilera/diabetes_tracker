@@ -1,6 +1,7 @@
 // DriveModeExpanded.jsx — vista glanceable de conducción (pantalla completa).
 // Safety-first: número grande, flecha, estado, frescura. Sin gráficos/dosis/predicción.
 // Recibe `data` = payload de /api/copilot/drive (o un demo state).
+import { useLang } from '../i18n.jsx'
 const SANS = '"Outfit", -apple-system, system-ui, sans-serif'
 
 const TINT = {
@@ -21,9 +22,12 @@ function OrbitMark({ color }) {
 }
 
 export default function DriveModeExpanded({ data, onClose }) {
+  const { gVal, gUnit } = useLang()
   const c = TINT[data.tint] || TINT.muted
   const urgent = data.level === 'urgent'
   const dim = 'rgba(234,242,248,0.55)'
+  // solo convertir si es un número real (no "--" cuando no hay dato)
+  const valueText = typeof data.value === 'number' ? gVal(data.value) : data.value
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: '#04060C',
@@ -53,10 +57,10 @@ export default function DriveModeExpanded({ data, onClose }) {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 4 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(8px,3vw,28px)' }}>
           <span style={{ fontSize: 'clamp(120px, 34vw, 280px)', fontWeight: 300, lineHeight: 0.85,
-            letterSpacing: '-0.04em', color: c, fontVariantNumeric: 'tabular-nums' }}>{data.value}</span>
+            letterSpacing: '-0.04em', color: c, fontVariantNumeric: 'tabular-nums' }}>{valueText}</span>
           <span style={{ fontSize: 'clamp(72px, 18vw, 150px)', color: c, lineHeight: 0.85 }}>{data.trend_arrow}</span>
         </div>
-        <span style={{ fontSize: 'clamp(16px,4vw,26px)', color: dim, marginTop: 8 }}>{data.unit}</span>
+        <span style={{ fontSize: 'clamp(16px,4vw,26px)', color: dim, marginTop: 8 }}>{gUnit}</span>
 
         {/* mensaje de seguridad (corto, claro) */}
         <div style={{ marginTop: 'clamp(18px,5vh,40px)', display: 'inline-flex', alignItems: 'center', gap: 12,

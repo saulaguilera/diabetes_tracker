@@ -45,7 +45,7 @@ function Metric({ theme, label, value, unit, color }) {
 }
 
 export default function Hoy({ theme, refreshKey = 0, onGoRegistro }) {
-  const { t } = useLang()
+  const { t, gVal, gUnit } = useLang()
   const [data, setData] = useState(null)
   const [err, setErr] = useState(null)
   const [sel, setSel] = useState(null)     // evento abierto para editar/borrar
@@ -118,9 +118,9 @@ export default function Hoy({ theme, refreshKey = 0, onGoRegistro }) {
           <>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12 }}>
               <span style={{ fontSize: 88, fontWeight: 200, letterSpacing: '-0.05em', color: theme.ink,
-                lineHeight: 0.82, fontVariantNumeric: 'tabular-nums' }}>{g.value}</span>
+                lineHeight: 0.82, fontVariantNumeric: 'tabular-nums' }}>{gVal(g.value)}</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: theme.inkSoft, fontSize: 16, paddingBottom: 8 }}>
-                {t('common.mgdl')} <span style={{ fontSize: 19, color: theme.inkFaint }}>{g.arrow}</span>
+                {gUnit} <span style={{ fontSize: 19, color: theme.inkFaint }}>{g.arrow}</span>
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16 }}>

@@ -43,7 +43,7 @@ function Toggle({ on, onChange, color }) {
 }
 
 export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleTheme }) {
-  const { t, lang, setLang } = useLang()
+  const { t, lang, setLang, unit, setUnit, gUnit, gVal } = useLang()
   const [data, setData] = useState(null)
   const [err, setErr] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
@@ -83,7 +83,7 @@ export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleThe
       {/* sensor */}
       <Card theme={theme}>
         <Eyebrow theme={theme} style={{ fontSize: 10, marginBottom: 4 }}>{t('perfil.sensor')}</Eyebrow>
-        <Row theme={theme} label={t('perfil.lastReading')} value={s.last_reading != null ? `${s.last_reading} mg/dL · ${s.last_reading_ago}` : '—'}/>
+        <Row theme={theme} label={t('perfil.lastReading')} value={s.last_reading != null ? `${gVal(s.last_reading)} ${gUnit} · ${s.last_reading_ago}` : '—'}/>
         <Row theme={theme} label={t('perfil.sync')} value={s.last_sync_ago || '—'}/>
         <Row theme={theme} label={t('perfil.source')} value={s.source === 'cgm_libre' ? 'FreeStyle Libre' : (s.source || '—')}/>
       </Card>
@@ -94,10 +94,10 @@ export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleThe
           <Eyebrow theme={theme} style={{ fontSize: 10 }}>{t('perfil.therapy')}</Eyebrow>
           <button onClick={() => setEditing(true)} style={{ background: 'none', border: 'none', color: theme.accent, fontSize: 12.5, fontFamily: SANS, cursor: 'pointer' }}>{t('common.edit')}</button>
         </div>
-        <Row theme={theme} label={t('perfil.target')} value={fmt(c.objetivo, ' mg/dL')}/>
+        <Row theme={theme} label={t('perfil.target')} value={c.objetivo != null ? `${gVal(c.objetivo)} ${gUnit}` : '—'}/>
         <Row theme={theme} label={t('perfil.isf')}
-          value={c.isf != null ? `${c.isf} mg/dL/U` : 'auto'}
-          sub={obs.isf ? t('perfil.inYourData', { v: obs.isf.mu, n: obs.isf.n }) : null}/>
+          value={c.isf != null ? `${gVal(c.isf)} ${gUnit}/U` : 'auto'}
+          sub={obs.isf ? t('perfil.inYourData', { v: gVal(obs.isf.mu), n: obs.isf.n }) : null}/>
         <Row theme={theme} label={t('perfil.icr')}
           value={c.icr != null ? `${c.icr} g/U` : 'auto'}
           sub={obs.icr ? t('perfil.inYourData', { v: obs.icr.mu, n: obs.icr.n }) : null}/>
@@ -135,6 +135,22 @@ export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleThe
               background: lang === l.id ? `${theme.accent}22` : 'transparent',
               color: lang === l.id ? theme.ink : theme.inkSoft, fontWeight: lang === l.id ? 600 : 400 }}>
               {l.label}
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      {/* unidad de glucosa */}
+      <Card theme={theme}>
+        <Eyebrow theme={theme} style={{ fontSize: 10, marginBottom: 12 }}>{t('perfil.glucoseUnit')}</Eyebrow>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {[{ id: 'mgdl', label: 'mg/dL' }, { id: 'mmol', label: 'mmol/L' }].map(u => (
+            <button key={u.id} onClick={() => setUnit(u.id)} style={{
+              flex: 1, padding: '11px', borderRadius: 12, cursor: 'pointer', fontFamily: SANS, fontSize: 14,
+              border: `0.5px solid ${unit === u.id ? theme.accent : theme.border}`,
+              background: unit === u.id ? `${theme.accent}22` : 'transparent',
+              color: unit === u.id ? theme.ink : theme.inkSoft, fontWeight: unit === u.id ? 600 : 400 }}>
+              {u.label}
             </button>
           ))}
         </div>

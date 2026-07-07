@@ -94,7 +94,8 @@ const DICT = {
     'perfil.reportDesc': 'TIR, noches, hipos y coberturas observadas de los últimos 30 días — datos, no opiniones.',
     'perfil.downloadPdf': 'Descargar reporte (PDF)',
     'perfil.appearance': 'Apariencia', 'perfil.darkTheme': 'Tema oscuro',
-    'perfil.language': 'Idioma', 'perfil.footer': 'Orbit · copiloto metabólico',
+    'perfil.language': 'Idioma', 'perfil.glucoseUnit': 'Unidad de glucosa',
+    'perfil.footer': 'Orbit · copiloto metabólico',
     'perfil.loadError': 'No se pudo cargar tu perfil ahora.',
     'perfil.editTitle': 'Editar perfil', 'perfil.name': 'Nombre', 'perfil.namePh': 'Tu nombre',
     'perfil.targetField': 'Objetivo (mg/dL)', 'perfil.auto': 'Automático', 'perfil.manual': 'Manual',
@@ -109,7 +110,7 @@ const DICT = {
     'pat.title': 'Patrones', 'pat.loadError': 'No se pudieron cargar tus patrones ahora.',
     'pat.tir': 'Tiempo en rango', 'pat.days7': '7 días', 'pat.daysN': '{n} días',
     'pat.distribution': 'Distribución · {n} días',
-    'pat.distHigh': 'Alto · > 180', 'pat.distRange': 'En rango · 70–180', 'pat.distLow': 'Bajo · < 70',
+    'pat.distHigh': 'Alto · > {hi}', 'pat.distRange': 'En rango · {lo}–{hi}', 'pat.distLow': 'Bajo · < {lo}',
     'pat.gmi': 'GMI estimada', 'pat.gmiSub': '≈ HbA1c · de tu promedio',
     'pat.average': 'Promedio', 'pat.variability': 'Variabilidad', 'pat.inRange': 'En rango',
     'pat.summary': 'Resumen · {n} días', 'pat.observations': 'Observaciones',
@@ -197,7 +198,8 @@ const DICT = {
     'perfil.reportDesc': 'TIR, nights, lows and observed coverages from the last 30 days — data, not opinions.',
     'perfil.downloadPdf': 'Download report (PDF)',
     'perfil.appearance': 'Appearance', 'perfil.darkTheme': 'Dark theme',
-    'perfil.language': 'Language', 'perfil.footer': 'Orbit · metabolic copilot',
+    'perfil.language': 'Language', 'perfil.glucoseUnit': 'Glucose unit',
+    'perfil.footer': 'Orbit · metabolic copilot',
     'perfil.loadError': "Couldn't load your profile right now.",
     'perfil.editTitle': 'Edit profile', 'perfil.name': 'Name', 'perfil.namePh': 'Your name',
     'perfil.targetField': 'Target (mg/dL)', 'perfil.auto': 'Automatic', 'perfil.manual': 'Manual',
@@ -211,7 +213,7 @@ const DICT = {
     'pat.title': 'Patterns', 'pat.loadError': "Couldn't load your patterns right now.",
     'pat.tir': 'Time in range', 'pat.days7': '7 days', 'pat.daysN': '{n} days',
     'pat.distribution': 'Distribution · {n} days',
-    'pat.distHigh': 'High · > 180', 'pat.distRange': 'In range · 70–180', 'pat.distLow': 'Low · < 70',
+    'pat.distHigh': 'High · > {hi}', 'pat.distRange': 'In range · {lo}–{hi}', 'pat.distLow': 'Low · < {lo}',
     'pat.gmi': 'Estimated GMI', 'pat.gmiSub': '≈ HbA1c · from your average',
     'pat.average': 'Average', 'pat.variability': 'Variability', 'pat.inRange': 'In range',
     'pat.summary': 'Summary · {n} days', 'pat.observations': 'Observations',
@@ -242,29 +244,68 @@ export function getInitialLang() {
   return 'es'
 }
 
-const LangContext = createContext({ lang: 'es', setLang: () => {}, t: (k) => k })
+// ── unidad de glucosa (los datos SIEMPRE se guardan en mg/dL; esto es display) ──
+export const GLUCOSE_UNITS = [
+  { id: 'mgdl', label: 'mg/dL' },
+  { id: 'mmol', label: 'mmol/L' },
+]
+const MMOL_FACTOR = 18.0182   // mmol/L = mg/dL ÷ 18.0182
+
+function getInitialUnit() {
+  try {
+    const saved = localStorage.getItem('orbit_glucose_unit')
+    if (saved === 'mmol' || saved === 'mgdl') return saved
+  } catch {}
+  return 'mgdl'
+}
+
+const LangContext = createContext({ lang: 'es', setLang: () => {}, t: (k) => k, unit: 'mgdl' })
 
 export function LangProvider({ children }) {
   const [lang, setLangState] = useState(getInitialLang)
-  const setLang = useCallback((next) => {
-    if (!DICT[next]) return
-    setLangState(next)
-    try { localStorage.setItem('orbit_lang', next) } catch {}
-    // avisar al backend para que el copiloto responda en el mismo idioma
+  const [unit, setUnitState] = useState(getInitialUnit)
+
+  const saveToBackend = (body) => {
     try {
       fetch('/api/copilot/profile', {
         method: 'PUT', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ui_lang: next }),
+        body: JSON.stringify(body),
       }).catch(() => {})
     } catch {}
+  }
+  const setLang = useCallback((next) => {
+    if (!DICT[next]) return
+    setLangState(next)
+    try { localStorage.setItem('orbit_lang', next) } catch {}
+    saveToBackend({ ui_lang: next })   // el copiloto responde en el mismo idioma
   }, [])
+  const setUnit = useCallback((next) => {
+    if (next !== 'mmol' && next !== 'mgdl') return
+    setUnitState(next)
+    try { localStorage.setItem('orbit_glucose_unit', next) } catch {}
+    saveToBackend({ glucose_unit: next })   // el copiloto usa la misma unidad
+  }, [])
+
   const t = useCallback((key, vars) => {
     const table = DICT[lang] || DICT.es
     const val = table[key] != null ? table[key] : (DICT.es[key] != null ? DICT.es[key] : key)
     return interpolate(val, vars)
   }, [lang])
-  return <LangContext.Provider value={{ lang, setLang, t }}>{children}</LangContext.Provider>
+
+  // helpers de glucosa: gVal(número), gDelta(±), gUnit (etiqueta)
+  const gUnit = unit === 'mmol' ? 'mmol/L' : 'mg/dL'
+  const gVal = useCallback((mgdl) => {
+    if (mgdl == null || mgdl === '' || isNaN(mgdl)) return mgdl
+    return unit === 'mmol' ? (mgdl / MMOL_FACTOR).toFixed(1) : String(Math.round(mgdl))
+  }, [unit])
+  const gDelta = useCallback((mgdl) => {
+    if (mgdl == null || isNaN(mgdl)) return mgdl
+    const s = mgdl >= 0 ? '+' : ''
+    return unit === 'mmol' ? s + (mgdl / MMOL_FACTOR).toFixed(1) : s + Math.round(mgdl)
+  }, [unit])
+
+  return <LangContext.Provider value={{ lang, setLang, t, unit, setUnit, gUnit, gVal, gDelta }}>{children}</LangContext.Provider>
 }
 
 export function useLang() {

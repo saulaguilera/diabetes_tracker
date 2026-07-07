@@ -35,7 +35,7 @@ function Tile({ theme, label, value, unit, color, sub }) {
 }
 
 export default function BriefSheet({ theme, onClose }) {
-  const { t, lang } = useLang()
+  const { t, lang, gVal, gDelta, gUnit } = useLang()
   const [data, setData] = useState(null)
   const [err, setErr] = useState(false)
   const [typed, setTyped] = useState(false)   // narrativa terminó de "escribirse"
@@ -53,13 +53,13 @@ export default function BriefSheet({ theme, onClose }) {
     // la noche primero — es lo que más importa a la mañana
     if (s.overnight)
       tiles.push(<Tile key="night" theme={theme} label="Noche · 00–08h" value={s.overnight.tir} unit="%" color={PAL.ritmo.key}
-        sub={`mín ${s.overnight.min}${s.overnight.low_events ? ` · ${s.overnight.low_events} baja` : ' · sin bajas'}`}/>)
+        sub={`mín ${gVal(s.overnight.min)}${s.overnight.low_events ? ` · ${s.overnight.low_events} baja` : ' · sin bajas'}`}/>)
     if (s.readings_n) {
       tiles.push(<Tile key="tir" theme={theme} label="Tiempo en rango" value={s.tir} unit="%" color={PAL.insulina.key}
         sub={s.tir_ayer != null ? `ayer ${s.tir_ayer}% · ${s.tir - s.tir_ayer >= 0 ? '+' : ''}${s.tir - s.tir_ayer}` : null}/>)
-      tiles.push(<Tile key="avg" theme={theme} label="Glucosa promedio" value={s.avg} unit="mg/dL"/>)
+      tiles.push(<Tile key="avg" theme={theme} label="Glucosa promedio" value={gVal(s.avg)} unit={gUnit}/>)
       if (s.min && s.max)
-        tiles.push(<Tile key="rng" theme={theme} label="Rango de hoy" value={`${s.min.v}–${s.max.v}`} unit="mg/dL"
+        tiles.push(<Tile key="rng" theme={theme} label="Rango de hoy" value={`${gVal(s.min.v)}–${gVal(s.max.v)}`} unit={gUnit}
           sub={`mín ${s.min.time} · máx ${s.max.time}`}/>)
       if (s.low_pct || s.high_pct)
         tiles.push(<Tile key="oor" theme={theme} label="Fuera de rango" value={s.low_pct + s.high_pct} unit="%"
@@ -125,7 +125,7 @@ export default function BriefSheet({ theme, onClose }) {
                     <span style={{ color: theme.inkFaint, fontSize: 12 }}>{mr.time} · {mr.carbs}g</span>
                     <span style={{ fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
                       color: mr.delta_2h > 60 ? '#D98A6A' : mr.delta_2h < -25 ? '#E0B057' : '#5FC6A8' }}>
-                      {mr.delta_2h >= 0 ? '+' : ''}{mr.delta_2h} <span style={{ fontWeight: 400, fontSize: 11, color: theme.inkFaint }}>2h</span>
+                      {gDelta(mr.delta_2h)} <span style={{ fontWeight: 400, fontSize: 11, color: theme.inkFaint }}>2h</span>
                     </span>
                   </div>
                 ))}

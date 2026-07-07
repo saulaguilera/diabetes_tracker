@@ -33,6 +33,15 @@ def _copilot_lang():
     return _LANG_NAME.get(_ui_lang(), _LANG_NAME["es"])
 
 
+def _glucose_unit_label():
+    """Etiqueta de la unidad de glucosa elegida por el usuario (para los prompts)."""
+    try:
+        from helpers import _get_setting as _gs
+        return "mmol/L" if (_gs("glucose_unit") or "mgdl") == "mmol" else "mg/dL"
+    except Exception:
+        return "mg/dL"
+
+
 def _translate_patterns(patterns, lang):
     """Traduce titulo/detalle/sugerencia de los patrones al idioma de la UI.
     Los patrones los genera el backend en español; si el usuario eligió otro
@@ -492,6 +501,9 @@ REGLAS INVIOLABLES:
 - Solo DESCRIBÍS y ACOMPAÑÁS lo que muestran los datos. NUNCA recomendás dosis,
   correcciones, qué comer o hacer, ni indicaciones médicas. NUNCA predigas.
 - Escribí SIEMPRE en {IDIOMA}, en segunda persona, cálido y tranquilo.
+- UNIDAD: la persona usa {UNIDAD} para la glucosa. Expresá TODOS los valores de
+  glucosa en {UNIDAD}. Los datos de abajo vienen en mg/dL; si la unidad es
+  mmol/L, convertí (mmol/L = mg/dL ÷ 18) y mostrá 1 decimal.
 - Prosa, sin listas ni bullets. 3 a 5 frases. Podés usar 1 emoji sutil si suma.
 - No inventes nada que no esté en los datos.
 
@@ -553,7 +565,7 @@ def copilot_brief():
             resp = client.messages.create(
                 model=os.environ.get("COPILOT_BRIEF_MODEL", "claude-sonnet-5"),
                 max_tokens=450,
-                system=_BRIEF_SYSTEM.format(context=ctx, IDIOMA=_copilot_lang()),
+                system=_BRIEF_SYSTEM.format(context=ctx, IDIOMA=_copilot_lang(), UNIDAD=_glucose_unit_label()),
                 messages=[{"role": "user", "content": "Escribí mi brief."}],
             )
             txt = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
@@ -776,6 +788,7 @@ def copilot_profile():
             "basal_dose": _num("basal_dose_u"),
             "basal_hora": _get_setting("basal_hora"),
             "basal_tipo": _get_setting("basal_tipo"),
+            "glucose_unit": _get_setting("glucose_unit") or "mgdl",
         },
         # Valores OBSERVADOS en los datos (PMM bayesiano, research). Solo se
         # muestran como referencia descriptiva — jamás se auto-aplican a la
@@ -852,6 +865,9 @@ comas" (NO, es indicación personalizada). Nunca un "no puedo" pelado.
 
 REGLAS DE ESTILO:
 - Respondé SIEMPRE en {IDIOMA}, en segunda persona, cálido.
+- UNIDAD: la persona usa {UNIDAD} para la glucosa. Expresá TODA la glucosa en
+  {UNIDAD}. Los datos y las consultas vienen en mg/dL; si la unidad es mmol/L,
+  convertí (mmol/L = mg/dL ÷ 18, 1 decimal) — incluí umbrales como 70/180 → 3.9/10.0.
 - No inventes datos que no estén en el contexto.
 - Si el contexto trae el NOMBRE de la persona, usalo con naturalidad y de vez
   en cuando (un saludo, un momento de ánimo) — no en cada mensaje, que no
@@ -1059,7 +1075,7 @@ def copilot_chat():
         from utils.copilot_tools import COPILOT_TOOLS, run_tool
 
         client = anthropic.Anthropic(api_key=api_key)
-        system = _CHAT_SYSTEM.format(context=_chat_context(), IDIOMA=_copilot_lang())
+        system = _CHAT_SYSTEM.format(context=_chat_context(), IDIOMA=_copilot_lang(), UNIDAD=_glucose_unit_label())
         # Sonnet para calidad analítica (las consultas requieren razonar sobre
         # números). Override por env si algún día hay que bajar costo.
         model = os.environ.get("COPILOT_CHAT_MODEL", "claude-sonnet-5")
@@ -1575,6 +1591,12 @@ def copilot_profile_edit():
             lang = (data.get("ui_lang") or "").strip().lower()[:5]
             if lang in ("es", "en", "pt"):
                 _set_setting("ui_lang", lang)
+        # unidad de glucosa (los datos se guardan en mg/dL; esto es display) →
+        # el copiloto expresa la glucosa en la misma unidad
+        if "glucose_unit" in data:
+            u = (data.get("glucose_unit") or "").strip().lower()
+            if u in ("mgdl", "mmol"):
+                _set_setting("glucose_unit", u)
         return jsonify({"ok": True})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
