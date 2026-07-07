@@ -59,6 +59,7 @@ class DailyMetabolicSummary:
     confidence:          float              # 0-1 — agregado de todas las dimensiones
     data_completeness:   float              # n_readings / expected
     max_gap_minutes:     int                # mayor gap entre lecturas consecutivas
+    unified_confidence:  Optional[dict]        # capa de confianza unificada (Fase 2); None si no disponible
 
     # Overnight (00:00-06:00)
     overnight_n:                 int
