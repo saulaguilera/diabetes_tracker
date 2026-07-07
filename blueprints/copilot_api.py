@@ -1234,6 +1234,58 @@ def copilot_meal_edit(meal_id):
         return jsonify({"ok": False, "error": "No se pudo guardar"}), 400
 
 
+def _combine_datetime(row, data):
+    """Aplica date/time del payload al timestamp de row (hora local).
+    Devuelve (nuevo_datetime, error_str|None). Ninguno de los dos = None si
+    no hay cambios de fecha/hora en el payload."""
+    if not (data.get("date") or data.get("time")):
+        return None, None
+    try:
+        base = row.timestamp
+        d = (datetime.strptime(data["date"], "%Y-%m-%d").date()
+             if data.get("date") else base.date())
+        tm = (datetime.strptime(data["time"], "%H:%M").time()
+              if data.get("time") else base.time())
+        nuevo = datetime.combine(d, tm)
+    except ValueError:
+        return None, "Fecha u hora inválida"
+    now = datetime.now()
+    if nuevo > now + timedelta(minutes=5):
+        return None, "La hora no puede ser futura"
+    if nuevo < now - timedelta(days=365):
+        return None, "Fecha demasiado antigua"
+    return nuevo, None
+
+
+@bp.route("/api/copilot/entry/<cat>/<int:entry_id>", methods=["PUT"], endpoint="copilot_entry_edit")
+def copilot_entry_edit(cat, entry_id):
+    """Editar fecha/hora de un registro (insulina / ejercicio / contexto).
+    El horario real importa: mucha gente registra tarde, y el momento correcto
+    hace que el análisis (ejercicio→glucosa, etc.) sea fiel."""
+    err = _require_login()
+    if err:
+        return err
+    from models import db, InsulinDose, Activity, ContextTag
+    model = {"insulina": InsulinDose, "ejercicio": Activity, "contexto": ContextTag}.get(cat)
+    if not model:
+        return jsonify({"ok": False, "error": "Categoría inválida"}), 400
+    row = model.query.get(entry_id)
+    if not row:
+        return jsonify({"ok": False, "error": "No encontrado"}), 404
+    data = request.get_json(silent=True) or {}
+    nuevo, e = _combine_datetime(row, data)
+    if e:
+        return jsonify({"ok": False, "error": e}), 400
+    try:
+        if nuevo is not None:
+            row.timestamp = nuevo
+        db.session.commit()
+        return jsonify({"ok": True})
+    except Exception:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": "No se pudo guardar"}), 400
+
+
 @bp.route("/api/copilot/entry/<cat>/<int:entry_id>", methods=["DELETE"], endpoint="copilot_entry_delete")
 def copilot_entry_delete(cat, entry_id):
     """Eliminar un registro del historial (comida / insulina / ejercicio)."""

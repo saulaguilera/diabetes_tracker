@@ -48,13 +48,22 @@ export default function EventSheet({ theme, ev, onClose, onChanged }) {
     : ev.cat === 'contexto' ? t('ev.noun.context')
     : t('ev.noun.exercise')
 
+  const dateTimeChanged = (date && date !== ev.date) || (time && time !== ev.time)
+
   const save = async () => {
     setBusy(true)
-    const body = { name, carbs, protein, fat }
-    if (date && date !== ev.date) body.date = date
-    if (time && time !== ev.time) body.time = time
-    try { await apiPut(`/meal/${ev.id}`, body); onChanged() }
-    catch (e) { setBusy(false) }
+    try {
+      if (isMeal) {
+        const body = { name, carbs, protein, fat }
+        if (date && date !== ev.date) body.date = date
+        if (time && time !== ev.time) body.time = time
+        await apiPut(`/meal/${ev.id}`, body)
+      } else {
+        // insulina / ejercicio / contexto: solo fecha/hora editables
+        await apiPut(`/entry/${ev.cat}/${ev.id}`, { date, time })
+      }
+      onChanged()
+    } catch (e) { setBusy(false) }
   }
   const remove = async () => {
     setBusy(true)
@@ -124,6 +133,16 @@ export default function EventSheet({ theme, ev, onClose, onChanged }) {
               <Info theme={theme} k={t('ev.context')} v={ev.title}/>
               {d.notes && <Info theme={theme} k={t('ev.note')} v={d.notes}/>}
             </>}
+            {/* fecha/hora editables — también se registra tarde el ejercicio, etc. */}
+            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <Row theme={theme} label={t('ev.day')}>
+                <input type="date" value={date} max={new Date().toISOString().slice(0, 10)}
+                  onChange={e => setDate(e.target.value)} style={timeInput(theme)}/>
+              </Row>
+              <Row theme={theme} label={t('ev.time')}>
+                <input type="time" value={time} onChange={e => setTime(e.target.value)} style={timeInput(theme)}/>
+              </Row>
+            </div>
           </div>
         )}
 
@@ -146,7 +165,8 @@ export default function EventSheet({ theme, ev, onClose, onChanged }) {
           <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
             <button onClick={() => setConfirm(true)} disabled={busy} style={{ padding: '13px 16px', borderRadius: 14, border: `0.5px solid ${theme.border}`,
               background: 'transparent', color: '#D98A6A', fontSize: 14, fontFamily: SANS, cursor: 'pointer' }}>{t('common.delete')}</button>
-            {isMeal && (
+            {/* comida: siempre editable; otros: Guardar solo si cambió fecha/hora */}
+            {(isMeal || dateTimeChanged) && (
               <button onClick={save} disabled={busy} style={{ flex: 1, padding: '13px', borderRadius: 14, border: 'none',
                 background: m.color, color: '#0A0C1E', fontSize: 15, fontWeight: 600, fontFamily: SANS, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
                 {busy ? t('common.saving') : t('common.save')}
