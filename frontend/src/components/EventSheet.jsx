@@ -17,18 +17,18 @@ export const META = {
   contexto:  { color: PAL.ritmo.key,       label: 'Contexto' },
 }
 
-export function dayLabel(dateStr) {
+export function dayLabel(dateStr, t, lang = 'es') {
   if (!dateStr) return ''
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const d = new Date(dateStr + 'T00:00:00')
   const diff = Math.round((today - d) / 86400000)
-  if (diff === 0) return 'Hoy'
-  if (diff === 1) return 'Ayer'
-  return d.toLocaleDateString('es', { day: 'numeric', month: 'short' })
+  if (diff === 0) return t ? t('common.today') : 'Hoy'
+  if (diff === 1) return t ? t('common.yesterday') : 'Ayer'
+  return d.toLocaleDateString(lang, { day: 'numeric', month: 'short' })
 }
 
 export default function EventSheet({ theme, ev, onClose, onChanged }) {
-  const { t } = useLang()
+  const { t, lang } = useLang()
   const isMeal = ev.cat === 'comida'
   const d = ev.data || {}
   const m = META[ev.cat] || { color: theme.accent, label: ev.cat }
@@ -75,7 +75,7 @@ export default function EventSheet({ theme, ev, onClose, onChanged }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
           <span style={{ width: 9, height: 9, borderRadius: '50%', background: m.color, boxShadow: `0 0 8px ${m.color}` }}/>
           <span style={{ flex: 1, color: theme.ink, fontSize: 18, fontWeight: 500 }}>{isMeal ? t('ev.editMeal') : ev.title}</span>
-          <span style={{ color: theme.inkFaint, fontSize: 13 }}>{[dayLabel(ev.date), ev.time].filter(Boolean).join(' · ')}</span>
+          <span style={{ color: theme.inkFaint, fontSize: 13 }}>{[dayLabel(ev.date, t, lang), ev.time].filter(Boolean).join(' · ')}</span>
         </div>
 
         {isMeal ? (

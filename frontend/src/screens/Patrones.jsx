@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { apiGet } from '../api.js'
 import { PAL, SANS } from '../theme.js'
+import { useLang } from '../i18n.jsx'
 import { Card, Eyebrow } from '../components/ui.jsx'
 
 const NIVEL_COLOR = {
@@ -49,6 +50,7 @@ function Stat({ theme, label, value, unit, color }) {
 }
 
 export default function Patrones({ theme, refreshKey = 0 }) {
+  const { t } = useLang()
   const [data, setData] = useState(null)
   const [err, setErr] = useState(null)
   const [expanded, setExpanded] = useState(false)
@@ -62,22 +64,22 @@ export default function Patrones({ theme, refreshKey = 0 }) {
     return () => { alive = false }
   }, [refreshKey])
 
-  if (err) return <Centered theme={theme}>No se pudieron cargar tus patrones ahora.</Centered>
-  if (!data) return <Centered theme={theme}>Cargando…</Centered>
+  if (err) return <Centered theme={theme}>{t('pat.loadError')}</Centered>
+  if (!data) return <Centered theme={theme}>{t('common.loading')}</Centered>
 
   const r = data.resumen || {}
   const div = <div style={{ width: '0.5px', background: theme.border }}/>
 
   return (
     <div style={{ padding: '4px 22px 120px', fontFamily: SANS, display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <Eyebrow theme={theme}>Patrones</Eyebrow>
+      <Eyebrow theme={theme}>{t('pat.title')}</Eyebrow>
 
       {/* TIR semanal — clickeable para expandir detalle */}
       <Card theme={theme} style={{ padding: '20px 20px 16px', cursor: 'pointer' }} onClick={() => setExpanded(e => !e)}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
-          <span style={{ color: theme.inkSoft, fontSize: 14 }}>Tiempo en rango</span>
+          <span style={{ color: theme.inkSoft, fontSize: 14 }}>{t('pat.tir')}</span>
           <span style={{ color: theme.inkFaint, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
-            7 días
+            {t('pat.days7')}
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={theme.inkFaint} strokeWidth="2.2"
               strokeLinecap="round" strokeLinejoin="round" style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.25s' }}>
               <path d="M6 9l6 6 6-6"/>
@@ -90,14 +92,14 @@ export default function Patrones({ theme, refreshKey = 0 }) {
           const bajo = r.hipo_pct || 0, alto = r.hiper_pct || 0
           const rango = r.tir != null ? r.tir : Math.max(0, 100 - bajo - alto)
           const dist = [
-            { label: 'Alto · > 180', val: alto, color: '#E0B057' },
-            { label: 'En rango · 70–180', val: rango, color: '#5FC6A8' },
-            { label: 'Bajo · < 70', val: bajo, color: '#D98A6A' },
+            { label: t('pat.distHigh'), val: alto, color: '#E0B057' },
+            { label: t('pat.distRange'), val: rango, color: '#5FC6A8' },
+            { label: t('pat.distLow'), val: bajo, color: '#D98A6A' },
           ]
           return (
             <div style={{ marginTop: 18, paddingTop: 16, borderTop: `0.5px solid ${theme.border}` }} onClick={e => e.stopPropagation()}>
               <div style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.inkFaint, marginBottom: 12 }}>
-                Distribución · {r.days || 14} días
+                {t('pat.distribution', { n: r.days || 14 })}
               </div>
               {/* barra apilada */}
               <div style={{ display: 'flex', height: 12, borderRadius: 6, overflow: 'hidden', background: theme.surface, marginBottom: 14 }}>
@@ -115,8 +117,8 @@ export default function Patrones({ theme, refreshKey = 0 }) {
               {/* GMI estimada (≈ HbA1c) */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 14, paddingTop: 14, borderTop: `0.5px solid ${theme.border}` }}>
                 <div>
-                  <div style={{ color: theme.inkSoft, fontSize: 13.5 }}>GMI estimada</div>
-                  <div style={{ color: theme.inkFaint, fontSize: 11, marginTop: 2 }}>≈ HbA1c · de tu promedio</div>
+                  <div style={{ color: theme.inkSoft, fontSize: 13.5 }}>{t('pat.gmi')}</div>
+                  <div style={{ color: theme.inkFaint, fontSize: 11, marginTop: 2 }}>{t('pat.gmiSub')}</div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
                   <span style={{ fontSize: 26, fontWeight: 300, color: theme.ink, fontVariantNumeric: 'tabular-nums' }}>{r.gmi ?? '—'}</span>
@@ -124,8 +126,8 @@ export default function Patrones({ theme, refreshKey = 0 }) {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 14, marginTop: 12 }}>
-                <span style={{ color: theme.inkSoft, fontSize: 13 }}>Promedio <b style={{ color: theme.ink, fontWeight: 500 }}>{r.avg ?? '—'}</b> mg/dL</span>
-                <span style={{ color: theme.inkSoft, fontSize: 13 }}>Variabilidad <b style={{ color: theme.ink, fontWeight: 500 }}>{r.cv ?? '—'}%</b></span>
+                <span style={{ color: theme.inkSoft, fontSize: 13 }}>{t('pat.average')} <b style={{ color: theme.ink, fontWeight: 500 }}>{r.avg ?? '—'}</b> mg/dL</span>
+                <span style={{ color: theme.inkSoft, fontSize: 13 }}>{t('pat.variability')} <b style={{ color: theme.ink, fontWeight: 500 }}>{r.cv ?? '—'}%</b></span>
               </div>
             </div>
           )
@@ -134,23 +136,23 @@ export default function Patrones({ theme, refreshKey = 0 }) {
 
       {/* resumen */}
       <Card theme={theme} style={{ padding: '16px 20px' }}>
-        <Eyebrow theme={theme} style={{ fontSize: 10 }}>Resumen · {r.days || 14} días</Eyebrow>
+        <Eyebrow theme={theme} style={{ fontSize: 10 }}>{t('pat.summary', { n: r.days || 14 })}</Eyebrow>
         <div style={{ display: 'flex', gap: 12, marginTop: 14 }}>
-          <Stat theme={theme} label="Promedio" value={r.avg} unit="mg/dL"/>
+          <Stat theme={theme} label={t('pat.average')} value={r.avg} unit="mg/dL"/>
           {div}
-          <Stat theme={theme} label="Variabilidad" value={r.cv} unit="%" color={r.cv != null && r.cv > 36 ? '#E0B057' : theme.ink}/>
+          <Stat theme={theme} label={t('pat.variability')} value={r.cv} unit="%" color={r.cv != null && r.cv > 36 ? '#E0B057' : theme.ink}/>
           {div}
-          <Stat theme={theme} label="En rango" value={r.tir} unit="%" color={tirColor(r.tir)}/>
+          <Stat theme={theme} label={t('pat.inRange')} value={r.tir} unit="%" color={tirColor(r.tir)}/>
         </div>
       </Card>
 
       {/* observaciones detectadas */}
       <div>
-        <Eyebrow theme={theme} style={{ marginBottom: 12 }}>Observaciones</Eyebrow>
+        <Eyebrow theme={theme} style={{ marginBottom: 12 }}>{t('pat.observations')}</Eyebrow>
         {(!data.patterns || data.patterns.length === 0) ? (
           <Card theme={theme} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#5FC6A8', boxShadow: '0 0 8px #5FC6A8' }}/>
-            <span style={{ color: theme.inkSoft, fontSize: 14 }}>Sin patrones destacados — buena señal.</span>
+            <span style={{ color: theme.inkSoft, fontSize: 14 }}>{t('pat.noPatterns')}</span>
           </Card>
         ) : data.patterns.map((p, i) => {
           const c = NIVEL_COLOR[p.nivel] || PAL.glucosa.key
@@ -170,7 +172,7 @@ export default function Patrones({ theme, refreshKey = 0 }) {
           )
         })}
         <div style={{ color: theme.inkFaint, fontSize: 11, lineHeight: 1.5, marginTop: 4, textAlign: 'center' }}>
-          Observaciones de tus datos. Conversá los ajustes con tu equipo médico.
+          {t('pat.note')}
         </div>
       </div>
     </div>
