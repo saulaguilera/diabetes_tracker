@@ -114,11 +114,14 @@ function TopBar({ theme, onDrive }) {
       backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)',
     }}>
       <OrbitLogo size={26}/>
-      {/* wordmark: Orbit (blanco) · Copilot (acento) · AI (badge) */}
+      {/* wordmark: Orbit (blanco) · Copilot (degradado del logo, difuminado) · AI (badge) */}
       <span style={{ fontFamily: SANS, fontSize: 19, fontWeight: 300, letterSpacing: '0.01em', color: theme.ink, display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span>Orbit <span style={{ color: theme.accent, fontWeight: 500 }}>Copilot</span></span>
+        <span>Orbit <span style={{ fontWeight: 500,
+          background: 'linear-gradient(100deg, #22D3EE 0%, #38BDF8 42%, #8B5CF6 100%)',
+          WebkitBackgroundClip: 'text', backgroundClip: 'text',
+          WebkitTextFillColor: 'transparent', color: 'transparent' }}>Copilot</span></span>
         <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', padding: '2px 6px',
-          borderRadius: 6, color: theme.accent, background: `${theme.accent}1F`, border: `0.5px solid ${theme.accent}55` }}>AI</span>
+          borderRadius: 6, color: '#8B5CF6', background: 'rgba(139,92,246,0.14)', border: '0.5px solid rgba(139,92,246,0.4)' }}>AI</span>
       </span>
       <div style={{ flex: 1 }}/>
       {/* Drive Mode — siempre a mano, arriba a la derecha */}
