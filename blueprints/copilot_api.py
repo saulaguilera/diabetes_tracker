@@ -21,12 +21,72 @@ LOW, HIGH = 70, 180
 _LANG_NAME = {"es": "español (neutro, latinoamericano)", "en": "English", "pt": "português"}
 
 
-def _copilot_lang():
+def _ui_lang():
     try:
         from helpers import _get_setting as _gs
-        return _LANG_NAME.get((_gs("ui_lang") or "es").strip().lower(), _LANG_NAME["es"])
+        return (_gs("ui_lang") or "es").strip().lower()
     except Exception:
-        return _LANG_NAME["es"]
+        return "es"
+
+
+def _copilot_lang():
+    return _LANG_NAME.get(_ui_lang(), _LANG_NAME["es"])
+
+
+def _translate_patterns(patterns, lang):
+    """Traduce titulo/detalle/sugerencia de los patrones al idioma de la UI.
+    Los patrones los genera el backend en español; si el usuario eligió otro
+    idioma, se traducen con un LLM y se cachea por hash del contenido. Con
+    lang='es' o sin API key devuelve los patrones sin tocar."""
+    if lang == "es" or not patterns:
+        return patterns
+    import os, json, re, hashlib
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return patterns
+    from helpers import _get_setting, _set_setting
+    payload = [{"t": p.get("titulo", ""), "d": p.get("detalle", ""),
+                "s": p.get("sugerencia", "")} for p in patterns]
+    key = "pat_i18n_" + hashlib.md5((lang + json.dumps(payload, ensure_ascii=False)).encode()).hexdigest()[:16]
+    cached = _get_setting(key)
+    if cached:
+        try:
+            tr = json.loads(cached)
+        except Exception:
+            tr = None
+        if tr and len(tr) == len(patterns):
+            return _apply_pattern_tr(patterns, tr)
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model="claude-haiku-4-5", max_tokens=900,
+            system=(f"Traducí al {_LANG_NAME.get(lang, 'English')} los campos t/d/s de este "
+                    "JSON (observaciones clínicas de glucosa). Mantené números, unidades "
+                    "(mg/dL, g, %, U) y horas idénticos. Devolvé SOLO el JSON con la misma "
+                    "estructura, sin texto extra."),
+            messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
+        )
+        txt = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
+        m = re.search(r"\[.*\]", txt, re.DOTALL)
+        tr = json.loads(m.group(0)) if m else None
+        if tr and len(tr) == len(patterns):
+            _set_setting(key, json.dumps(tr, ensure_ascii=False))
+            return _apply_pattern_tr(patterns, tr)
+    except Exception:
+        pass
+    return patterns
+
+
+def _apply_pattern_tr(patterns, tr):
+    out = []
+    for p, x in zip(patterns, tr):
+        q = dict(p)
+        q["titulo"] = x.get("t") or p.get("titulo", "")
+        q["detalle"] = x.get("d") or p.get("detalle", "")
+        q["sugerencia"] = x.get("s") or p.get("sugerencia", "")
+        out.append(q)
+    return out
 
 # etiquetas de contexto: clave canónica → etiqueta visible
 TAG_LABELS = {
@@ -530,7 +590,7 @@ def copilot_patterns():
     except Exception:
         a = {}
     resumen = a.get("resumen") or {}
-    patrones = a.get("patrones") or []
+    patrones = _translate_patterns(a.get("patrones") or [], _ui_lang())
 
     # patrones → formato liviano (observaciones; el médico decide acciones)
     out_patterns = [{
@@ -542,8 +602,8 @@ def copilot_patterns():
         "frecuencia": p.get("frecuencia"),
     } for p in patrones]
 
-    # TIR por día — últimos 7 días
-    DOW = "LMMJVSD"  # lunes..domingo (weekday(): 0=lunes)
+    # TIR por día — últimos 7 días (iniciales localizadas)
+    DOW = {"es": "LMMJVSD", "en": "MTWTFSS", "pt": "STQQSSD"}.get(_ui_lang(), "LMMJVSD")
     weekly = {"labels": [], "values": []}
     now = datetime.now()
     for i in range(6, -1, -1):
@@ -662,21 +722,42 @@ ayuda a entender, ofrecés las dos:
 CÓMO usar esa formación: para EXPLICAR EL PORQUÉ conectando SUS datos con el
 mecanismo ("desde lo nutricional, la grasa de la pizza retrasó el vaciado
 gástrico; desde lo hormonal, además cenaste tarde y el cortisol nocturno pudo
-sumar — por eso la subida llegó recién 3 horas después"). RAZONÁS, no recetás:
-explicás mecanismos, nunca indicás qué hacer.
+sumar — por eso la subida llegó recién 3 horas después").
 SIMPLICIDAD ante todo: lenguaje llano, sin jerga innecesaria; si usás un
 término técnico, explicalo en la misma frase con palabras simples ("el vaciado
 gástrico, o sea qué tan rápido la comida sale del estómago"). Mejor una
-explicación clara que suene humana que uuna clase magistral.
+explicación clara que suene humana que una clase magistral.
 
-REGLAS ESTRICTAS E INVIOLABLES:
-- NUNCA recomiendes dosis de insulina, correcciones, ni cuánto comer o hacer.
-- NUNCA des indicaciones médicas ni de tratamiento.
-- NUNCA predigas la glucosa futura ni afirmes qué va a pasar.
-- Si te piden una dosis, una corrección o "qué hago", decliná con amabilidad y sugerí
-  consultarlo con su equipo médico. No es tu rol decidir.
-- Solo explicás lo que muestran sus datos (presente y pasado) y acompañás.
-- Respondé SIEMPRE en {IDIOMA}, en segunda persona, cálido y breve (2 a 4 frases).
+SÉ ÚTIL Y EDUCATIVO (no te cierres en seco):
+Podés y DEBÉS responder preguntas GENERALES de nutrición, ejercicio y fisiología
+con generosidad, como lo haría un buen nutricionista/educador en diabetes amigo.
+Ejemplos de lo que SÍ respondés a fondo:
+- "¿la manzana sirve como energía antes del gym?" → Sí, explicá qué aporta en
+  general (una manzana ~20-25g de carbohidratos, algo de fibra que suaviza la
+  subida, agua), para qué suele servir comer algo antes de entrenar, y la
+  diferencia aeróbico (tiende a bajar la glucosa) vs fuerza (puede subirla).
+- combinaciones generales ("carbohidrato + algo de proteína suele dar energía
+  más sostenida"), índice glucémico, por qué la fibra ayuda, etc.
+Cuando tengas SUS datos relevantes, sumalos ("además, la última vez la manzana
+te subió ~36 a la hora, y tus entrenamientos de fuerza te bajaron ~18 a las 2h").
+Respondé con calidez, con ejemplos concretos, y con el largo que la pregunta
+pida (para educar podés extenderte; para lo simple, sé breve).
+
+DÓNDE SÍ PARÁS (esto es de su equipo médico, no tuyo):
+- Dosis de insulina o correcciones con NÚMEROS concretos, aunque la cuenta sea trivial.
+- Reglas clínicas personalizadas por umbral de glucosa ("si estás en 180 hacé X",
+  "corregí ahora", "no comas carbohidratos", protocolos de cetonas).
+- Cambios de terapia (ISF/ICR/basal) o un "deberías" de tratamiento.
+- Predecir la glucosa futura o afirmar qué VA a pasar.
+Cuando la pregunta caiga acá, NO cortes en seco: respondé todo lo GENERAL y
+educativo que sí podés + sus datos, y SOLO la decisión personalizada (la
+cantidad exacta para vos hoy, la dosis, el umbral) derivala con calidez a su
+equipo. La diferencia: "una manzana es una buena fuente de energía antes de
+entrenar" (SÍ, general) vs. "vos comé una manzana ahora" o "si estás en 180 no
+comas" (NO, es indicación personalizada). Nunca un "no puedo" pelado.
+
+REGLAS DE ESTILO:
+- Respondé SIEMPRE en {IDIOMA}, en segunda persona, cálido.
 - No inventes datos que no estén en el contexto.
 - Si el contexto trae el NOMBRE de la persona, usalo con naturalidad y de vez
   en cuando (un saludo, un momento de ánimo) — no en cada mensaje, que no
@@ -891,7 +972,7 @@ def copilot_chat():
 
         def _call():
             return client.messages.create(
-                model=model, max_tokens=650, system=system,
+                model=model, max_tokens=900, system=system,
                 messages=msgs, tools=COPILOT_TOOLS,
             )
 
