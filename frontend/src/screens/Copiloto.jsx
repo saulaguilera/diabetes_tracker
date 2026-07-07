@@ -8,13 +8,50 @@ import NebulaGuide from '../components/NebulaGuide.jsx'
 
 const SUGG_KEYS = ['cop.s1', 'cop.s2', 'cop.s3', 'cop.s4', 'cop.s5']
 
+// La conversación se guarda en localStorage y dura 24h: sobrevive a cambiar de
+// pestaña, y al día siguiente arranca una nueva.
+const CHAT_KEY = 'orbit_chat_v1'
+const DAY_MS = 24 * 60 * 60 * 1000
+
+function loadChat() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CHAT_KEY) || 'null')
+    if (saved && Array.isArray(saved.messages) && saved.messages.length &&
+        Date.now() - saved.startedAt < DAY_MS) {
+      return saved
+    }
+  } catch {}
+  return null
+}
+
 export default function Copiloto({ theme }) {
   const { t } = useLang()
-  const [messages, setMessages] = useState([{ role: 'assistant', content: t('cop.greeting') }])
+  const startedAtRef = useRef(0)
+  const [messages, setMessages] = useState(() => {
+    const saved = loadChat()
+    if (saved) { startedAtRef.current = saved.startedAt; return saved.messages }
+    startedAtRef.current = Date.now()
+    return [{ role: 'assistant', content: t('cop.greeting') }]
+  })
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [kb, setKb] = useState(0)   // alto del teclado (visualViewport)
   const listRef = useRef(null)
+
+  // persistir la conversación (no guardamos solo el saludo)
+  useEffect(() => {
+    try {
+      if (messages.length > 1)
+        localStorage.setItem(CHAT_KEY, JSON.stringify({ startedAt: startedAtRef.current, messages }))
+    } catch {}
+  }, [messages])
+
+  // empezar una conversación nueva (manual o cuando venció el día)
+  const resetChat = () => {
+    try { localStorage.removeItem(CHAT_KEY) } catch {}
+    startedAtRef.current = Date.now()
+    setMessages([{ role: 'assistant', content: t('cop.greeting') }])
+  }
 
   // Sube el input con el teclado en vez de empujar toda la pantalla.
   useEffect(() => {
@@ -63,6 +100,19 @@ export default function Copiloto({ theme }) {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', fontFamily: SANS }}>
+      {/* nueva conversación — sutil, arriba a la derecha, cuando hay charla activa */}
+      {messages.length > 1 && (
+        <button onClick={resetChat} title={t('cop.newChat')} style={{
+          position: 'absolute', top: 'calc(56px + env(safe-area-inset-top))', right: 16, zIndex: 5,
+          display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 100, cursor: 'pointer',
+          background: theme.surface, color: theme.inkSoft, border: `0.5px solid ${theme.border}`,
+          fontFamily: SANS, fontSize: 12 }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>
+          </svg>
+          {t('cop.newChat')}
+        </button>
+      )}
       {/* mensajes */}
       <div ref={listRef} style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', padding: '8px 18px 8px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         {messages.map((m, i) => (
