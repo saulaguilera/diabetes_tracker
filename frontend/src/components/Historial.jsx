@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { apiGet } from '../api.js'
 import { SANS } from '../theme.js'
 import { useLang } from '../i18n.jsx'
+import { Loading } from './ui.jsx'
 import EventSheet, { META, dayLabel } from './EventSheet.jsx'
 
 const FILTERS = [
@@ -27,7 +28,7 @@ export default function Historial({ theme }) {
   useEffect(() => { load() }, [])
 
   if (err) return <Centered theme={theme}>{t('hist.loadError')}</Centered>
-  if (!data) return <Centered theme={theme}>{t('common.loading')}</Centered>
+  if (!data) return <Centered theme={theme}><Loading theme={theme} label={t('common.loading')}/></Centered>
 
   const events = (data.events || []).filter(e => filter === 'todos' || e.cat === filter)
   const groups = []

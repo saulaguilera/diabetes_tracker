@@ -53,6 +53,12 @@ body::after {
 .msg-in  { animation: msgIn 0.32s cubic-bezier(.2,.8,.2,1); }
 .rise-in { animation: riseIn 0.28s ease-out; }
 
+/* estado de carga: el satélite del logo orbita más rápido + latido suave */
+.orbit-loading { display: inline-flex; animation: orbitLoadPulse 2.4s ease-in-out infinite; }
+.orbit-loading .logo-sat { animation-duration: 2.2s !important; }
+@keyframes orbitLoadPulse { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .orbit-loading { animation: none; } }
+
 /* cursor de "escritura" del brief (typewriter) */
 @keyframes twBlink { 0%, 100% { opacity: 0.7; } 50% { opacity: 0; } }
 .tw-caret { animation: twBlink 0.9s steps(1) infinite; margin-left: 1px; font-weight: 300; }

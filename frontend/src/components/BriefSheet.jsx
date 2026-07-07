@@ -8,7 +8,7 @@ import { apiGet } from '../api.js'
 import { PAL, SANS } from '../theme.js'
 import { useLang } from '../i18n.jsx'
 import NebulaGuide from './NebulaGuide.jsx'
-import { useSheetClose, backdropAnim, sheetAnim } from './ui.jsx'
+import { useSheetClose, backdropAnim, sheetAnim, Loading } from './ui.jsx'
 
 function fmtDate(dateStr, lang = 'es') {
   if (!dateStr) return ''
@@ -84,7 +84,7 @@ export default function BriefSheet({ theme, onClose }) {
         animation: sheetAnim(closing), maxHeight: '88%', overflowY: 'auto' }}>
         <div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border, margin: '0 auto 18px' }}/>
 
-        {!data && !err && <div style={{ padding: '30px 0', textAlign: 'center', color: theme.inkSoft, fontSize: 14, fontFamily: SANS }}>{t('brief.preparing')}</div>}
+        {!data && !err && <div style={{ padding: '34px 0' }}><Loading theme={theme} label={t('brief.preparing')}/></div>}
         {err && <div style={{ padding: '30px 0', textAlign: 'center', color: theme.inkSoft, fontSize: 14, fontFamily: SANS }}>{t('brief.loadError')}</div>}
 
         {data && (

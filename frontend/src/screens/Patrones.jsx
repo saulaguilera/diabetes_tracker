@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { apiGet } from '../api.js'
 import { PAL, SANS } from '../theme.js'
 import { useLang } from '../i18n.jsx'
-import { Card, Eyebrow } from '../components/ui.jsx'
+import { Card, Eyebrow, Loading } from '../components/ui.jsx'
 
 const NIVEL_COLOR = {
   danger: '#D98A6A', warning: '#E0B057', info: PAL.glucosa.key,
@@ -65,7 +65,7 @@ export default function Patrones({ theme, refreshKey = 0 }) {
   }, [refreshKey])
 
   if (err) return <Centered theme={theme}>{t('pat.loadError')}</Centered>
-  if (!data) return <Centered theme={theme}>{t('common.loading')}</Centered>
+  if (!data) return <Centered theme={theme}><Loading theme={theme} label={t('common.loading')}/></Centered>
 
   const r = data.resumen || {}
   const div = <div style={{ width: '0.5px', background: theme.border }}/>

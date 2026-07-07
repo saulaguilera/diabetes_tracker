@@ -1,6 +1,21 @@
 // ui.jsx — primitivos visuales compartidos.
 import { useState } from 'react'
 import { SANS } from '../theme.js'
+import OrbitLogo from './OrbitLogo.jsx'
+
+// Estado de carga: el logo de Orbit con el satélite orbitando (más rápido).
+// Reemplaza el texto "Cargando…" en todas las pantallas.
+export function Loading({ theme, label, size = 48 }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, fontFamily: SANS }}>
+      <div className="orbit-loading"><OrbitLogo size={size}/></div>
+      {label && (
+        <div style={{ color: theme ? theme.inkFaint : 'rgba(234,242,248,0.5)', fontSize: 12.5,
+          letterSpacing: '0.16em', textTransform: 'uppercase' }}>{label}</div>
+      )}
+    </div>
+  )
+}
 
 // Cierre animado de sheets/overlays: en vez de desmontar de golpe, anima la
 // salida y recién entonces llama a onClose. [closing, requestClose]

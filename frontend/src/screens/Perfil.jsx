@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { apiGet, apiPut } from '../api.js'
 import { PAL, SANS } from '../theme.js'
-import { Card, Eyebrow, Stepper, Field, useSheetClose, backdropAnim, sheetAnim } from '../components/ui.jsx'
+import { Card, Eyebrow, Stepper, Field, Loading, useSheetClose, backdropAnim, sheetAnim } from '../components/ui.jsx'
 import { useLang, LANGS } from '../i18n.jsx'
 
 function Centered({ theme, children }) {
@@ -59,7 +59,7 @@ export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleThe
   }, [refreshKey, reloadKey])
 
   if (err) return <Centered theme={theme}>{t('perfil.loadError')}</Centered>
-  if (!data) return <Centered theme={theme}>{t('common.loading')}</Centered>
+  if (!data) return <Centered theme={theme}><Loading theme={theme} label={t('common.loading')}/></Centered>
 
   const s = data.sensor || {}
   const c = data.config || {}

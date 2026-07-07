@@ -8,7 +8,7 @@ import NebulaGuide from '../components/NebulaGuide.jsx'
 import GlucoseWave from '../components/GlucoseWave.jsx'
 import EventSheet from '../components/EventSheet.jsx'
 import BriefSheet from '../components/BriefSheet.jsx'
-import { Card, Eyebrow, Meter } from '../components/ui.jsx'
+import { Card, Eyebrow, Meter, Loading } from '../components/ui.jsx'
 
 const STATUS = {
   hipo:  { dot: '#E0B057', key: 'hoy.status.low' },
@@ -70,7 +70,7 @@ export default function Hoy({ theme, refreshKey = 0, onGoRegistro }) {
   }, [refreshKey, reload])
 
   if (err) return <Centered theme={theme}>{t('common.loadError')}</Centered>
-  if (!data) return <Centered theme={theme}>{t('common.loading')}</Centered>
+  if (!data) return <Centered theme={theme}><Loading theme={theme} label={t('common.loading')}/></Centered>
 
   const g = data.glucose
   const st = STATUS[g && g.status] || STATUS.rango
