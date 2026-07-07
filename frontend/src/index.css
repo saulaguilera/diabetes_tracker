@@ -53,9 +53,14 @@ body::after {
 .msg-in  { animation: msgIn 0.32s cubic-bezier(.2,.8,.2,1); }
 .rise-in { animation: riseIn 0.28s ease-out; }
 
+/* cursor de "escritura" del brief (typewriter) */
+@keyframes twBlink { 0%, 100% { opacity: 0.7; } 50% { opacity: 0; } }
+.tw-caret { animation: twBlink 0.9s steps(1) infinite; margin-left: 1px; font-weight: 300; }
+
 /* respetar la preferencia de reducir movimiento */
 @media (prefers-reduced-motion: reduce) {
   .msg-in, .rise-in { animation: none; }
+  .tw-caret { display: none; }
 }
 
 @keyframes aiSpin { to { transform: rotate(360deg); } }

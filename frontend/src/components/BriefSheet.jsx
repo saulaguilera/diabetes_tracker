@@ -38,6 +38,7 @@ export default function BriefSheet({ theme, onClose }) {
   const { t, lang } = useLang()
   const [data, setData] = useState(null)
   const [err, setErr] = useState(false)
+  const [typed, setTyped] = useState(false)   // narrativa terminó de "escribirse"
   const [closing, requestClose] = useSheetClose(onClose)
 
   useEffect(() => {
@@ -61,8 +62,8 @@ export default function BriefSheet({ theme, onClose }) {
         tiles.push(<Tile key="rng" theme={theme} label="Rango de hoy" value={`${s.min.v}–${s.max.v}`} unit="mg/dL"
           sub={`mín ${s.min.time} · máx ${s.max.time}`}/>)
       if (s.low_pct || s.high_pct)
-        tiles.push(<Tile key="oor" theme={theme} label="Fuera de rango" value={`${s.low_pct}·${s.high_pct}`} unit="%"
-          color={s.low_pct >= 4 ? '#E0B057' : '#D98A6A'} sub="bajo · alto"/>)
+        tiles.push(<Tile key="oor" theme={theme} label="Fuera de rango" value={s.low_pct + s.high_pct} unit="%"
+          color={s.low_pct >= 4 ? '#E0B057' : '#D98A6A'} sub={`${s.low_pct}% bajo · ${s.high_pct}% alto`}/>)
     }
     if (s.meals_n)
       tiles.push(<Tile key="ch" theme={theme} label="Carbohidratos" value={s.carbs_total} unit="g" color={PAL.metabolismo.key}
@@ -94,15 +95,17 @@ export default function BriefSheet({ theme, onClose }) {
               <div style={{ color: theme.inkFaint, fontSize: 13, marginTop: 3 }}>{fmtDate(data.date, lang)}</div>
             </div>
 
-            {/* narrativa del copiloto */}
+            {/* narrativa del copiloto — aparece como si se escribiera, tranquila */}
             <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', padding: '14px 0 18px' }}>
               <div style={{ flexShrink: 0, marginTop: -2 }}><NebulaGuide kind="pancreas" size={44} light={!theme.dark}/></div>
-              <p style={{ margin: 0, color: theme.ink, fontSize: 15.5, lineHeight: 1.55 }}>{data.narrative}</p>
+              <Typewriter text={data.narrative} onDone={() => setTyped(true)}
+                style={{ margin: 0, color: theme.ink, fontSize: 15.5, lineHeight: 1.55 }}/>
             </div>
 
-            {/* métricas de hoy */}
+            {/* métricas de hoy — se revelan suave cuando termina de escribir */}
             {tiles.length > 0 ? (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>{tiles}</div>
+              <div className={typed ? 'rise-in' : ''} style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 4,
+                opacity: typed ? 1 : 0, transition: 'opacity 0.4s ease' }}>{tiles}</div>
             ) : (
               <div style={{ color: theme.inkSoft, fontSize: 13.5, lineHeight: 1.5, padding: '4px 2px 8px' }}>
                 {t('brief.empty')}
@@ -137,4 +140,32 @@ export default function BriefSheet({ theme, onClose }) {
       </div>
     </div>
   ), document.body)
+}
+
+// Revela el texto como si se escribiera (calmo). Respeta prefers-reduced-motion.
+function Typewriter({ text, style, onDone }) {
+  const [n, setN] = useState(0)
+  useEffect(() => {
+    if (!text) { onDone && onDone(); return }
+    let reduce = false
+    try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch {}
+    if (reduce) { setN(text.length); onDone && onDone(); return }
+    setN(0)
+    // ritmo tranquilo: ~2.6s en total, sin bajar de 10ms/carácter
+    const step = Math.max(10, Math.round(2600 / text.length))
+    let i = 0
+    const id = setInterval(() => {
+      i += 1
+      setN(i)
+      if (i >= text.length) { clearInterval(id); onDone && onDone() }
+    }, step)
+    return () => clearInterval(id)
+  }, [text])
+  const done = !text || n >= text.length
+  return (
+    <p style={style}>
+      {text ? text.slice(0, n) : ''}
+      {!done && <span className="tw-caret" aria-hidden="true">▍</span>}
+    </p>
+  )
 }
