@@ -342,6 +342,8 @@ def _today_stats():
                         "name": m.name or "comida",
                         "time": m.timestamp.strftime("%H:%M"),
                         "carbs": int(m.carbs_g or 0),
+                        "protein": int(m.protein_g or 0),
+                        "fat": int(m.fat_g or 0),
                         "delta_2h": int(round(g2 - g0)),
                     })
         except Exception:
@@ -447,7 +449,12 @@ def _brief_context(s):
         L.append(f"Comidas: {s['meals_n']} ({s['carbs_total']} g de carbohidratos en total).")
     for mr in (s.get("meal_responses") or [])[:4]:
         sign = "+" if mr["delta_2h"] >= 0 else ""
-        L.append(f"Tras {mr['name']} ({mr['time']}, {mr['carbs']}g CH) la glucosa "
+        macros = f"{mr['carbs']}g CH"
+        if mr.get("protein"):
+            macros += f", {mr['protein']}g proteína"
+        if mr.get("fat"):
+            macros += f", {mr['fat']}g grasa"
+        L.append(f"Tras {mr['name']} ({mr['time']}, {macros}) la glucosa "
                  f"cambió {sign}{mr['delta_2h']} mg/dL a las 2h.")
     if s["insulin_total"]:
         L.append(f"Insulina: {s['insulin_total']} U en total "
@@ -974,9 +981,19 @@ def _chat_context():
         return "; ".join(fn(x) for x in rows) if rows else "ninguno"
 
     meals = Meal.query.filter(Meal.timestamp >= since48).order_by(Meal.timestamp.desc()).limit(8).all()
+
+    def _macros(m):
+        # carbos + proteína + grasa (las tres se registran; el copiloto necesita
+        # las tres para razonar el 'efecto pizza' y la subida tardía por proteína)
+        parts = [f"{int(m.carbs_g or 0)}g CH"]
+        if (m.protein_g or 0) > 0:
+            parts.append(f"{int(m.protein_g)}g proteína")
+        if (m.fat_g or 0) > 0:
+            parts.append(f"{int(m.fat_g)}g grasa")
+        return ", ".join(parts)
+
     L.append("COMIDAS (48h): " + _fmt(meals, lambda m:
-             f"{m.timestamp.strftime('%d/%m %H:%M')} {m.name or 'comida'} "
-             f"({int(m.carbs_g or 0)}g CH" + (f", {int(m.fat_g)}g grasa" if (m.fat_g or 0) > 0 else "") + ")"))
+             f"{m.timestamp.strftime('%d/%m %H:%M')} {m.name or 'comida'} ({_macros(m)})"))
     doses = InsulinDose.query.filter(InsulinDose.timestamp >= since48).order_by(InsulinDose.timestamp.desc()).limit(8).all()
     L.append("INSULINA (48h): " + _fmt(doses, lambda d:
              f"{d.timestamp.strftime('%d/%m %H:%M')} {d.units:g}U "

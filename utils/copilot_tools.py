@@ -284,6 +284,7 @@ def respuesta_a_comida(nombre: str, days: int = 90) -> dict:
         if len(instancias) < 15:
             instancias.append({"fecha": m.timestamp.strftime("%d/%m %H:%M"),
                                "nombre": m.name, "carbs_g": int(m.carbs_g or 0),
+                               "protein_g": int(m.protein_g or 0), "fat_g": int(m.fat_g or 0),
                                "delta_1h": d1, "delta_2h": d2, "delta_3h": d3})
     return {
         "coincidencias": len(meals), "ventana_dias": days,
