@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { apiPut, apiDelete } from '../api.js'
 import { PAL, SANS } from '../theme.js'
+import { useLang } from '../i18n.jsx'
 import { Stepper, Field, useSheetClose, backdropAnim, sheetAnim } from './ui.jsx'
 
 export const META = {
@@ -27,6 +28,7 @@ export function dayLabel(dateStr) {
 }
 
 export default function EventSheet({ theme, ev, onClose, onChanged }) {
+  const { t } = useLang()
   const isMeal = ev.cat === 'comida'
   const d = ev.data || {}
   const m = META[ev.cat] || { color: theme.accent, label: ev.cat }
@@ -41,10 +43,10 @@ export default function EventSheet({ theme, ev, onClose, onChanged }) {
   const [busy, setBusy] = useState(false)
   const [confirm, setConfirm] = useState(false)   // paso "¿seguro?" antes de borrar
 
-  const noun = isMeal ? 'este alimento'
-    : ev.cat === 'insulina' ? 'este registro de insulina'
-    : ev.cat === 'contexto' ? 'esta marca de contexto'
-    : 'esta actividad'
+  const noun = isMeal ? t('ev.noun.meal')
+    : ev.cat === 'insulina' ? t('ev.noun.insulin')
+    : ev.cat === 'contexto' ? t('ev.noun.context')
+    : t('ev.noun.exercise')
 
   const save = async () => {
     setBusy(true)
@@ -72,20 +74,20 @@ export default function EventSheet({ theme, ev, onClose, onChanged }) {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
           <span style={{ width: 9, height: 9, borderRadius: '50%', background: m.color, boxShadow: `0 0 8px ${m.color}` }}/>
-          <span style={{ flex: 1, color: theme.ink, fontSize: 18, fontWeight: 500 }}>{isMeal ? 'Editar comida' : ev.title}</span>
+          <span style={{ flex: 1, color: theme.ink, fontSize: 18, fontWeight: 500 }}>{isMeal ? t('ev.editMeal') : ev.title}</span>
           <span style={{ color: theme.inkFaint, fontSize: 13 }}>{[dayLabel(ev.date), ev.time].filter(Boolean).join(' · ')}</span>
         </div>
 
         {isMeal ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <Field theme={theme} value={name} onChange={setName} placeholder="¿Qué comiste?"/>
+            <Field theme={theme} value={name} onChange={setName} placeholder={t('reg.whatAte')}/>
             {/* ingredientes (si la comida se registró con desglose de foto) */}
             {d.components && d.components.length > 0 && (
               <div style={{ padding: '10px 12px', borderRadius: 12,
                 background: theme.dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
                 border: `0.5px solid ${theme.border}` }}>
                 <div style={{ color: theme.inkFaint, fontSize: 10.5, letterSpacing: '0.12em',
-                  textTransform: 'uppercase', marginBottom: 5 }}>Ingredientes</div>
+                  textTransform: 'uppercase', marginBottom: 5 }}>{t('ev.ingredients')}</div>
                 {d.components.map((cp, i) => (
                   <div key={i} style={{ display: 'flex', gap: 8, fontSize: 12.5, padding: '2px 0', color: theme.inkSoft }}>
                     <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cp.name}</span>
@@ -95,32 +97,32 @@ export default function EventSheet({ theme, ev, onClose, onChanged }) {
                 ))}
               </div>
             )}
-            <Row theme={theme} label="Carbohidratos"><Stepper theme={theme} value={carbs} setValue={setCarbs} step={5} max={300} unit="g" color={m.color}/></Row>
-            <Row theme={theme} label="Proteína"><Stepper theme={theme} value={protein} setValue={setProtein} step={5} max={200} unit="g" color={theme.ink}/></Row>
-            <Row theme={theme} label="Grasa"><Stepper theme={theme} value={fat} setValue={setFat} step={5} max={200} unit="g" color={theme.ink}/></Row>
+            <Row theme={theme} label={t('reg.carbs')}><Stepper theme={theme} value={carbs} setValue={setCarbs} step={5} max={300} unit="g" color={m.color}/></Row>
+            <Row theme={theme} label={t('reg.protein')}><Stepper theme={theme} value={protein} setValue={setProtein} step={5} max={200} unit="g" color={theme.ink}/></Row>
+            <Row theme={theme} label={t('reg.fat')}><Stepper theme={theme} value={fat} setValue={setFat} step={5} max={200} unit="g" color={theme.ink}/></Row>
             {/* ¿registraste tarde? corregí cuándo comiste en realidad */}
-            <Row theme={theme} label="Día">
+            <Row theme={theme} label={t('ev.day')}>
               <input type="date" value={date} max={new Date().toISOString().slice(0, 10)}
                 onChange={e => setDate(e.target.value)} style={timeInput(theme)}/>
             </Row>
-            <Row theme={theme} label="Hora">
+            <Row theme={theme} label={t('ev.time')}>
               <input type="time" value={time} onChange={e => setTime(e.target.value)} style={timeInput(theme)}/>
             </Row>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {ev.cat === 'insulina' && <>
-              <Info theme={theme} k="Unidades" v={`${d.units}U`}/>
-              <Info theme={theme} k="Tipo" v={d.label || d.type}/>
+              <Info theme={theme} k={t('ev.units')} v={`${d.units}U`}/>
+              <Info theme={theme} k={t('ev.type')} v={d.label || d.type}/>
             </>}
             {ev.cat === 'ejercicio' && <>
-              <Info theme={theme} k="Actividad" v={d.activity_type}/>
-              <Info theme={theme} k="Duración" v={d.duration_min ? `${d.duration_min} min` : '—'}/>
-              {d.intensity && <Info theme={theme} k="Intensidad" v={d.intensity}/>}
+              <Info theme={theme} k={t('ev.activity')} v={d.activity_type}/>
+              <Info theme={theme} k={t('ev.durationLabel')} v={d.duration_min ? `${d.duration_min} min` : '—'}/>
+              {d.intensity && <Info theme={theme} k={t('ev.intensity')} v={d.intensity}/>}
             </>}
             {ev.cat === 'contexto' && <>
-              <Info theme={theme} k="Contexto" v={ev.title}/>
-              {d.notes && <Info theme={theme} k="Nota" v={d.notes}/>}
+              <Info theme={theme} k={t('ev.context')} v={ev.title}/>
+              {d.notes && <Info theme={theme} k={t('ev.note')} v={d.notes}/>}
             </>}
           </div>
         )}
@@ -128,26 +130,26 @@ export default function EventSheet({ theme, ev, onClose, onChanged }) {
         {confirm ? (
           <div style={{ marginTop: 22 }}>
             <div style={{ color: theme.inkSoft, fontSize: 14, lineHeight: 1.45, marginBottom: 14 }}>
-              ¿Seguro que querés eliminar <b style={{ color: theme.ink }}>{noun}</b>? Esta acción no se puede deshacer.
+              {t('ev.confirmDel', { noun })}
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setConfirm(false)} disabled={busy} style={{ flex: 1, padding: '13px', borderRadius: 14,
                 border: `0.5px solid ${theme.border}`, background: 'transparent', color: theme.inkSoft, fontSize: 15,
-                fontFamily: SANS, cursor: 'pointer' }}>Cancelar</button>
+                fontFamily: SANS, cursor: 'pointer' }}>{t('common.cancel')}</button>
               <button onClick={remove} disabled={busy} style={{ flex: 1, padding: '13px', borderRadius: 14, border: 'none',
                 background: '#D9665A', color: '#fff', fontSize: 15, fontWeight: 600, fontFamily: SANS, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
-                {busy ? 'Eliminando…' : 'Sí, eliminar'}
+                {busy ? t('common.deleting') : t('ev.confirmYes')}
               </button>
             </div>
           </div>
         ) : (
           <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
             <button onClick={() => setConfirm(true)} disabled={busy} style={{ padding: '13px 16px', borderRadius: 14, border: `0.5px solid ${theme.border}`,
-              background: 'transparent', color: '#D98A6A', fontSize: 14, fontFamily: SANS, cursor: 'pointer' }}>Eliminar</button>
+              background: 'transparent', color: '#D98A6A', fontSize: 14, fontFamily: SANS, cursor: 'pointer' }}>{t('common.delete')}</button>
             {isMeal && (
               <button onClick={save} disabled={busy} style={{ flex: 1, padding: '13px', borderRadius: 14, border: 'none',
                 background: m.color, color: '#0A0C1E', fontSize: 15, fontWeight: 600, fontFamily: SANS, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
-                {busy ? 'Guardando…' : 'Guardar'}
+                {busy ? t('common.saving') : t('common.save')}
               </button>
             )}
           </div>

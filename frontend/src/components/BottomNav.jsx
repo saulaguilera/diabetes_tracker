@@ -1,12 +1,13 @@
 // BottomNav.jsx — navegación inferior (portado de cm-app.jsx)
 import { SANS } from '../theme.js'
+import { useLang } from '../i18n.jsx'
 
 export const NAV = [
-  { id: 'hoy',        label: 'Hoy',      icon: 'hoy'   },
-  { id: 'patrones',   label: 'Patrones', icon: 'trend' },
-  { id: 'registro',   label: 'Registro', icon: 'plus'  },
-  { id: 'copiloto',   label: 'Copiloto', icon: 'spark' },
-  { id: 'perfil',     label: 'Perfil',   icon: 'user'  },
+  { id: 'hoy',        key: 'nav.hoy',      icon: 'hoy'   },
+  { id: 'patrones',   key: 'nav.patrones', icon: 'trend' },
+  { id: 'registro',   key: 'nav.registro', icon: 'plus'  },
+  { id: 'copiloto',   key: 'nav.copiloto', icon: 'spark' },
+  { id: 'perfil',     key: 'nav.perfil',   icon: 'user'  },
 ]
 
 function NavIcon({ kind, color }) {
@@ -23,6 +24,7 @@ function NavIcon({ kind, color }) {
 }
 
 export default function BottomNav({ theme, current, onChange }) {
+  const { t } = useLang()
   return (
     <div style={{
       position: 'fixed', left: 14, right: 14, bottom: 'max(10px, env(safe-area-inset-bottom))', zIndex: 40, borderRadius: 32, maxWidth: 480, marginInline: 'auto',
@@ -42,7 +44,7 @@ export default function BottomNav({ theme, current, onChange }) {
           }}>
             {on && <div style={{ position: 'absolute', top: -2, width: 40, height: 40, borderRadius: 20, background: `radial-gradient(circle, ${theme.accent}33 0%, transparent 70%)` }}/>}
             <div style={{ position: 'relative', zIndex: 1 }}><NavIcon kind={item.icon} color={on ? theme.ink : theme.inkFaint}/></div>
-            <span style={{ fontSize: 9.5, letterSpacing: '0.02em', position: 'relative', zIndex: 1 }}>{item.label}</span>
+            <span style={{ fontSize: 9.5, letterSpacing: '0.02em', position: 'relative', zIndex: 1 }}>{t(item.key)}</span>
           </div>
         )
       })}

@@ -3,23 +3,14 @@
 import { useState, useRef, useEffect } from 'react'
 import { apiPost } from '../api.js'
 import { PAL, SANS } from '../theme.js'
+import { useLang } from '../i18n.jsx'
 import NebulaGuide from '../components/NebulaGuide.jsx'
 
-const GREETING = 'Hola 👋 Soy tu copiloto. Puedo explicarte tus datos y acompañarte. Para dosis o decisiones médicas, siempre tu equipo de salud. ¿Qué querés saber?'
-
-// Preguntas sugeridas (estilo del diseño) — SOLO explicativas/de acompañamiento.
-// Se evitan a propósito las que piden juicio o recomendación ("¿está bien?",
-// "ideas para mi comida"), por el candado del copiloto.
-const SUGGESTIONS = [
-  '¿Qué me estuvo afectando?',
-  '¿Qué pasa con mi glucosa después del ejercicio?',
-  '¿Cómo me fue cubriendo los carbohidratos?',
-  '¿Cómo son mis noches?',
-  '¿Cómo estuvo mi semana?',
-]
+const SUGG_KEYS = ['cop.s1', 'cop.s2', 'cop.s3', 'cop.s4', 'cop.s5']
 
 export default function Copiloto({ theme }) {
-  const [messages, setMessages] = useState([{ role: 'assistant', content: GREETING }])
+  const { t } = useLang()
+  const [messages, setMessages] = useState([{ role: 'assistant', content: t('cop.greeting') }])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [kb, setKb] = useState(0)   // alto del teclado (visualViewport)
@@ -56,7 +47,7 @@ export default function Copiloto({ theme }) {
       setMessages(m => [...m, { role: 'assistant', content: r.reply || '…',
         usedData: (r.used_data || []).length > 0 }])
     } catch (e) {
-      setMessages(m => [...m, { role: 'assistant', content: 'No pude responder ahora. Probá de nuevo.' }])
+      setMessages(m => [...m, { role: 'assistant', content: t('cop.error') }])
     } finally {
       setSending(false)
     }
@@ -66,8 +57,8 @@ export default function Copiloto({ theme }) {
   const [slowThinking, setSlowThinking] = useState(false)
   useEffect(() => {
     if (!sending) { setSlowThinking(false); return }
-    const t = setTimeout(() => setSlowThinking(true), 2500)
-    return () => clearTimeout(t)
+    const id = setTimeout(() => setSlowThinking(true), 2500)
+    return () => clearTimeout(id)
   }, [sending])
 
   return (
@@ -80,7 +71,7 @@ export default function Copiloto({ theme }) {
         {sending && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: theme.inkFaint, fontSize: 12.5, paddingLeft: 44 }}>
             <div className="ai-orbit" style={{ width: 14, height: 14, borderRadius: '50%', border: `2px solid ${theme.accent}44`, borderTopColor: theme.accent }}/>
-            {slowThinking ? 'analizando tus datos…' : 'pensando…'}
+            {slowThinking ? t('cop.analyzing') : t('cop.thinking')}
           </div>
         )}
       </div>
@@ -88,11 +79,11 @@ export default function Copiloto({ theme }) {
       {/* preguntas sugeridas (al empezar) */}
       {messages.length === 1 && !sending && (
         <div style={{ flexShrink: 0, display: 'flex', gap: 8, overflowX: 'auto', padding: '4px 16px 2px' }}>
-          {SUGGESTIONS.map((s, i) => (
-            <button key={i} onClick={() => send(s)} style={{
+          {SUGG_KEYS.map((k, i) => (
+            <button key={i} onClick={() => send(t(k))} style={{
               flexShrink: 0, padding: '9px 14px', borderRadius: 100, cursor: 'pointer', fontFamily: SANS, fontSize: 13,
               background: theme.surface, color: theme.inkSoft, border: `0.5px solid ${theme.border}`, whiteSpace: 'nowrap' }}>
-              {s}
+              {t(k)}
             </button>
           ))}
         </div>
@@ -106,7 +97,7 @@ export default function Copiloto({ theme }) {
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-          placeholder="Preguntá sobre tus datos…"
+          placeholder={t('cop.placeholder')}
           rows={1}
           style={{
             flex: 1, resize: 'none', maxHeight: 100, padding: '12px 14px', borderRadius: 18, fontSize: 15,
@@ -126,6 +117,7 @@ export default function Copiloto({ theme }) {
 }
 
 function Bubble({ theme, role, text, usedData }) {
+  const { t } = useLang()
   const isUser = role === 'user'
   return (
     <div className="msg-in" style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexDirection: isUser ? 'row-reverse' : 'row' }}>
@@ -146,7 +138,7 @@ function Bubble({ theme, role, text, usedData }) {
         {/* transparencia: esta respuesta salió de consultar tus datos reales */}
         {usedData && !isUser && (
           <div style={{ color: theme.inkFaint, fontSize: 10.5, marginTop: 4, paddingLeft: 6,
-            letterSpacing: '0.06em' }}>✦ basado en tus datos</div>
+            letterSpacing: '0.06em' }}>{t('cop.basedOnData')}</div>
         )}
       </div>
     </div>

@@ -6,14 +6,15 @@ import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { apiGet } from '../api.js'
 import { PAL, SANS } from '../theme.js'
+import { useLang } from '../i18n.jsx'
 import NebulaGuide from './NebulaGuide.jsx'
 import { useSheetClose, backdropAnim, sheetAnim } from './ui.jsx'
 
-function fmtDate(dateStr) {
+function fmtDate(dateStr, lang = 'es') {
   if (!dateStr) return ''
   try {
     const d = new Date(dateStr + 'T00:00:00')
-    const s = d.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })
+    const s = d.toLocaleDateString(lang, { weekday: 'long', day: 'numeric', month: 'long' })
     return s.charAt(0).toUpperCase() + s.slice(1)
   } catch { return '' }
 }
@@ -34,6 +35,7 @@ function Tile({ theme, label, value, unit, color, sub }) {
 }
 
 export default function BriefSheet({ theme, onClose }) {
+  const { t, lang } = useLang()
   const [data, setData] = useState(null)
   const [err, setErr] = useState(false)
   const [closing, requestClose] = useSheetClose(onClose)
@@ -77,15 +79,15 @@ export default function BriefSheet({ theme, onClose }) {
         animation: sheetAnim(closing), maxHeight: '88%', overflowY: 'auto' }}>
         <div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border, margin: '0 auto 18px' }}/>
 
-        {!data && !err && <div style={{ padding: '30px 0', textAlign: 'center', color: theme.inkSoft, fontSize: 14, fontFamily: SANS }}>Preparando tu resumen…</div>}
-        {err && <div style={{ padding: '30px 0', textAlign: 'center', color: theme.inkSoft, fontSize: 14, fontFamily: SANS }}>No se pudo cargar el resumen ahora.</div>}
+        {!data && !err && <div style={{ padding: '30px 0', textAlign: 'center', color: theme.inkSoft, fontSize: 14, fontFamily: SANS }}>{t('brief.preparing')}</div>}
+        {err && <div style={{ padding: '30px 0', textAlign: 'center', color: theme.inkSoft, fontSize: 14, fontFamily: SANS }}>{t('brief.loadError')}</div>}
 
         {data && (
           <div style={{ fontFamily: SANS }}>
             {/* encabezado — saludo + fecha */}
             <div style={{ marginBottom: 16 }}>
               <div style={{ color: theme.ink, fontSize: 22, fontWeight: 500, letterSpacing: '-0.01em' }}>{data.greeting}</div>
-              <div style={{ color: theme.inkFaint, fontSize: 13, marginTop: 3 }}>{fmtDate(data.date)}</div>
+              <div style={{ color: theme.inkFaint, fontSize: 13, marginTop: 3 }}>{fmtDate(data.date, lang)}</div>
             </div>
 
             {/* narrativa del copiloto */}
@@ -99,7 +101,7 @@ export default function BriefSheet({ theme, onClose }) {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>{tiles}</div>
             ) : (
               <div style={{ color: theme.inkSoft, fontSize: 13.5, lineHeight: 1.5, padding: '4px 2px 8px' }}>
-                Todavía no registraste nada hoy. Cuando agregues lecturas o eventos, los vas a ver acá.
+                {t('brief.empty')}
               </div>
             )}
 
@@ -107,7 +109,7 @@ export default function BriefSheet({ theme, onClose }) {
             {s && s.meal_responses && s.meal_responses.length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <div style={{ color: theme.inkFaint, fontSize: 11, letterSpacing: '0.14em',
-                  textTransform: 'uppercase', marginBottom: 6 }}>Tus comidas de hoy</div>
+                  textTransform: 'uppercase', marginBottom: 6 }}>{t('brief.yourMeals')}</div>
                 {s.meal_responses.map((mr, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10,
                     padding: '10px 0', borderTop: `0.5px solid ${theme.border}` }}>
@@ -124,7 +126,7 @@ export default function BriefSheet({ theme, onClose }) {
             )}
 
             <div style={{ color: theme.inkFaint, fontSize: 11.5, lineHeight: 1.5, marginTop: 18 }}>
-              Orbit solo describe y acompaña tus datos. No reemplaza a tu equipo médico.
+              {t('brief.disclaimer')}
             </div>
           </div>
         )}

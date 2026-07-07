@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { apiGet } from '../api.js'
 import { PAL, SANS } from '../theme.js'
+import { useLang } from '../i18n.jsx'
 import NebulaGuide from '../components/NebulaGuide.jsx'
 import GlucoseWave from '../components/GlucoseWave.jsx'
 import EventSheet from '../components/EventSheet.jsx'
@@ -10,10 +11,12 @@ import BriefSheet from '../components/BriefSheet.jsx'
 import { Card, Eyebrow, Meter } from '../components/ui.jsx'
 
 const STATUS = {
-  hipo:  { dot: '#E0B057', label: 'Bajo' },
-  hiper: { dot: '#D98A6A', label: 'Alto' },
-  rango: { dot: '#5FC6A8', label: 'En rango' },
+  hipo:  { dot: '#E0B057', key: 'hoy.status.low' },
+  hiper: { dot: '#D98A6A', key: 'hoy.status.high' },
+  rango: { dot: '#5FC6A8', key: 'hoy.status.range' },
 }
+// tendencia del backend (español) → clave i18n
+const TREND_KEY = { 'Subiendo': 'hoy.trend.up', 'Bajando': 'hoy.trend.down', 'Estable': 'hoy.trend.flat' }
 const CAT_COLOR = {
   comida: PAL.metabolismo.key,
   insulina: PAL.insulina.key,
@@ -42,6 +45,7 @@ function Metric({ theme, label, value, unit, color }) {
 }
 
 export default function Hoy({ theme, refreshKey = 0, onGoRegistro }) {
+  const { t } = useLang()
   const [data, setData] = useState(null)
   const [err, setErr] = useState(null)
   const [sel, setSel] = useState(null)     // evento abierto para editar/borrar
@@ -65,16 +69,16 @@ export default function Hoy({ theme, refreshKey = 0, onGoRegistro }) {
     return () => { alive = false }
   }, [refreshKey, reload])
 
-  if (err) return <Centered theme={theme}>No se pudieron cargar tus datos ahora.</Centered>
-  if (!data) return <Centered theme={theme}>Cargando…</Centered>
+  if (err) return <Centered theme={theme}>{t('common.loadError')}</Centered>
+  if (!data) return <Centered theme={theme}>{t('common.loading')}</Centered>
 
   const g = data.glucose
   const st = STATUS[g && g.status] || STATUS.rango
   const div = <div style={{ width: '0.5px', background: theme.border }}/>
 
   const hour = new Date().getHours()
-  const hello = hour < 12 ? 'Buenos días' : hour < 20 ? 'Buenas tardes' : 'Buenas noches'
-  const briefTeaser = data.tir_today != null ? `${hello} · ${data.tir_today}% en rango hoy` : 'Tu resumen del día'
+  const hello = hour < 12 ? t('greet.morning') : hour < 20 ? t('greet.afternoon') : t('greet.evening')
+  const briefTeaser = data.tir_today != null ? t('hoy.briefTeaser', { greet: hello, tir: data.tir_today }) : t('hoy.briefDefault')
 
   // recordatorio amable: basal de hoy sin registrar, pasada tu hora habitual
   const basal = data.context && data.context.basal
@@ -91,42 +95,42 @@ export default function Hoy({ theme, refreshKey = 0, onGoRegistro }) {
             background: '#E0B057', boxShadow: '0 0 10px #E0B057' }}/>
           <div style={{ flex: 1 }}>
             <div style={{ color: theme.ink, fontSize: 14, lineHeight: 1.4 }}>
-              Tu basal de hoy todavía no está registrada
+              {t('hoy.basalReminder')}
             </div>
             <div style={{ color: theme.inkFaint, fontSize: 12, marginTop: 2 }}>
-              Solés aplicarla a las {basal.hora}:00{basal.tipo ? ` (${basal.tipo} ${basal.expected_units}U)` : ''}
+              {t('hoy.basalReminderWhen', { h: basal.hora })}{basal.tipo ? ` (${basal.tipo} ${basal.expected_units}U)` : ''}
             </div>
           </div>
           {onGoRegistro && (
             <button onClick={onGoRegistro} style={{ padding: '8px 13px', borderRadius: 100, border: 'none', cursor: 'pointer',
               background: 'rgba(224,176,87,0.16)', color: '#E0B057', fontSize: 12.5, fontWeight: 600, fontFamily: SANS }}>
-              Registrar
+              {t('hoy.log')}
             </button>
           )}
-          <button onClick={dismissBasal} aria-label="Descartar por hoy" style={{ background: 'none', border: 'none',
+          <button onClick={dismissBasal} aria-label={t('hoy.dismiss')} style={{ background: 'none', border: 'none',
             color: theme.inkFaint, fontSize: 16, cursor: 'pointer', padding: '4px 2px', fontFamily: SANS }}>✕</button>
         </Card>
       )}
       {/* hero — glucosa actual */}
       <div>
-        <div style={{ color: theme.inkSoft, fontSize: 14, marginBottom: 10 }}>Ahora</div>
+        <div style={{ color: theme.inkSoft, fontSize: 14, marginBottom: 10 }}>{t('hoy.now')}</div>
         {g ? (
           <>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12 }}>
               <span style={{ fontSize: 88, fontWeight: 200, letterSpacing: '-0.05em', color: theme.ink,
                 lineHeight: 0.82, fontVariantNumeric: 'tabular-nums' }}>{g.value}</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: theme.inkSoft, fontSize: 16, paddingBottom: 8 }}>
-                mg/dL <span style={{ fontSize: 19, color: theme.inkFaint }}>{g.arrow}</span>
+                {t('common.mgdl')} <span style={{ fontSize: 19, color: theme.inkFaint }}>{g.arrow}</span>
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16 }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: st.dot, boxShadow: `0 0 10px ${st.dot}` }}/>
-              <span style={{ color: theme.inkSoft, fontSize: 15 }}>{st.label}</span>
-              {g.age_min != null && <span style={{ color: theme.inkFaint, fontSize: 12 }}>· hace {g.age_min}m</span>}
+              <span style={{ color: theme.inkSoft, fontSize: 15 }}>{t(st.key)}</span>
+              {g.age_min != null && <span style={{ color: theme.inkFaint, fontSize: 12 }}>· {t('hoy.agoMin', { n: g.age_min })}</span>}
             </div>
           </>
         ) : (
-          <div style={{ color: theme.inkSoft, fontSize: 15 }}>Sin lecturas recientes.</div>
+          <div style={{ color: theme.inkSoft, fontSize: 15 }}>{t('hoy.noReadings')}</div>
         )}
       </div>
 
@@ -144,15 +148,15 @@ export default function Hoy({ theme, refreshKey = 0, onGoRegistro }) {
 
       {/* contexto ahora — IOB / COB / tendencia + basal */}
       <Card theme={theme} style={{ padding: '16px 20px' }}>
-        <Eyebrow theme={theme} style={{ fontSize: 10 }}>Contexto ahora</Eyebrow>
+        <Eyebrow theme={theme} style={{ fontSize: 10 }}>{t('hoy.contextNow')}</Eyebrow>
         <div style={{ display: 'flex', gap: 12, marginTop: 14 }}>
-          <Metric theme={theme} label="Insulina activa" value={data.context.iob} unit="U" color={PAL.insulina.key}/>
+          <Metric theme={theme} label={t('hoy.activeInsulin')} value={data.context.iob} unit="U" color={PAL.insulina.key}/>
           {div}
-          <Metric theme={theme} label="Carbos activos" value={data.context.cob} unit="g" color={PAL.metabolismo.key}/>
+          <Metric theme={theme} label={t('hoy.activeCarbs')} value={data.context.cob} unit="g" color={PAL.metabolismo.key}/>
           {div}
           <div style={{ flex: 1 }}>
-            <div style={{ color: theme.inkFaint, fontSize: 11 }}>Tendencia</div>
-            <div style={{ fontSize: 18, fontWeight: 400, color: theme.ink, marginTop: 7 }}>{data.context.trend}</div>
+            <div style={{ color: theme.inkFaint, fontSize: 11 }}>{t('hoy.trend')}</div>
+            <div style={{ fontSize: 18, fontWeight: 400, color: theme.ink, marginTop: 7 }}>{TREND_KEY[data.context.trend] ? t(TREND_KEY[data.context.trend]) : data.context.trend}</div>
           </div>
         </div>
         {/* basal — antes no aparecía en el contexto */}
@@ -163,8 +167,8 @@ export default function Hoy({ theme, refreshKey = 0, onGoRegistro }) {
               background: data.context.basal.logged_today ? '#5FC6A8' : '#E0B057',
               boxShadow: `0 0 8px ${data.context.basal.logged_today ? '#5FC6A8' : '#E0B057'}` }}/>
             <span style={{ color: theme.inkSoft, fontSize: 12.5 }}>
-              Basal{data.context.basal.tipo ? ` (${data.context.basal.tipo})` : ''} · {data.context.basal.last_units}U hace {data.context.basal.last_ago}
-              {!data.context.basal.logged_today && ' · hoy sin registrar'}
+              {t('hoy.basal')}{data.context.basal.tipo ? ` (${data.context.basal.tipo})` : ''} · {data.context.basal.last_units}U · {data.context.basal.last_ago}
+              {!data.context.basal.logged_today && ` · ${t('hoy.basalNotToday')}`}
             </span>
           </div>
         )}
@@ -174,8 +178,8 @@ export default function Hoy({ theme, refreshKey = 0, onGoRegistro }) {
       {data.tir_today != null && (
         <Card theme={theme} style={{ padding: '20px 22px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <span style={{ color: theme.inkSoft, fontSize: 14 }}>Tiempo en rango</span>
-            <span style={{ color: theme.inkFaint, fontSize: 13 }}>Hoy · 24 h</span>
+            <span style={{ color: theme.inkSoft, fontSize: 14 }}>{t('hoy.tir')}</span>
+            <span style={{ color: theme.inkFaint, fontSize: 13 }}>{t('hoy.tirToday')}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '14px 0 16px' }}>
             <span style={{ fontSize: 40, fontWeight: 300, color: theme.ink, letterSpacing: '-0.03em',
@@ -189,7 +193,7 @@ export default function Hoy({ theme, refreshKey = 0, onGoRegistro }) {
       {/* actividad reciente */}
       {data.recent && data.recent.length > 0 && (
         <Card theme={theme} style={{ padding: '6px 18px 10px' }}>
-          <Eyebrow theme={theme} style={{ fontSize: 10, padding: '12px 0 4px' }}>Actividad reciente</Eyebrow>
+          <Eyebrow theme={theme} style={{ fontSize: 10, padding: '12px 0 4px' }}>{t('hoy.recent')}</Eyebrow>
           {data.recent.map((e, i) => (
             <div key={i} onClick={() => e.id && setSel(e)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderTop: `0.5px solid ${theme.border}`, cursor: e.id ? 'pointer' : 'default' }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
@@ -206,7 +210,7 @@ export default function Hoy({ theme, refreshKey = 0, onGoRegistro }) {
       <Card theme={theme} glow={PAL.ritmo.soft} onClick={() => setShowBrief(true)} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px' }}>
         <div style={{ marginLeft: -4, flexShrink: 0 }}><NebulaGuide kind="pancreas" size={52} light={!theme.dark}/></div>
         <div style={{ flex: 1 }}>
-          <Eyebrow theme={theme} style={{ fontSize: 9.5 }}>Brief diario</Eyebrow>
+          <Eyebrow theme={theme} style={{ fontSize: 9.5 }}>{t('hoy.brief')}</Eyebrow>
           <div style={{ color: theme.ink, fontSize: 15, marginTop: 6, lineHeight: 1.4 }}>{briefTeaser}</div>
         </div>
         <span style={{ color: theme.inkFaint, fontSize: 20 }}>›</span>
