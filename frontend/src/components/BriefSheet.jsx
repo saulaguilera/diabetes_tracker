@@ -49,6 +49,10 @@ export default function BriefSheet({ theme, onClose }) {
   const s = data && data.stats
   const tiles = []
   if (s) {
+    // la noche primero — es lo que más importa a la mañana
+    if (s.overnight)
+      tiles.push(<Tile key="night" theme={theme} label="Noche · 00–08h" value={s.overnight.tir} unit="%" color={PAL.ritmo.key}
+        sub={`mín ${s.overnight.min}${s.overnight.low_events ? ` · ${s.overnight.low_events} baja` : ' · sin bajas'}`}/>)
     if (s.readings_n) {
       tiles.push(<Tile key="tir" theme={theme} label="Tiempo en rango" value={s.tir} unit="%" color={PAL.insulina.key}
         sub={s.tir_ayer != null ? `ayer ${s.tir_ayer}% · ${s.tir - s.tir_ayer >= 0 ? '+' : ''}${s.tir - s.tir_ayer}` : null}/>)

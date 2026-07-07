@@ -241,9 +241,50 @@ def copilot_home():
 
 
 # ── Brief diario — resumen retrospectivo del día (SIN predicción) ─────────────
+def _overnight_stats(now):
+    """La noche/madrugada (hoy 00:00–08:00): TIR nocturno, mínima, hipos y alba.
+    Es lo que más importa en un brief de la mañana ('¿cómo estuve de noche?')."""
+    from models import GlucoseReading
+    n0 = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    n1 = min(now, n0 + timedelta(hours=8))
+    reads = (GlucoseReading.query
+             .filter(GlucoseReading.timestamp >= n0, GlucoseReading.timestamp < n1,
+                     GlucoseReading.is_artifact == False)  # noqa: E712
+             .order_by(GlucoseReading.timestamp).all())
+    if len(reads) < 6:
+        return None
+    vals = [r.value_mgdl for r in reads]
+    n = len(vals)
+    low_events, in_low = 0, False
+    for v in vals:
+        if v < LOW:
+            if not in_low:
+                low_events += 1
+            in_low = True
+        else:
+            in_low = False
+    dawn = None
+    try:
+        from utils.copilot_memory import reading_near
+        times = [r.timestamp for r in reads]
+        g3 = reading_near(times, vals, n0.replace(hour=3))
+        g7 = reading_near(times, vals, n0.replace(hour=7))
+        if g3 is not None and g7 is not None:
+            dawn = int(round(g7 - g3))
+    except Exception:
+        pass
+    return {
+        "tir": round(100 * sum(1 for v in vals if LOW <= v <= HIGH) / n),
+        "avg": int(round(sum(vals) / n)),
+        "min": int(min(vals)),
+        "low_events": low_events,
+        "dawn_delta": dawn,
+    }
+
+
 def _today_stats():
     """Métricas de HOY (desde la medianoche local) calculadas, no predichas."""
-    from models import GlucoseReading, Meal, InsulinDose, Activity
+    from models import GlucoseReading, Meal, InsulinDose, Activity, ContextTag
     now = datetime.now()
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -300,6 +341,18 @@ def _today_stats():
     # ── basal de hoy ──────────────────────────────────────────────────────
     basal_hoy = next((d for d in doses if d.type == "basal"), None)
 
+    # ── contexto marcado (desde anoche) + ejercicio de hoy ────────────────
+    ctx_since = start - timedelta(hours=12)
+    ctx_tags = [{"tag": t.tag, "time": t.timestamp.strftime("%H:%M"), "notes": t.notes or ""}
+                for t in ContextTag.query.filter(ContextTag.timestamp >= ctx_since)
+                .order_by(ContextTag.timestamp).all()]
+    exercise = [{"type": a.activity_type or "ejercicio", "min": a.duration_min or 0,
+                 "intensity": a.intensity or "", "time": a.timestamp.strftime("%H:%M")}
+                for a in acts]
+
+    # franja horaria del brief → el LLM enmarca distinto a la mañana vs la noche
+    tod = "morning" if now.hour < 11 else "evening" if now.hour >= 20 else "day"
+
     return {
         **g,
         "carbs_total": int(round(sum(m.carbs_g or 0 for m in meals))),
@@ -314,6 +367,10 @@ def _today_stats():
         "basal_today": ({"units": basal_hoy.units,
                          "time": basal_hoy.timestamp.strftime("%H:%M")}
                         if basal_hoy else None),
+        "overnight": _overnight_stats(now),
+        "context_tags": ctx_tags,
+        "exercise": exercise,
+        "time_of_day": tod,
     }
 
 
@@ -342,6 +399,22 @@ def _brief_context(s):
             L.append(f"La persona se llama {nombre} (podés usar su nombre con calidez).")
     except Exception:
         pass
+    tod = s.get("time_of_day", "day")
+    L.append({"morning": "MOMENTO: es la mañana — arrancá por cómo estuvo la noche/madrugada "
+                          "y poné el foco ahí; el día recién empieza.",
+              "evening": "MOMENTO: es la noche — hacé un cierre del día completo.",
+              "day":     "MOMENTO: es de día — mirá cómo viene la jornada hasta ahora."}[tod])
+
+    # ── la noche/madrugada (lo primero que importa a la mañana) ──────────
+    ov = s.get("overnight")
+    if ov:
+        seg = f"NOCHE/MADRUGADA (00–08h): tiempo en rango {ov['tir']}%, promedio {ov['avg']} mg/dL, mínima {ov['min']}"
+        if ov["low_events"]:
+            seg += f", {ov['low_events']} episodio(s) de hipoglucemia nocturna"
+        if ov.get("dawn_delta") is not None and ov["dawn_delta"] >= 20:
+            seg += f", subida del alba de +{ov['dawn_delta']} mg/dL entre las 3 y las 7"
+        L.append(seg + ".")
+
     if s["readings_n"]:
         L.append(f"Tiempo en rango hoy: {s['tir']}% ({s['readings_n']} lecturas).")
         L.append(f"Glucosa promedio: {s['avg']} mg/dL. Mínima {s['min']['v']} a las "
@@ -354,6 +427,13 @@ def _brief_context(s):
         L.append("Todavía no hay lecturas de glucosa hoy.")
     if s.get("tir_ayer") is not None:
         L.append(f"Ayer el tiempo en rango fue {s['tir_ayer']}%.")
+    # contexto marcado (estrés/enfermedad/mal sueño) — para conectar el porqué
+    for ct in (s.get("context_tags") or []):
+        L.append(f"CONTEXTO marcado: {ct['tag']} ({ct['time']})"
+                 + (f" — {ct['notes']}" if ct["notes"] else "") + ".")
+    for ex in (s.get("exercise") or []):
+        L.append(f"Ejercicio: {ex['type']} {ex['min']}min "
+                 + (f"({ex['intensity']}) " if ex["intensity"] else "") + f"a las {ex['time']}.")
     if s["meals_n"]:
         L.append(f"Comidas: {s['meals_n']} ({s['carbs_total']} g de carbohidratos en total).")
     for mr in (s.get("meal_responses") or [])[:4]:
@@ -396,26 +476,38 @@ def _brief_fallback(s):
     return txt
 
 
-_BRIEF_SYSTEM = """Sos el copiloto de Orbit. Escribí el RESUMEN DEL DÍA de una persona con diabetes tipo 1.
+_BRIEF_SYSTEM = """Sos el copiloto de Orbit: escribís el brief diario de una persona
+con diabetes tipo 1. Sos como un buen educador en diabetes / nutricionista amigo:
+cálido, humano, claro, y con criterio — no un robot que enumera métricas.
 
-REGLAS ESTRICTAS E INVIOLABLES:
-- Solo DESCRIBÍS y ACOMPAÑÁS con lo que muestran los datos de hoy.
-- NUNCA recomiendes dosis, correcciones, qué comer o hacer, ni des indicaciones médicas.
-- NUNCA predigas la glucosa futura ni afirmes qué va a pasar.
-- 3 a 4 frases, en segunda persona, tono humano, cálido y tranquilo. Sin listas ni emojis.
-- Escribí SIEMPRE en {IDIOMA}.
-- No inventes datos que no estén abajo.
+TU MIRADA (usala para dar el PORQUÉ, no para indicar):
+Razonás desde la nutrición y la endocrinología. Si algo del día tiene una
+explicación fisiológica linda de contar, contala en simple: "la subida del alba
+(esas hormonas que te despiertan) te llevó la glucosa de X a Y de madrugada";
+"como marcaste que dormiste mal, tiene sentido que la noche viniera más
+variable — el mal sueño sube el cortisol y baja la sensibilidad a la insulina".
+Conectá los datos con el mecanismo, siempre en pasado y descriptivo.
 
-CÓMO ESCRIBIRLO (en este orden, todo en prosa):
-1. Cómo viene el día en una mirada honesta y humana (no repitas todos los números:
-   elegí lo que importa).
-2. Algo positivo CONCRETO del día (una comida que salió bien, una recuperación,
-   estabilidad nocturna, comparación favorable con ayer o con la semana).
-3. Si hay algo notable (una hipo, una comida que subió mucho, la basal sin
-   registrar), mencionalo con suavidad y SIN decir qué hacer — describir no es
-   indicar. Si no hay nada notable, cerrá con calma.
+REGLAS INVIOLABLES:
+- Solo DESCRIBÍS y ACOMPAÑÁS lo que muestran los datos. NUNCA recomendás dosis,
+  correcciones, qué comer o hacer, ni indicaciones médicas. NUNCA predigas.
+- Escribí SIEMPRE en {IDIOMA}, en segunda persona, cálido y tranquilo.
+- Prosa, sin listas ni bullets. 3 a 5 frases. Podés usar 1 emoji sutil si suma.
+- No inventes nada que no esté en los datos.
 
-DATOS DE HOY:
+CÓMO ESCRIBIRLO (adaptalo al MOMENTO del día que dice el contexto):
+- A la MAÑANA: abrí por cómo estuvo la NOCHE/madrugada (si dormiste protegido,
+  si hubo alguna baja, la subida del alba), y cerrá con un aliento para el día
+  que arranca.
+- De DÍA/NOCHE: hacé el balance de la jornada.
+En cualquier caso: (1) una mirada honesta y humana de lo esencial —elegí lo que
+importa, no recites todo—; (2) algo POSITIVO concreto (una comida que salió
+bien, una recuperación, una noche cuidada, mejor que ayer/la semana); (3) si hay
+algo para notar (una hipo, una comida que trepó, la basal sin registrar,
+contexto como estrés/enfermedad), nombralo con suavidad y con su PORQUÉ, sin
+decir qué hacer. Si no hay nada notable, cerrá con calma y calidez.
+
+DATOS:
 {context}"""
 
 
@@ -450,17 +542,19 @@ def copilot_brief():
     ctx = _brief_context(s)
     narrative = _brief_fallback(s)
 
-    # narrativa con el LLM (mismos guardarraíles); si falla, queda el fallback
+    # narrativa con el LLM (mismos guardarraíles); si falla, queda el fallback.
+    # Sonnet para calidad narrativa (override por env). Corre si hay lecturas de
+    # hoy O de la noche (a la mañana temprano el foco es la madrugada).
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if api_key and s["readings_n"]:
+    if api_key and (s["readings_n"] or s.get("overnight")):
         try:
             import anthropic
             client = anthropic.Anthropic(api_key=api_key)
             resp = client.messages.create(
-                model="claude-haiku-4-5",
-                max_tokens=200,
+                model=os.environ.get("COPILOT_BRIEF_MODEL", "claude-sonnet-5"),
+                max_tokens=450,
                 system=_BRIEF_SYSTEM.format(context=ctx, IDIOMA=_copilot_lang()),
-                messages=[{"role": "user", "content": "Escribí mi resumen del día."}],
+                messages=[{"role": "user", "content": "Escribí mi brief."}],
             )
             txt = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
             if txt:
