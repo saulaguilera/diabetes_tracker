@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { apiGet } from '../api.js'
+import { useLang } from '../i18n.jsx'
 import DriveModeExpanded from './DriveModeExpanded.jsx'
 import { DEMO_STATES } from './demoStates.js'
 import { startDriveActivity, updateDriveActivity, endDriveActivity } from './liveActivityBridge.js'
@@ -12,6 +13,7 @@ const SANS = '"Outfit", -apple-system, system-ui, sans-serif'
 const POLL_MS = 30000
 
 export default function DriveModeScreen({ onClose, demo = false }) {
+  const { t } = useLang()
   const [data, setData] = useState(demo ? DEMO_STATES[0] : null)
   const [err, setErr] = useState(false)
   const [demoIdx, setDemoIdx] = useState(0)
@@ -86,7 +88,7 @@ export default function DriveModeScreen({ onClose, demo = false }) {
       <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: '#04060C', color: 'rgba(234,242,248,0.6)',
         display: 'grid', placeItems: 'center', fontFamily: SANS, fontSize: 15,
         animation: closing ? 'scaleOut 0.24s ease forwards' : 'scaleIn 0.3s cubic-bezier(.2,.8,.2,1)' }}>
-        {err ? 'No se pudo cargar el estado.' : 'Cargando…'}
+        {err ? t('drive.loadError') : t('common.loading')}
         <button onClick={requestClose} style={{ position: 'absolute', top: 'max(20px,env(safe-area-inset-top))', right: 24,
           width: 40, height: 40, borderRadius: 20, border: '1px solid rgba(255,255,255,0.12)',
           background: 'transparent', color: 'inherit', fontSize: 20, cursor: 'pointer' }}>✕</button>
