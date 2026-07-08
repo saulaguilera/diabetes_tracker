@@ -902,6 +902,15 @@ REGLAS DE ESTILO:
   descriptivo, nunca como predicción.
 - Si la persona te pide que recuerdes algo, la nota SE GUARDA AUTOMÁTICAMENTE:
   confirmalo con calidez ("Listo, lo voy a tener presente").
+- LÍNEA DE TIEMPO: el contexto trae los eventos de las últimas 48h (comidas,
+  insulina, ejercicio, contexto, bajadas/subidas) MEZCLADOS en orden
+  cronológico, con la glucosa del momento. Pensá el día como una SECUENCIA
+  causa→efecto: lo que pasó antes explica lo que vino después (comida grasosa
+  al mediodía → subida tardía; fuerza a la tarde → más sensibilidad a la
+  noche; estrés a la mañana → resistencia el resto del día). Cuando expliques
+  algo, anclalo en esa secuencia concreta ("a las 14:02 comiste el bife, te
+  aplicaste 4U a las 14:10, y para las 16:00 estabas en 180") en vez de tratar
+  cada dato como un hecho suelto.
 - Tenés CONSULTAS a los datos reales (ejercicio, hipos, franjas horarias,
   comidas, impacto de eventos, relación carbos-insulina, impacto de contexto
   como estrés/enfermedad/mal sueño). Cuando la pregunta lo amerite, usalas y
@@ -979,9 +988,11 @@ def _chat_context():
     except Exception:
         pass
 
-    # ── glucosa últimas 24h ───────────────────────────────────────────────
-    since = now - timedelta(hours=24)
-    reads = GlucoseReading.query.filter(GlucoseReading.timestamp >= since).order_by(GlucoseReading.timestamp).all()
+    # ── glucosa: lecturas 48h (alimentan resumen 24h + línea de tiempo) ───
+    since48 = now - timedelta(hours=48)
+    reads48 = (GlucoseReading.query.filter(GlucoseReading.timestamp >= since48)
+               .order_by(GlucoseReading.timestamp).all())
+    reads = [r for r in reads48 if r.timestamp >= now - timedelta(hours=24)]
     if reads:
         vals = [r.value_mgdl for r in reads]
         tir = round(100 * sum(1 for v in vals if LOW <= v <= HIGH) / len(vals))
@@ -991,13 +1002,19 @@ def _chat_context():
                  f"a las {lo_r.timestamp.strftime('%H:%M')}, máximo {int(hi_r.value_mgdl)} "
                  f"a las {hi_r.timestamp.strftime('%H:%M')}.")
 
-    # ── eventos recientes (48h) ───────────────────────────────────────────
-    since48 = now - timedelta(hours=48)
-
-    def _fmt(rows, fn):
-        return "; ".join(fn(x) for x in rows) if rows else "ninguno"
-
-    meals = Meal.query.filter(Meal.timestamp >= since48).order_by(Meal.timestamp.desc()).limit(8).all()
+    # ── LÍNEA DE TIEMPO unificada (48h) ───────────────────────────────────
+    # Comidas, insulina, ejercicio, contexto y excursiones de glucosa MEZCLADOS
+    # en orden cronológico, con la glucosa del momento al lado de cada evento.
+    # Así el copiloto lee el día como secuencia causa→efecto, no como listas
+    # sueltas por categoría.
+    def _g_at(ts):
+        """Lectura más cercana a ±12 min del evento (para anclarlo en la curva)."""
+        best = None
+        for r in reads48:
+            d = abs((r.timestamp - ts).total_seconds())
+            if d <= 720 and (best is None or d < best[0]):
+                best = (d, r.value_mgdl)
+        return f" · glucosa {int(best[1])}" if best else ""
 
     def _macros(m):
         # carbos + proteína + grasa (las tres se registran; el copiloto necesita
@@ -1009,25 +1026,62 @@ def _chat_context():
             parts.append(f"{int(m.fat_g)}g grasa")
         return ", ".join(parts)
 
-    L.append("COMIDAS (48h): " + _fmt(meals, lambda m:
-             f"{m.timestamp.strftime('%d/%m %H:%M')} {m.name or 'comida'} ({_macros(m)})"))
-    doses = InsulinDose.query.filter(InsulinDose.timestamp >= since48).order_by(InsulinDose.timestamp.desc()).limit(8).all()
-    L.append("INSULINA (48h): " + _fmt(doses, lambda d:
-             f"{d.timestamp.strftime('%d/%m %H:%M')} {d.units:g}U "
-             f"{ {'bolus':'rápida','basal':'basal'}.get(d.type, d.type or '') }"))
-    acts = Activity.query.filter(Activity.timestamp >= since48).order_by(Activity.timestamp.desc()).limit(5).all()
-    if acts:
-        L.append("ACTIVIDAD (48h): " + _fmt(acts, lambda a:
-                 f"{a.timestamp.strftime('%d/%m %H:%M')} {a.activity_type or 'ejercicio'} "
-                 f"{a.duration_min or 0}min"))
-
-    # ── contexto marcado por la persona (estrés, enfermedad, viaje…) ──────
+    eventos = []   # (timestamp, texto)
+    meals = Meal.query.filter(Meal.timestamp >= since48).order_by(Meal.timestamp).all()[-10:]
+    for m in meals:
+        eventos.append((m.timestamp,
+                        f"comida: {m.name or 'comida'} ({_macros(m)}){_g_at(m.timestamp)}"))
+    doses = InsulinDose.query.filter(InsulinDose.timestamp >= since48).order_by(InsulinDose.timestamp).all()[-10:]
+    for d in doses:
+        tipo = {"bolus": "rápida", "basal": "basal"}.get(d.type, d.type or "")
+        eventos.append((d.timestamp, f"insulina: {d.units:g}U {tipo}{_g_at(d.timestamp)}"))
+    acts = Activity.query.filter(Activity.timestamp >= since48).order_by(Activity.timestamp).all()[-6:]
+    for a in acts:
+        inten = f", intensidad {a.intensity}" if a.intensity else ""
+        eventos.append((a.timestamp,
+                        f"ejercicio: {a.activity_type or 'ejercicio'} "
+                        f"{a.duration_min or 0}min{inten}{_g_at(a.timestamp)}"))
     from models import ContextTag
-    tags = ContextTag.query.filter(ContextTag.timestamp >= since48).order_by(ContextTag.timestamp.desc()).limit(6).all()
-    if tags:
-        L.append("CONTEXTO (48h): " + _fmt(tags, lambda t:
-                 f"{t.timestamp.strftime('%d/%m %H:%M')} {t.tag}"
-                 + (f" ({t.notes})" if t.notes else "")))
+    tags = ContextTag.query.filter(ContextTag.timestamp >= since48).order_by(ContextTag.timestamp).all()[-8:]
+    for t in tags:
+        nota = f" ({t.notes[:60]})" if t.notes else ""
+        eventos.append((t.timestamp, f"contexto: {t.tag}{nota}"))
+
+    # excursiones de glucosa como eventos propios (episodios colapsados)
+    def _episodios(pred):
+        eps, cur = [], []
+        for r in reads48:
+            if pred(r.value_mgdl):
+                cur.append(r)
+            elif cur:
+                eps.append(cur); cur = []
+        if cur:
+            eps.append(cur)
+        return eps
+    for ep in _episodios(lambda v: v < LOW)[-6:]:
+        nadir = min(r.value_mgdl for r in ep)
+        eventos.append((ep[0].timestamp,
+                        f"glucosa BAJA: mínimo {int(nadir)} "
+                        f"({ep[0].timestamp.strftime('%H:%M')}–{ep[-1].timestamp.strftime('%H:%M')})"))
+    for ep in _episodios(lambda v: v > 250)[-4:]:
+        pico = max(r.value_mgdl for r in ep)
+        eventos.append((ep[0].timestamp,
+                        f"glucosa muy alta: pico {int(pico)} "
+                        f"({ep[0].timestamp.strftime('%H:%M')}–{ep[-1].timestamp.strftime('%H:%M')})"))
+
+    if eventos:
+        eventos.sort(key=lambda e: e[0])
+        tl, dia_prev = ["LÍNEA DE TIEMPO (48h, en orden cronológico):"], None
+        for ts, txt in eventos:
+            if ts.date() != dia_prev:
+                dia_prev = ts.date()
+                delta = (now.date() - dia_prev).days
+                etiq = {0: "hoy", 1: "ayer", 2: "anteayer"}.get(delta, "")
+                tl.append(f"[{etiq} {dia_prev.strftime('%d/%m')}]".replace("[ ", "["))
+            tl.append(f"  {ts.strftime('%H:%M')} {txt}")
+        L.append("\n".join(tl))
+    else:
+        L.append("LÍNEA DE TIEMPO (48h): sin eventos registrados.")
 
     # ── etiquetas de contexto (7 días): estrés/enfermedad/sueño/viaje ─────
     try:

@@ -282,7 +282,11 @@ export default function Registro({ theme, onDone }) {
         <Card theme={theme} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <Chips theme={theme} options={EX_TYPES.map(([id, k]) => ({ id, label: t(k) }))} value={actType} onChange={setActType} color={color}/>
           <Row theme={theme} label={t('reg.duration')}><Stepper theme={theme} value={dur} setValue={setDur} step={5} max={300} unit="min" color={color}/></Row>
-          <Chips theme={theme} options={INTENSITIES.map(([id, k]) => ({ id, label: t(k) }))} value={intensity} onChange={setIntensity} color={color}/>
+          {/* etiqueta arriba de las chips: sin ella no se entiende qué significan */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <span style={{ color: theme.inkSoft, fontSize: 14 }}>{t('ev.intensity')}</span>
+            <Chips theme={theme} options={INTENSITIES.map(([id, k]) => ({ id, label: t(k) }))} value={intensity} onChange={setIntensity} color={color}/>
+          </div>
         </Card>
       )}
 
