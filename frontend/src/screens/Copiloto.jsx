@@ -5,7 +5,7 @@ import { apiPost } from '../api.js'
 import { PAL, SANS } from '../theme.js'
 import { useLang } from '../i18n.jsx'
 import { Typewriter } from '../components/ui.jsx'
-import NebulaGuide from '../components/NebulaGuide.jsx'
+import CopilotAvatar from '../components/CopilotAvatar.jsx'
 
 const SUGG_KEYS = ['cop.s1', 'cop.s2', 'cop.s3', 'cop.s4', 'cop.s5']
 
@@ -179,7 +179,7 @@ function Bubble({ theme, role, text, usedData, animate, onScroll }) {
     <div className="msg-in" style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexDirection: isUser ? 'row-reverse' : 'row' }}>
       {!isUser && (
         <div style={{ flexShrink: 0, width: 34, height: 34, marginBottom: 2 }}>
-          <NebulaGuide kind="insulina" size={34} breathe={false}/>
+          <CopilotAvatar size={34}/>
         </div>
       )}
       <div style={{ maxWidth: '78%' }}>

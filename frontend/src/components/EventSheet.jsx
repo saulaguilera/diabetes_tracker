@@ -10,6 +10,10 @@ import { PAL, SANS } from '../theme.js'
 import { useLang } from '../i18n.jsx'
 import { Stepper, Field, useSheetClose, backdropAnim, sheetAnim } from './ui.jsx'
 
+// intensidad canónica (baja/media/alta) → etiqueta i18n; fallback al valor crudo
+// por si quedara alguna fila legacy sin normalizar.
+const INT_LABEL = { baja: 'reg.int.light', media: 'reg.int.moderate', alta: 'reg.int.intense' }
+
 export const META = {
   comida:    { color: PAL.metabolismo.key, label: 'Comida' },
   insulina:  { color: PAL.insulina.key,    label: 'Insulina' },
@@ -127,7 +131,7 @@ export default function EventSheet({ theme, ev, onClose, onChanged }) {
             {ev.cat === 'ejercicio' && <>
               <Info theme={theme} k={t('ev.activity')} v={d.activity_type}/>
               <Info theme={theme} k={t('ev.durationLabel')} v={d.duration_min ? `${d.duration_min} min` : '—'}/>
-              {d.intensity && <Info theme={theme} k={t('ev.intensity')} v={d.intensity}/>}
+              {d.intensity && <Info theme={theme} k={t('ev.intensity')} v={INT_LABEL[d.intensity] ? t(INT_LABEL[d.intensity]) : d.intensity}/>}
             </>}
             {ev.cat === 'contexto' && <>
               <Info theme={theme} k={t('ev.context')} v={ev.title}/>

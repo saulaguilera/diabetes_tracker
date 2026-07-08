@@ -17,6 +17,23 @@ bp = Blueprint("copilot_api", __name__)
 
 LOW, HIGH = 70, 180
 
+# Intensidad de actividad: valor canónico baja/media/alta en todo el sistema
+# (modelo, dashboard clásico, quicklog, datos históricos). Normalizamos cualquier
+# variante que llegue del frontend (texto, mayúsculas, inglés) al código canónico.
+_INTENSITY_CANON = {
+    "baja": "baja", "ligera": "baja", "low": "baja", "light": "baja",
+    "media": "media", "moderada": "media", "medium": "media", "moderate": "media",
+    "alta": "alta", "intensa": "alta", "high": "alta", "intense": "alta",
+}
+
+
+def _norm_intensity(v):
+    if not v:
+        return None
+    key = str(v).strip().lower()
+    return _INTENSITY_CANON.get(key, key)
+
+
 # idioma de respuesta del copiloto (según el setting ui_lang)
 _LANG_NAME = {"es": "español (neutro, latinoamericano)", "en": "English", "pt": "português"}
 
@@ -657,7 +674,7 @@ def copilot_log():
                 timestamp=now,
                 activity_type=(data.get("activity_type") or "Ejercicio").strip()[:100],
                 duration_min=int(_f("duration_min")),
-                intensity=(data.get("intensity") or None),
+                intensity=_norm_intensity(data.get("intensity")),
                 notes=(data.get("notes") or None),
             )
         elif cat == "contexto":

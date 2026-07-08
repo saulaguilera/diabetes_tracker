@@ -243,6 +243,25 @@ with app.app_context():
                     conn.execute(text(ddl))
                     conn.commit()
 
+        # Migración de datos: unificar la intensidad de actividad a los códigos
+        # canónicos baja/media/alta (modelo, dashboard clásico, quicklog e histórico
+        # usan esos). La app React guardó por un tiempo el texto de la etiqueta
+        # ("Ligera/Moderada/Intensa"); acá se normaliza. Idempotente: tras la primera
+        # corrida ya no quedan variantes, así que las siguientes actualizan 0 filas.
+        _intensity_fix = {
+            "baja":  ("Ligera", "ligera", "Light", "light", "Baja", "BAJA"),
+            "media": ("Moderada", "moderada", "Moderate", "moderate", "Media", "MEDIA"),
+            "alta":  ("Intensa", "intensa", "Intense", "intense", "Alta", "ALTA"),
+        }
+        for _canon, _variants in _intensity_fix.items():
+            _ph = ", ".join(f":v{_i}" for _i in range(len(_variants)))
+            _params = {f"v{_i}": _v for _i, _v in enumerate(_variants)}
+            _params["canon"] = _canon
+            conn.execute(text(
+                f"UPDATE activities SET intensity = :canon WHERE intensity IN ({_ph})"
+            ), _params)
+        conn.commit()
+
 
 # ── Configuración LibreLinkUp ─────────────────────────────────────────────────
 _LIBRE_EMAIL    = os.environ.get("LIBRE_EMAIL", "")

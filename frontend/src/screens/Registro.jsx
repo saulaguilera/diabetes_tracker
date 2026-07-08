@@ -48,7 +48,9 @@ const CONTEXT_TAGS = [
 ]
 // opciones de ejercicio/intensidad (id estable para backend + clave i18n)
 const EX_TYPES = [['Caminar','reg.ex.walk'],['Correr','reg.ex.run'],['Bici','reg.ex.bike'],['Fuerza','reg.ex.strength'],['Otro','reg.ex.other']]
-const INTENSITIES = [['Ligera','reg.int.light'],['Moderada','reg.int.moderate'],['Intensa','reg.int.intense']]
+// id = valor canónico que guarda el backend (baja/media/alta), igual que el resto
+// del sistema (dashboard clásico, quicklog, datos históricos). La etiqueta es i18n.
+const INTENSITIES = [['baja','reg.int.light'],['media','reg.int.moderate'],['alta','reg.int.intense']]
 
 export default function Registro({ theme, onDone }) {
   const { t } = useLang()
@@ -70,7 +72,7 @@ export default function Registro({ theme, onDone }) {
   // ejercicio
   const [actType, setActType] = useState('Caminar')
   const [dur, setDur] = useState(30)
-  const [intensity, setIntensity] = useState('Ligera')
+  const [intensity, setIntensity] = useState('media')
   // contexto
   const [ctxTag, setCtxTag] = useState('estres')
   const [ctxNotes, setCtxNotes] = useState('')
