@@ -588,7 +588,9 @@ def copilot_brief():
             client = anthropic.Anthropic(api_key=api_key)
             resp = client.messages.create(
                 model=os.environ.get("COPILOT_BRIEF_MODEL", "claude-sonnet-5"),
-                max_tokens=450,
+                # tope con aire: el razonamiento interno de Sonnet 5 consume del
+                # mismo tope; 450 podía recortar la narrativa a mitad de frase
+                max_tokens=1500,
                 system=_BRIEF_SYSTEM.format(context=ctx, IDIOMA=_copilot_lang(), UNIDAD=_glucose_unit_label()),
                 messages=[{"role": "user", "content": "Escribí mi brief."}],
             )
@@ -871,8 +873,8 @@ Ejemplos de lo que SÍ respondés a fondo:
   más sostenida"), índice glucémico, por qué la fibra ayuda, etc.
 Cuando tengas SUS datos relevantes, sumalos ("además, la última vez la manzana
 te subió ~36 a la hora, y tus entrenamientos de fuerza te bajaron ~18 a las 2h").
-Respondé con calidez, con ejemplos concretos, y con el largo que la pregunta
-pida (para educar podés extenderte; para lo simple, sé breve).
+Respondé con calidez y ejemplos concretos, pero con ECONOMÍA: educar no es
+alargar — es elegir lo que de verdad le sirve saber y decirlo claro.
 
 DÓNDE SÍ PARÁS (esto es de su equipo médico, no tuyo):
 - Dosis de insulina o correcciones con NÚMEROS concretos, aunque la cuenta sea trivial.
@@ -888,7 +890,14 @@ entrenar" (SÍ, general) vs. "vos comé una manzana ahora" o "si estás en 180 n
 comas" (NO, es indicación personalizada). Nunca un "no puedo" pelado.
 
 REGLAS DE ESTILO:
+- LO MÁS IMPORTANTE PRIMERO: tu PRIMERA frase responde la pregunta o da el
+  hallazgo clave. Después, solo el porqué esencial. Por defecto sé BREVE
+  (2-4 frases); extendete únicamente si piden más detalle o la pregunta lo
+  exige de verdad (tope ~7 frases). Sin relleno, sin resumen final, sin
+  repetir lo ya dicho, sin enumerar todo lo que mirar — elegí lo que importa.
 - Respondé SIEMPRE en {IDIOMA}, en segunda persona, cálido.
+- TEXTO PLANO: nada de markdown (ni **negrita**, ni títulos, ni listas con
+  guiones) — el chat lo muestra tal cual y se verían los asteriscos.
 - UNIDAD: la persona usa {UNIDAD} para la glucosa. Expresá TODA la glucosa en
   {UNIDAD}. Los datos y las consultas vienen en mg/dL; si la unidad es mmol/L,
   convertí (mmol/L = mg/dL ÷ 18, 1 decimal) — incluí umbrales como 70/180 → 3.9/10.0.
@@ -927,8 +936,8 @@ REGLAS DE ESTILO:
   Si una consulta trae pocos datos, decilo con honestidad ("tengo pocas
   sesiones registradas para afirmarlo"). Los resultados describen el PASADO:
   contalos en pasado ("después de entrenar te bajó ~25"), jamás como promesa
-  de lo que va a pasar. Para preguntas analíticas podés extenderte a 5-6
-  frases; seguí sin listas salvo que ayuden de verdad.
+  de lo que va a pasar. Para preguntas analíticas: el NÚMERO clave + el
+  porqué, en 3-5 frases; sin listas salvo que ayuden de verdad.
 
 CONTEXTO ACTUAL DE LA PERSONA:
 {context}"""
@@ -1168,11 +1177,31 @@ def copilot_chat():
         # números). Override por env si algún día hay que bajar costo.
         model = os.environ.get("COPILOT_CHAT_MODEL", "claude-sonnet-5")
 
-        def _call():
+        def _call(force_text=False):
+            # max_tokens es un TOPE (no un gasto): en Sonnet 5 el razonamiento
+            # interno automático consume del mismo tope que el texto visible,
+            # así que 900 recortaba respuestas a mitad de frase (o se comía TODO
+            # el tope pensando y la respuesta salía vacía → el "…"). 4000 da aire.
+            kw = {"tool_choice": {"type": "none"}} if force_text else {}
             return client.messages.create(
-                model=model, max_tokens=900, system=system,
-                messages=msgs, tools=COPILOT_TOOLS,
+                model=model, max_tokens=4000, system=system,
+                messages=msgs, tools=COPILOT_TOOLS, **kw,
             )
+
+        def _text(r):
+            return "".join(b.text for b in r.content
+                           if getattr(b, "type", None) == "text").strip()
+
+        def _run_pending_tools(r):
+            msgs.append({"role": "assistant", "content": r.content})
+            results = []
+            for b in r.content:
+                if getattr(b, "type", None) == "tool_use":
+                    used.append(b.name)
+                    out = run_tool(b.name, dict(b.input or {}))
+                    results.append({"type": "tool_result", "tool_use_id": b.id,
+                                    "content": _json.dumps(out, ensure_ascii=False)})
+            msgs.append({"role": "user", "content": results})
 
         resp = _call()
         used = []
@@ -1180,19 +1209,45 @@ def copilot_chat():
         for _ in range(3):
             if resp.stop_reason != "tool_use":
                 break
-            msgs.append({"role": "assistant", "content": resp.content})
-            results = []
-            for b in resp.content:
-                if getattr(b, "type", None) == "tool_use":
-                    used.append(b.name)
-                    out = run_tool(b.name, dict(b.input or {}))
-                    results.append({"type": "tool_result", "tool_use_id": b.id,
-                                    "content": _json.dumps(out, ensure_ascii=False)})
-            msgs.append({"role": "user", "content": results})
+            _run_pending_tools(resp)
             resp = _call()
+        # Si agotó las rondas y AÚN quiere consultar más, respondemos sus
+        # consultas pendientes y lo obligamos a escribir con lo que ya tiene
+        # (sin esto, la respuesta salía sin texto → el usuario veía "…").
+        if resp.stop_reason == "tool_use":
+            _run_pending_tools(resp)
+            resp = _call(force_text=True)
 
-        reply = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
-        return jsonify({"ok": True, "reply": reply or "…",
+        reply = _text(resp)
+
+        # Red de seguridad 1: si aun así topó el límite, pedir UNA continuación
+        # para que a la persona nunca le llegue un mensaje cortado a mitad de frase.
+        if resp.stop_reason == "max_tokens" and reply:
+            try:
+                msgs.append({"role": "assistant", "content": reply})
+                msgs.append({"role": "user",
+                             "content": "Tu respuesta quedó cortada. Continuá EXACTAMENTE "
+                                        "donde quedaste, sin repetir nada de lo ya dicho."})
+                extra = _text(_call())
+                if extra:
+                    reply = (reply.rstrip() + " " + extra).strip()
+            except Exception:
+                pass   # mejor entregar lo que hay que fallar todo el mensaje
+
+        # Red de seguridad 2: respuesta vacía por el motivo que sea → un reintento
+        # directo. Nunca devolver "…" (la app lo mostraba como mensaje).
+        if not reply:
+            try:
+                msgs.append({"role": "user",
+                             "content": "Respondé ahora en 2-3 frases, con lo más importante."})
+                reply = _text(_call(force_text=True))
+            except Exception:
+                pass
+        if not reply:
+            reply = ("Me quedé sin respuesta ahí — probá preguntármelo de nuevo, "
+                     "quizás en dos preguntas más cortas.")
+
+        return jsonify({"ok": True, "reply": reply,
                         "used_data": sorted(set(used))})
     except Exception as exc:
         return jsonify({"ok": False, "error": "No pude responder ahora. Intentá de nuevo."}), 502
@@ -1235,7 +1290,9 @@ def copilot_estimate():
         client = anthropic.Anthropic(api_key=api_key)
         resp = client.messages.create(
             model=os.environ.get("COPILOT_VISION_MODEL", DEFAULT_VISION_MODEL),
-            max_tokens=900,   # deja lugar al razonamiento por pasos + JSON
+            max_tokens=2500,  # razonamiento por pasos + JSON; en Sonnet 5 el
+                              # pensamiento interno consume del mismo tope — con
+                              # 900 un JSON largo podía salir truncado (parse roto)
             messages=[{
                 "role": "user",
                 "content": [
