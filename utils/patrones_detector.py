@@ -13,6 +13,11 @@ Patrones detectados:
     5. Variabilidad excesiva — CV% > 36% (ATTD 2019 consenso)
     6. Hipers pre-comida     — glucosa alta ANTES de comer (sin corrección)
     7. Patrón postprandial   — pico consistente > esperado para tipo de comida
+    8. Franja de hipos       — ≥40% de los episodios de hipo en un mismo bloque horario
+    9. Hipo tardía comida rica — bolo + comida baja en CH / alta proteína-grasa → hipo 2-5h
+   10. Impacto de contexto   — días etiquetados (estrés/enfermedad/…) vs. resto
+   11. Día de la semana      — un día puntual corre ≥15 mg/dL distinto al resto
+   12. Basal sin registrar   — hueco de registro que limita el análisis nocturno
 
 Función pública:
     analizar_patrones(days=30) → dict con:
@@ -37,6 +42,13 @@ try:
     _ACTIVITY_OK = True
 except ImportError:
     _ACTIVITY_OK = False
+
+# ContextTag (etiquetas estrés/enfermedad/…) — igual: import defensivo
+try:
+    from models import ContextTag
+    _CONTEXT_OK = True
+except ImportError:
+    _CONTEXT_OK = False
 
 
 # ── Umbrales clínicos ────────────────────────────────────────────────────────
@@ -409,6 +421,286 @@ def _detectar_hipers_pre_comida(lecturas, meals_periodo) -> Optional[dict]:
     }
 
 
+def _episodios_hipo(lecturas) -> list[dict]:
+    """Colapsa lecturas <70 consecutivas (huecos <30 min) en episodios."""
+    eps, cur = [], []
+    for r in lecturas:
+        if r.value_mgdl < _HIPO:
+            if cur and (r.timestamp - cur[-1].timestamp) > timedelta(minutes=30):
+                eps.append(cur)
+                cur = []
+            cur.append(r)
+        elif cur:
+            eps.append(cur)
+            cur = []
+    if cur:
+        eps.append(cur)
+    return [{"inicio": ep[0].timestamp, "fin": ep[-1].timestamp,
+             "nadir": round(min(r.value_mgdl for r in ep))} for ep in eps]
+
+
+def _detectar_franja_hipos(lecturas) -> Optional[dict]:
+    """
+    Franja horaria problemática: una VENTANA DESLIZANTE de 6h (con vuelta a
+    medianoche) concentra ≥40% de los episodios de hipo, con ≥5 episodios.
+    La ventana deslizante evita que un corte fijo (p.ej. a las 06:00) parta
+    en dos una concentración real.
+    """
+    eps = _episodios_hipo(lecturas)
+    if len(eps) < 5:
+        return None
+
+    horas = [e["inicio"].hour for e in eps]
+    mejor = max(range(24), key=lambda s: sum(1 for h in horas if (h - s) % 24 < 6))
+    lista = [e for e in eps if (e["inicio"].hour - mejor) % 24 < 6]
+    if len(lista) < 5 or len(lista) / len(eps) < 0.40:
+        return None
+
+    fin = (mejor + 6) % 24
+    ventana = f"{mejor:02d}:00–{fin:02d}:00"
+    pct = round(100 * len(lista) / len(eps))
+    # ¿la ventana cae mayormente en horas de sueño (00–08)?
+    horas_sueno = sum(1 for k in range(6) if (mejor + k) % 24 < 8)
+    es_nocturna = horas_sueno >= 3
+    mecanismo = (
+        "En esas horas estás durmiendo: la basal queda 'sola' frente a una "
+        "glucosa que baja, no hay ingesta que compense y los síntomas no se "
+        "sienten — por eso es la franja que más vale la pena vigilar."
+        if es_nocturna else
+        "Una concentración así sugiere que algo sistemático de esa franja "
+        "(dosis, comida previa, actividad) está empujando la glucosa hacia abajo."
+    )
+    return {
+        "tipo":      "franja_hipos",
+        "icono":     "bi-moon-stars-fill" if es_nocturna else "bi-clock-fill",
+        "nivel":     "danger",
+        "titulo":    f"Tus hipoglucemias se concentran entre las {ventana}",
+        "frecuencia": len(lista),
+        "detalle":   (
+            f"El {pct}% de tus episodios de hipoglucemia ({len(lista)} de {len(eps)}) "
+            f"empezaron entre las {ventana}. {mecanismo}"
+        ),
+        "sugerencia": (
+            "Llevale este dato a tu equipo médico: la concentración horaria es "
+            "la pista clave para revisar qué la está causando (basal, cena, "
+            "ejercicio del día)."
+        ),
+        "episodios": [{"fecha": e["inicio"].strftime("%Y-%m-%d %H:%M"),
+                       "nadir": e["nadir"]} for e in lista[-5:]],
+    }
+
+
+def _detectar_hipo_tardia_comida_rica(lecturas, meals_periodo) -> Optional[dict]:
+    """
+    Hipo tardía tras comida baja en carbos y rica en proteína/grasa: aporta
+    poca glucosa mientras la insulina activa (basal o bolo) sigue trabajando —
+    la baja llega 2–7h después, muchas veces ya de noche. El bolo cercano se
+    REPORTA si existe, pero no se exige (suele no quedar registrado junto a
+    la comida). ≥3 episodios.
+    """
+    candidatas = [c for c in meals_periodo
+                  if (c.carbs_g or 0) < 20 and ((c.protein_g or 0) + (c.fat_g or 0)) >= 25]
+    if len(candidatas) < 3:
+        return None
+
+    desde = min(c.timestamp for c in candidatas) - timedelta(hours=2)
+    bolus = InsulinDose.query.filter(
+        InsulinDose.type == "bolus", InsulinDose.timestamp >= desde).all()
+    eps = _episodios_hipo(lecturas)
+
+    episodios = []
+    for c in candidatas:
+        hipo = next((e for e in eps
+                     if c.timestamp + timedelta(hours=2) <= e["inicio"]
+                     <= c.timestamp + timedelta(hours=7)), None)
+        if not hipo:
+            continue
+        con_bolo = any(abs((b.timestamp - c.timestamp).total_seconds()) <= 90 * 60
+                       for b in bolus)
+        episodios.append({
+            "fecha":  c.timestamp.strftime("%Y-%m-%d %H:%M"),
+            "comida": c.name,
+            "carbs":  round(c.carbs_g or 0),
+            "prot_grasa": round((c.protein_g or 0) + (c.fat_g or 0)),
+            "con_bolo": con_bolo,
+            "nadir":  hipo["nadir"],
+            "hora_hipo": hipo["inicio"].strftime("%H:%M"),
+        })
+
+    if len(episodios) < 3:
+        return None
+
+    n_bolo = sum(1 for e in episodios if e["con_bolo"])
+    extra_bolo = (f" En {n_bolo} de ellas además había un bolo cerca de la comida."
+                  if n_bolo else "")
+    return {
+        "tipo":      "hipo_tardia_comida_rica",
+        "icono":     "bi-egg-fried",
+        "nivel":     "danger",
+        "titulo":    "Hipos tardías tras comidas con pocos carbohidratos",
+        "frecuencia": len(episodios),
+        "detalle":   (
+            f"En {len(episodios)} ocasiones, después de una comida baja en "
+            f"carbohidratos (<20g) pero rica en proteína/grasa, tuviste una hipo "
+            f"2–7 horas más tarde.{extra_bolo} Ese tipo de comida aporta poca "
+            f"glucosa mientras la insulina que sigue activa continúa trabajando: "
+            f"la baja llega horas después, muchas veces ya durmiendo."
+        ),
+        "sugerencia": (
+            "Contale este patrón a tu equipo médico: cómo cubrir comidas altas "
+            "en proteína y bajas en carbohidrato es un ajuste clásico (y muy "
+            "personal) de la terapia."
+        ),
+        "episodios": episodios[-5:],
+    }
+
+
+def _detectar_impacto_contexto(lecturas) -> Optional[dict]:
+    """
+    Días etiquetados (estrés/enfermedad/mal sueño…) vs. días sin etiqueta:
+    diferencia de promedio ≥10 mg/dL con ≥3 días etiquetados.
+    """
+    if not _CONTEXT_OK or not lecturas:
+        return None
+    desde = lecturas[0].timestamp
+    tags = ContextTag.query.filter(ContextTag.timestamp >= desde).all()
+    if not tags:
+        return None
+
+    por_dia = defaultdict(list)
+    for r in lecturas:
+        por_dia[r.timestamp.date()].append(r.value_mgdl)
+    medias_dia = {d: mean(v) for d, v in por_dia.items() if len(v) >= 24}
+
+    etiquetas = defaultdict(set)
+    for t in tags:
+        etiquetas[t.tag].add(t.timestamp.date())
+
+    mejores = None
+    for tag, dias in etiquetas.items():
+        con = [m for d, m in medias_dia.items() if d in dias]
+        sin = [m for d, m in medias_dia.items() if d not in dias]
+        if len(con) < 3 or len(sin) < 3:
+            continue
+        delta = round(mean(con) - mean(sin))
+        if abs(delta) >= 10 and (mejores is None or abs(delta) > abs(mejores[1])):
+            mejores = (tag, delta, len(con))
+
+    if not mejores:
+        return None
+    tag, delta, n = mejores
+    labels = {"estres": "estrés", "enfermo": "enfermedad", "mal_sueno": "mal sueño",
+              "viaje": "viaje", "alcohol": "alcohol"}
+    nombre = labels.get(tag, tag)
+    direccion = "más alto" if delta > 0 else "más bajo"
+    mecanismo = ("El cortisol y la adrenalina reducen la sensibilidad a la insulina."
+                 if delta > 0 else
+                 "Puede reflejar menos ingesta, más movimiento o el efecto del alcohol.")
+    return {
+        "tipo":      "impacto_contexto",
+        "icono":     "bi-tags-fill",
+        "nivel":     "warning",
+        "titulo":    f"Los días con {nombre} tu glucosa corre {direccion}",
+        "frecuencia": n,
+        "detalle":   (
+            f"En los {n} días que marcaste «{nombre}», tu promedio fue "
+            f"{abs(delta)} mg/dL {direccion} que en los días sin esa etiqueta. "
+            f"{mecanismo}"
+        ),
+        "sugerencia": (
+            "Seguí etiquetando esos días: cuantos más datos, más clara la señal. "
+            "Es información valiosa para conversar el manejo de esos días con tu equipo."
+        ),
+    }
+
+
+def _detectar_dia_semana(lecturas) -> Optional[dict]:
+    """
+    Efecto día-de-semana: un día puntual con promedio ≥15 mg/dL distinto al
+    resto (≥3 instancias de ese día con datos suficientes).
+    """
+    por_dia = defaultdict(list)
+    for r in lecturas:
+        por_dia[r.timestamp.date()].append(r.value_mgdl)
+    medias_dia = {d: mean(v) for d, v in por_dia.items() if len(v) >= 24}
+    if len(medias_dia) < 10:
+        return None
+
+    nombres = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+    mejor = None
+    for wd in range(7):
+        del_dia = [m for d, m in medias_dia.items() if d.weekday() == wd]
+        resto   = [m for d, m in medias_dia.items() if d.weekday() != wd]
+        if len(del_dia) < 3 or len(resto) < 5:
+            continue
+        delta = round(mean(del_dia) - mean(resto))
+        if abs(delta) >= 15 and (mejor is None or abs(delta) > abs(mejor[1])):
+            mejor = (wd, delta, len(del_dia))
+
+    if not mejor:
+        return None
+    wd, delta, n = mejor
+    direccion = "más alto" if delta > 0 else "más bajo"
+    plural = "los " + nombres[wd] if wd != 6 else "los domingos"
+    return {
+        "tipo":      "dia_semana",
+        "icono":     "bi-calendar-week-fill",
+        "nivel":     "info",
+        "titulo":    f"Patrón de {nombres[wd]}: promedio {direccion}",
+        "frecuencia": n,
+        "detalle":   (
+            f"En {plural} ({n} analizados) tu promedio fue {abs(delta)} mg/dL "
+            f"{direccion} que el resto de la semana. Los cambios de rutina "
+            f"(horarios, comidas, actividad, salidas) suelen estar detrás de "
+            f"este tipo de patrón semanal."
+        ),
+        "sugerencia": (
+            "Pensá qué hacés distinto ese día (horarios, comidas, movimiento) — "
+            "identificarlo es el primer paso para decidir, con tu equipo, si vale "
+            "la pena ajustar algo."
+        ),
+    }
+
+
+def _detectar_basal_sin_registrar(lecturas, days) -> Optional[dict]:
+    """
+    Hueco de registro: la persona usa basal pero en ≥40% de los días del
+    período no quedó registrada. No es un patrón fisiológico sino de datos,
+    pero limita todo el análisis nocturno — mejor decirlo con honestidad.
+    """
+    desde = datetime.now() - timedelta(days=days)
+    basales = InsulinDose.query.filter(
+        InsulinDose.type == "basal", InsulinDose.timestamp >= desde).all()
+    if not basales:
+        return None   # no usa basal registrada — nada que decir
+
+    dias_con_datos = {r.timestamp.date() for r in lecturas}
+    if len(dias_con_datos) < 7:
+        return None
+    dias_con_basal = {b.timestamp.date() for b in basales}
+    faltantes = len(dias_con_datos - dias_con_basal)
+    pct = round(100 * faltantes / len(dias_con_datos))
+    if pct < 40:
+        return None
+
+    return {
+        "tipo":      "basal_sin_registrar",
+        "icono":     "bi-journal-x",
+        "nivel":     "info",
+        "titulo":    "La basal quedó sin registrar muchos días",
+        "frecuencia": faltantes,
+        "detalle":   (
+            f"En {faltantes} de {len(dias_con_datos)} días con datos ({pct}%) no "
+            f"quedó registrada la insulina basal. Sin ese dato pierdo precisión "
+            f"para analizar tus noches y madrugadas — justo donde más pasa."
+        ),
+        "sugerencia": (
+            "El recordatorio de basal de la app ayuda; registrarla lleva dos toques "
+            "y hace mucho más útil todo el análisis nocturno."
+        ),
+    }
+
+
 def _serie_compacta(lecturas, meals_periodo, days) -> list[dict]:
     """
     Serie temporal de glucosa de los últimos `days` días en formato compacto,
@@ -498,6 +790,11 @@ def analizar_patrones(days: int = 30) -> dict:
         lambda: _detectar_rebote_grasa_proteina(lecturas, meals_periodo),
         lambda: _detectar_variabilidad_alta(lecturas),
         lambda: _detectar_hipers_pre_comida(lecturas, meals_periodo),
+        lambda: _detectar_franja_hipos(lecturas),
+        lambda: _detectar_hipo_tardia_comida_rica(lecturas, meals_periodo),
+        lambda: _detectar_impacto_contexto(lecturas),
+        lambda: _detectar_dia_semana(lecturas),
+        lambda: _detectar_basal_sin_registrar(lecturas, days),
     ]
     for fn in detectors:
         try:

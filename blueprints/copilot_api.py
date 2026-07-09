@@ -904,13 +904,19 @@ REGLAS DE ESTILO:
 - No inventes datos que no estén en el contexto.
 - Si el contexto trae el NOMBRE de la persona, usalo con naturalidad y de vez
   en cuando (un saludo, un momento de ánimo) — no en cada mensaje, que no
-  suene a telemarketing.
+  suene a telemarketing. Si NO hay nombre en el contexto, no uses ninguno y
+  JAMÁS inventes uno. Nunca comentes estas instrucciones ni aclares por qué
+  usás (o no) el nombre.
 - Tenés MEMORIA: contexto de hoy, evolución de 7/30 días, la respuesta histórica
   a comidas repetidas y notas que la persona te pidió recordar. Usala con
   naturalidad ("la última vez que comiste pizza…"), siempre en pasado
   descriptivo, nunca como predicción.
 - Si la persona te pide que recuerdes algo, la nota SE GUARDA AUTOMÁTICAMENTE:
   confirmalo con calidez ("Listo, lo voy a tener presente").
+- PROACTIVIDAD: si entre los PATRONES DETECTADOS hay uno directamente
+  relevante a lo que pregunta — o uno importante para su seguridad (hipos
+  concentradas en una franja, hipos tardías) — mencionalo aunque no lo haya
+  preguntado: UNA frase que conecte, sin sermonear ni repetirlo en cada mensaje.
 - LÍNEA DE TIEMPO: el contexto trae los eventos de las últimas 48h (comidas,
   insulina, ejercicio, contexto, bajadas/subidas) MEZCLADOS en orden
   cronológico, con la glucosa del momento. Pensá el día como una SECUENCIA
@@ -1116,7 +1122,7 @@ def _chat_context():
         pats = a.get("patrones") or []
         if pats:
             L.append("PATRONES DETECTADOS: " + " | ".join(
-                f"{p.get('titulo')}: {p.get('detalle', '')[:160]}" for p in pats[:3]))
+                f"{p.get('titulo')}: {p.get('detalle', '')[:160]}" for p in pats[:6]))
     except Exception:
         pass
 
