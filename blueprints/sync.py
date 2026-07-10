@@ -167,6 +167,16 @@ def _do_libre_sync(email: str, password: str) -> dict:
         except Exception:
             pass
 
+        # ── ORBIT Drive: push del nuevo estado a la Live Activity vía APNs.
+        #    Flag DRIVE_APNS_ENABLED=0 por defecto → no-op total. Con flag ON
+        #    y token registrado, actualiza la Live Activity en background
+        #    (Lock Screen / CarPlay) aunque la app esté cerrada.
+        try:
+            from drive_mode.apns_push import push_drive_update
+            push_drive_update()
+        except Exception:
+            pass
+
         # Reajustar modelo AR si no se ha entrenado en las últimas 6h
         # (lazy: solo cuando llegan datos nuevos, máx 1 vez cada 6h)
         try:

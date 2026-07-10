@@ -40,3 +40,14 @@ export async function endDriveActivity() {
   if (!p) return
   try { await p.endDriveActivity() } catch {}
 }
+
+// Escucha el push token de ActivityKit (evento nativo "drivePushToken").
+// cb recibe { token }. Devuelve una función para remover el listener.
+// En navegador (sin plugin) → no-op.
+export function onDrivePushToken(cb) {
+  const p = plugin()
+  if (!p || !p.addListener) return () => {}
+  let handle = null
+  try { handle = p.addListener('drivePushToken', cb) } catch { return () => {} }
+  return () => { try { handle?.remove?.() } catch {} }
+}
