@@ -12,7 +12,8 @@ import Copiloto from './screens/Copiloto.jsx'
 import Perfil from './screens/Perfil.jsx'
 import DriveModeScreen from './drive_mode/DriveModeScreen.jsx'
 import NotifSheet from './components/NotifSheet.jsx'
-import { apiGet } from './api.js'
+import { apiGet, apiPost } from './api.js'
+import { initAppPush } from './pushBridge.js'
 import { useLang } from './i18n.jsx'
 
 // Alto del viewport visible (se achica al abrir el teclado en móvil). Permite
@@ -196,6 +197,12 @@ export default function App() {
   useEffect(() => {
     apiGet('/notifications').then(d => setUnread(d.unread || 0)).catch(() => {})
   }, [refreshKey])
+
+  // push nativo: pedir permiso + registrar el token del dispositivo en el
+  // backend (solo en la app iOS; en navegador es no-op)
+  useEffect(() => {
+    return initAppPush(token => { apiPost('/push-token', { token }).catch(() => {}) })
+  }, [])
 
   // recarga la pantalla activa; el spinner queda ~650ms mientras refetchea
   const onRefresh = () => {

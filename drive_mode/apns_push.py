@@ -209,3 +209,70 @@ def _send(device_token: str, content_state: dict) -> dict:
 
     log.warning("APNs push HTTP %s: %s", r.status_code, r.text[:200])
     return {"ok": False, "reason": f"http_{r.status_code}: {reason}"}
+
+
+# ─────────────── notificaciones normales (alert push) ───────────────
+# Mismo pipeline (clave/JWT/host) pero push-type "alert" y topic = bundle:
+# es lo que hace sonar el teléfono con la app cerrada (campanita 🧠, basal…).
+# El token del DISPOSITIVO (≠ token de la Live Activity) lo registra la app
+# vía POST /api/copilot/push-token → settings key `app_apns_token`.
+
+_ALERT_TOKEN_KEY = "app_apns_token"
+
+
+def _bundle_topic() -> str:
+    """Topic para alerts = bundle id (el de Live Activity lleva sufijo)."""
+    t = _topic()
+    suffix = ".push-type.liveactivity"
+    return t[: -len(suffix)] if t.endswith(suffix) else t
+
+
+def push_alert(title: str, body: str) -> dict:
+    """Notificación normal al teléfono. Nunca levanta excepciones al caller."""
+    if not _enabled():
+        return {"ok": False, "reason": "disabled"}
+
+    from helpers import _get_setting, _set_setting
+    token = (_get_setting(_ALERT_TOKEN_KEY) or "").strip()
+    if not token:
+        return {"ok": False, "reason": "no_token"}
+
+    jwt_token = _get_jwt()
+    if not jwt_token:
+        return {"ok": False, "reason": "no_jwt"}
+
+    payload = {"aps": {"alert": {"title": title, "body": body}, "sound": "default"}}
+    headers = {
+        "authorization":   f"bearer {jwt_token}",
+        "apns-topic":      _bundle_topic(),
+        "apns-push-type":  "alert",
+        "apns-priority":   "10",
+        "apns-expiration": str(int(time.time()) + 6 * 3600),
+    }
+
+    try:
+        import httpx
+        url = f"{_apns_host()}/3/device/{token}"
+        with httpx.Client(http2=True, timeout=10) as client:
+            r = client.post(url, json=payload, headers=headers)
+    except Exception as exc:
+        log.warning("APNs alert falló: %s", exc)
+        return {"ok": False, "reason": f"error: {exc}"}
+
+    if r.status_code == 200:
+        log.info("APNs alert OK (%s)", title)
+        return {"ok": True}
+
+    reason = ""
+    try:
+        reason = r.json().get("reason", "")
+    except Exception:
+        pass
+    if r.status_code in (400, 410) and reason in ("BadDeviceToken", "Unregistered",
+                                                  "ExpiredToken"):
+        _set_setting(_ALERT_TOKEN_KEY, "")
+        log.info("APNs alert token inválido (%s) — registro limpiado", reason)
+        return {"ok": False, "reason": f"token_cleared: {reason}"}
+
+    log.warning("APNs alert HTTP %s: %s", r.status_code, r.text[:200])
+    return {"ok": False, "reason": f"http_{r.status_code}: {reason}"}

@@ -132,5 +132,41 @@ class TestKeyLoading(unittest.TestCase):
             os.environ.pop("APNS_KEY_P8", None)
 
 
+
+
+class TestPushAlert(unittest.TestCase):
+    """push_alert (notificaciones normales) — mismos candados que el drive push."""
+
+    def test_disabled_by_default(self):
+        os.environ.pop("DRIVE_APNS_ENABLED", None)
+        from drive_mode.apns_push import push_alert
+        r = push_alert("t", "b")
+        self.assertFalse(r["ok"])
+        self.assertEqual(r["reason"], "disabled")
+
+    def test_bundle_topic_strips_liveactivity_suffix(self):
+        from drive_mode.apns_push import _bundle_topic
+        os.environ.pop("APNS_TOPIC", None)
+        self.assertEqual(_bundle_topic(), "com.saulaguilera.orbit")
+        os.environ["APNS_TOPIC"] = "com.x.y.push-type.liveactivity"
+        try:
+            self.assertEqual(_bundle_topic(), "com.x.y")
+        finally:
+            os.environ.pop("APNS_TOPIC", None)
+
+    def test_enabled_without_token_is_noop(self):
+        # flag ON pero sin token registrado → no intenta red (no_token)
+        os.environ["DRIVE_APNS_ENABLED"] = "1"
+        try:
+            import unittest.mock as mock
+            with mock.patch("helpers._get_setting", return_value=""):
+                from drive_mode.apns_push import push_alert
+                r = push_alert("t", "b")
+            self.assertFalse(r["ok"])
+            self.assertEqual(r["reason"], "no_token")
+        finally:
+            os.environ.pop("DRIVE_APNS_ENABLED", None)
+
+
 if __name__ == "__main__":
     unittest.main()

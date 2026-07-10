@@ -846,6 +846,7 @@ def _check_new_patterns():
     lang = _ui_lang()
     titulo_notif = _NOTIF_TITLES.get(lang, _NOTIF_TITLES["es"])
     traducidos = _translate_patterns(nuevos, lang)
+    cuerpos = []
     for p in traducidos:
         # cuerpo estilo insight: la estadística + el porqué (sin repetir el
         # título del patrón, que ya dice lo mismo que la primera frase)
@@ -853,6 +854,7 @@ def _check_new_patterns():
         cuerpo = (frases[0].rstrip(".") + "." if frases else p.get("titulo", ""))
         if len(frases) > 1 and len(cuerpo) + len(frases[1]) <= 230:
             cuerpo += " " + frases[1].rstrip(".") + "."
+        cuerpos.append(cuerpo)
         db.session.add(CopilotNotification(
             created_at=now, kind="pattern",
             title=titulo_notif, body=cuerpo,
@@ -861,6 +863,20 @@ def _check_new_patterns():
         seen[p.get("tipo") or ""] = now.isoformat()
     _set_setting("notif_patterns_seen", _json.dumps(seen))
     db.session.commit()
+
+    # push real al teléfono (si APNs está configurado y hay token registrado);
+    # UN solo push por escaneo para no ametrallar
+    try:
+        from drive_mode.apns_push import push_alert
+        if len(cuerpos) == 1:
+            push_alert(titulo_notif, cuerpos[0])
+        elif cuerpos:
+            push_alert(titulo_notif, {
+                "es": f"Encontré {len(cuerpos)} patrones nuevos en tus datos — tocá la campanita para verlos 🔔",
+                "en": f"Found {len(cuerpos)} new patterns in your data — tap the bell to see them 🔔",
+            }.get(lang, f"Encontré {len(cuerpos)} patrones nuevos en tus datos 🔔"))
+    except Exception:
+        pass   # el push nunca debe romper el escaneo
 
 
 @bp.route("/api/copilot/notifications", endpoint="copilot_notifications")
@@ -901,6 +917,37 @@ def copilot_notifications_read():
      .update({CopilotNotification.read_at: now}))
     db.session.commit()
     return jsonify({"ok": True})
+
+
+@bp.route("/api/copilot/push-token", methods=["POST"], endpoint="copilot_push_token")
+def copilot_push_token():
+    """La app nativa registra el token APNs del DISPOSITIVO (notificaciones
+    normales; distinto del token de la Live Activity)."""
+    err = _require_login()
+    if err:
+        return err
+    token = ((request.get_json(silent=True) or {}).get("token") or "").strip()
+    if not token or len(token) > 200:
+        return jsonify({"ok": False, "error": "Token inválido"}), 400
+    from helpers import _set_setting
+    _set_setting("app_apns_token", token)
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/copilot/notifications/test-push", methods=["POST"],
+          endpoint="copilot_test_push")
+def copilot_test_push():
+    """Push de prueba para verificar la tubería de punta a punta."""
+    err = _require_login()
+    if err:
+        return err
+    from drive_mode.apns_push import push_alert
+    lang = _ui_lang()
+    res = push_alert(_NOTIF_TITLES.get(lang, _NOTIF_TITLES["es"]), {
+        "es": "Notificación de prueba — el push de la campanita funciona ✅",
+        "en": "Test notification — the bell push works ✅",
+    }.get(lang, "Notificación de prueba ✅"))
+    return jsonify({"ok": bool(res.get("ok")), "result": res})
 
 
 @bp.route("/api/copilot/profile", endpoint="copilot_profile")
