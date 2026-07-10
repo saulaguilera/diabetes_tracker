@@ -528,7 +528,8 @@ REGLAS INVIOLABLES:
 - UNIDAD: la persona usa {UNIDAD} para la glucosa. Expresá TODOS los valores de
   glucosa en {UNIDAD}. Los datos de abajo vienen en mg/dL; si la unidad es
   mmol/L, convertí (mmol/L = mg/dL ÷ 18) y mostrá 1 decimal.
-- Prosa, sin listas ni bullets. 3 a 5 frases. Podés usar 1 emoji sutil si suma.
+- Prosa, sin listas ni bullets. 3 a 5 frases. Usá 1-2 emojis suaves que sumen
+  calma (🌙 💙 ✅ ☀️) — sos un acompañante que tranquiliza, no un informe.
 - No inventes nada que no esté en los datos.
 
 CÓMO ESCRIBIRLO (adaptalo al MOMENTO del día que dice el contexto):
@@ -771,6 +772,119 @@ def copilot_patterns():
     })
 
 
+# ── Notificaciones in-app («🧠 Orbit encontró algo») ──────────────────────────
+# Cuando el detector encuentra un patrón NUEVO (tipo no notificado en los
+# últimos 30 días), se crea una notificación para la campanita del header.
+# El escaneo corre como mucho cada 6h (lo dispara el GET de notificaciones).
+
+_NOTIF_TITLES = {"es": "🧠 Orbit encontró algo",
+                 "en": "🧠 Orbit found something",
+                 "pt": "🧠 Orbit encontrou algo"}
+
+
+def _check_new_patterns():
+    """Escaneo throttled: detecta patrones nuevos y crea notificaciones."""
+    import json as _json
+    from models import db, CopilotNotification
+    from helpers import _get_setting, _set_setting
+    now = datetime.now()
+
+    last = _get_setting("notif_scan_last")
+    if last:
+        try:
+            if now - datetime.fromisoformat(last) < timedelta(hours=6):
+                return
+        except Exception:
+            pass
+    _set_setting("notif_scan_last", now.isoformat())
+
+    from utils.patrones_detector import analizar_patrones
+    # misma ventana que la pestaña Patrones: la notificación siempre apunta
+    # a algo que la persona puede ver ahí
+    pats = (analizar_patrones(days=14) or {}).get("patrones") or []
+    if not pats:
+        return
+
+    try:
+        seen = _json.loads(_get_setting("notif_patterns_seen") or "{}")
+    except Exception:
+        seen = {}
+
+    nuevos = []
+    for p in pats:
+        tipo = p.get("tipo") or ""
+        prev = seen.get(tipo)
+        if prev:
+            try:
+                if now - datetime.fromisoformat(prev) < timedelta(days=30):
+                    continue   # ya notificado hace poco
+            except Exception:
+                pass
+        nuevos.append(p)
+
+    if not nuevos:
+        return
+
+    lang = _ui_lang()
+    titulo_notif = _NOTIF_TITLES.get(lang, _NOTIF_TITLES["es"])
+    traducidos = _translate_patterns(nuevos, lang)
+    for p in traducidos:
+        # cuerpo estilo insight: la estadística + el porqué (sin repetir el
+        # título del patrón, que ya dice lo mismo que la primera frase)
+        frases = [s.strip() for s in (p.get("detalle") or "").split(". ") if s.strip()]
+        cuerpo = (frases[0].rstrip(".") + "." if frases else p.get("titulo", ""))
+        if len(frases) > 1 and len(cuerpo) + len(frases[1]) <= 230:
+            cuerpo += " " + frases[1].rstrip(".") + "."
+        db.session.add(CopilotNotification(
+            created_at=now, kind="pattern",
+            title=titulo_notif, body=cuerpo,
+        ))
+    for p in nuevos:
+        seen[p.get("tipo") or ""] = now.isoformat()
+    _set_setting("notif_patterns_seen", _json.dumps(seen))
+    db.session.commit()
+
+
+@bp.route("/api/copilot/notifications", endpoint="copilot_notifications")
+def copilot_notifications():
+    """Lista de notificaciones + conteo de no leídas (dispara el escaneo)."""
+    err = _require_login()
+    if err:
+        return err
+    from models import CopilotNotification
+    try:
+        _check_new_patterns()
+    except Exception:
+        pass   # el escaneo nunca debe romper la campanita
+
+    rows = (CopilotNotification.query
+            .order_by(CopilotNotification.created_at.desc()).limit(30).all())
+    return jsonify({
+        "ok": True,
+        "unread": sum(1 for r in rows if not r.read_at),
+        "notifications": [{
+            "id": r.id, "kind": r.kind, "title": r.title, "body": r.body or "",
+            "time": r.created_at.isoformat(), "read": bool(r.read_at),
+        } for r in rows],
+    })
+
+
+@bp.route("/api/copilot/notifications/read", methods=["POST"],
+          endpoint="copilot_notifications_read")
+def copilot_notifications_read():
+    """Marca todas como leídas (al abrir la campanita)."""
+    err = _require_login()
+    if err:
+        return err
+    from models import db, CopilotNotification
+    now = datetime.now()
+    (CopilotNotification.query
+     .filter(CopilotNotification.read_at.is_(None))
+     .update({CopilotNotification.read_at: now}))
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
 @bp.route("/api/copilot/profile", endpoint="copilot_profile")
 def copilot_profile():
     """Pantalla Perfil — datos del usuario, sensor y terapia (solo lectura).
@@ -898,6 +1012,9 @@ REGLAS DE ESTILO:
 - Respondé SIEMPRE en {IDIOMA}, en segunda persona, cálido.
 - TEXTO PLANO: nada de markdown (ni **negrita**, ni títulos, ni listas con
   guiones) — el chat lo muestra tal cual y se verían los asteriscos.
+- EMOJIS: usá 1-2 por mensaje cuando sumen calma o calidez (🌙 💙 ✅ 🙂 📉 🍽️),
+  como un amigo que tranquiliza. Nunca más de dos, y bajales el tono cuando
+  el tema sea delicado (una hipo fea, un mal día): ahí prima la contención.
 - UNIDAD: la persona usa {UNIDAD} para la glucosa. Expresá TODA la glucosa en
   {UNIDAD}. Los datos y las consultas vienen en mg/dL; si la unidad es mmol/L,
   convertí (mmol/L = mg/dL ÷ 18, 1 decimal) — incluí umbrales como 70/180 → 3.9/10.0.

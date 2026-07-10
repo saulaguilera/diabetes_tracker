@@ -11,6 +11,8 @@ import Patrones from './screens/Patrones.jsx'
 import Copiloto from './screens/Copiloto.jsx'
 import Perfil from './screens/Perfil.jsx'
 import DriveModeScreen from './drive_mode/DriveModeScreen.jsx'
+import NotifSheet from './components/NotifSheet.jsx'
+import { apiGet } from './api.js'
 import { useLang } from './i18n.jsx'
 
 // Alto del viewport visible (se achica al abrir el teclado en móvil). Permite
@@ -100,8 +102,8 @@ function PullToRefresh({ theme, onRefresh, children }) {
   )
 }
 
-// Barra superior global de marca: logo Orbit + wordmark + acceso a Drive Mode.
-function TopBar({ theme, onDrive }) {
+// Barra superior global: logo + wordmark + notificaciones + acceso a Drive Mode.
+function TopBar({ theme, onDrive, onNotif, unread }) {
   const { t } = useLang()
   return (
     <div style={{
@@ -124,6 +126,27 @@ function TopBar({ theme, onDrive }) {
           borderRadius: 6, color: '#8B5CF6', background: 'rgba(139,92,246,0.14)', border: '0.5px solid rgba(139,92,246,0.4)' }}>AI</span>
       </span>
       <div style={{ flex: 1 }}/>
+      {/* Notificaciones — campanita con badge de no leídas */}
+      <button onClick={onNotif} aria-label={t('notif.title')} style={{
+        pointerEvents: 'auto', width: 36, height: 36, borderRadius: 18, cursor: 'pointer',
+        display: 'grid', placeItems: 'center', padding: 0, position: 'relative',
+        border: `0.5px solid ${theme.border}`,
+        background: theme.dark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.6)',
+      }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.inkSoft}
+          strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.7 21a2 2 0 0 1-3.4 0"/>
+        </svg>
+        {unread > 0 && (
+          <span style={{ position: 'absolute', top: 4, right: 4, minWidth: 15, height: 15,
+            borderRadius: 8, background: '#8B5CF6', color: '#fff', fontSize: 9.5, fontWeight: 700,
+            display: 'grid', placeItems: 'center', padding: '0 3px',
+            border: `1.5px solid ${theme.dark ? '#070C18' : '#E6EEFA'}` }}>
+            {unread > 9 ? '9+' : unread}
+          </span>
+        )}
+      </button>
       {/* Drive Mode — siempre a mano, arriba a la derecha */}
       <button onClick={onDrive} aria-label={t('app.driveAria')} style={{
         pointerEvents: 'auto', width: 36, height: 36, borderRadius: 18, cursor: 'pointer',
@@ -166,6 +189,13 @@ export default function App() {
   const [tab, setTab] = useState('hoy')
   const [refreshKey, setRefreshKey] = useState(0)
   const [showDrive, setShowDrive] = useState(false)
+  const [showNotifs, setShowNotifs] = useState(false)
+  const [unread, setUnread] = useState(0)
+
+  // contador de notificaciones no leídas (al abrir la app y tras cada refresh)
+  useEffect(() => {
+    apiGet('/notifications').then(d => setUnread(d.unread || 0)).catch(() => {})
+  }, [refreshKey])
 
   // recarga la pantalla activa; el spinner queda ~650ms mientras refetchea
   const onRefresh = () => {
@@ -191,7 +221,8 @@ export default function App() {
         <div className="ambient-drift-2" style={{ position: 'absolute', inset: '-15%', pointerEvents: 'none',
           background: `radial-gradient(50% 30% at 80% 12%, rgba(${PAL.pancreas.rgb},0.10) 0%, transparent 70%), radial-gradient(55% 32% at 12% 78%, rgba(${PAL.ritmo.rgb},0.10) 0%, transparent 70%)` }}/>
         <Starfield count={46} opacity={0.55} seed={3}/>
-        <TopBar theme={theme} onDrive={() => setShowDrive(true)}/>
+        <TopBar theme={theme} onDrive={() => setShowDrive(true)}
+          onNotif={() => setShowNotifs(true)} unread={unread}/>
 
         {tab === 'copiloto' ? (
           <div style={{ position: 'absolute', inset: 0, paddingTop: 'calc(52px + env(safe-area-inset-top))' }}>{screen}</div>
@@ -209,6 +240,7 @@ export default function App() {
 
         <BottomNav theme={theme} current={tab} onChange={setTab}/>
         {showDrive && <DriveModeScreen onClose={() => setShowDrive(false)}/>}
+        {showNotifs && <NotifSheet theme={theme} onClose={() => { setShowNotifs(false); setUnread(0) }}/>}
       </div>
     </div>
   )

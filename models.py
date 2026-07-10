@@ -141,6 +141,23 @@ class ContextTag(db.Model):
         return f"<Contexto {self.tag} @ {self.timestamp:%d/%m %H:%M}>"
 
 
+class CopilotNotification(db.Model):
+    """Notificación in-app de Orbit Copilot (p.ej. «🧠 Orbit encontró algo»
+    cuando el detector encuentra un patrón nuevo). Se listan en la campanita
+    del header; read_at marca cuándo se vieron."""
+    __tablename__ = "copilot_notifications"
+
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    kind = db.Column(db.String(40), default="pattern")   # pattern | (futuro: sync, basal…)
+    title = db.Column(db.String(200), nullable=False)
+    body = db.Column(db.Text)
+    read_at = db.Column(db.DateTime)
+
+    def __repr__(self):
+        return f"<Notif {self.kind} {self.title[:30]!r} @ {self.created_at:%d/%m %H:%M}>"
+
+
 class FoodItem(db.Model):
     """Alimentos frecuentes con sus valores nutricionales."""
     __tablename__ = "food_items"

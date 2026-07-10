@@ -69,6 +69,11 @@ const DICT = {
     'ev.confirmYes': 'Sí, eliminar',
     'ev.noun.meal': 'este alimento', 'ev.noun.insulin': 'este registro de insulina',
     'ev.noun.exercise': 'esta actividad', 'ev.noun.context': 'esta marca de contexto',
+    // Notificaciones
+    'notif.title': 'Notificaciones',
+    'notif.loading': 'Buscando novedades…',
+    'notif.loadError': 'No pude cargar las notificaciones ahora.',
+    'notif.empty': 'Sin novedades por ahora. Cuando Orbit encuentre un patrón nuevo en tus datos, te lo dejo acá. 💙',
     // Brief
     'brief.preparing': 'Preparando tu resumen…', 'brief.loadError': 'No se pudo cargar el resumen ahora.',
     'brief.empty': 'Todavía no registraste nada hoy. Cuando agregues lecturas o eventos, los vas a ver acá.',
@@ -176,6 +181,10 @@ const DICT = {
     'ev.confirmYes': 'Yes, delete',
     'ev.noun.meal': 'this food', 'ev.noun.insulin': 'this insulin entry',
     'ev.noun.exercise': 'this activity', 'ev.noun.context': 'this context tag',
+    'notif.title': 'Notifications',
+    'notif.loading': 'Checking for updates…',
+    'notif.loadError': "Couldn't load notifications right now.",
+    'notif.empty': "Nothing new yet. When Orbit finds a new pattern in your data, it lands here. 💙",
     'brief.preparing': 'Preparing your summary…', 'brief.loadError': "Couldn't load the summary right now.",
     'brief.empty': "You haven't logged anything today yet. Once you add readings or events, they'll show up here.",
     'brief.yourMeals': "Today's meals", 'brief.disclaimer': 'Orbit only describes and supports your data. It does not replace your care team.',
