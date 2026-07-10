@@ -83,7 +83,7 @@ APNs `liveactivity` push con el `content-state` (claves = ContentState Codable).
    `DRIVE_APNS_ENABLED=1`, `APNS_TEAM_ID`, `APNS_KEY_ID`,
    `APNS_KEY_P8` (contenido del .p8; admite `\n` escapados o base64),
    `APNS_ENV=sandbox` (builds de Xcode; `production` para TestFlight/App Store).
-   Topic default: `com.saulaguilera.orbit2026.push-type.liveactivity`.
+   Topic default: `com.saulaguilera.orbit.push-type.liveactivity`.
 4. Rebuild de la app → abrir Drive Mode una vez (registra el token) → los
    updates siguen solos con el teléfono bloqueado.
 Con `DRIVE_APNS_ENABLED=0` (default) todo el camino APNs es no-op.

@@ -16,7 +16,7 @@ Env vars (Railway) — requieren cuenta de Apple Developer paga:
     APNS_KEY_ID         Key ID de la clave APNs (.p8)
     APNS_KEY_P8         contenido PEM de la clave .p8 (admite '\n' escapados
                         o el PEM entero en base64)
-    APNS_TOPIC          default: com.saulaguilera.orbit2026.push-type.liveactivity
+    APNS_TOPIC          default: com.saulaguilera.orbit.push-type.liveactivity
     APNS_ENV            "sandbox" (builds de Xcode, default) | "production"
 
 El push token de la Live Activity lo registra la app nativa vía
@@ -35,7 +35,9 @@ import time
 
 log = logging.getLogger("drive.apns")
 
-_DEFAULT_TOPIC = "com.saulaguilera.orbit2026.push-type.liveactivity"
+# bundle renombrado a com.saulaguilera.orbit (2026-07: el orbit2026 quedó
+# atrapado en el Personal Team gratuito y el team pago no podía registrarlo)
+_DEFAULT_TOPIC = "com.saulaguilera.orbit.push-type.liveactivity"
 _STALE_AFTER_S = 15 * 60          # igual que staleAfter del manager nativo
 _JWT_TTL_S     = 45 * 60          # Apple pide refrescar el JWT cada 20–60 min
 
