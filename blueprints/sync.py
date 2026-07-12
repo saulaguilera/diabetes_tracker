@@ -47,30 +47,53 @@ _SYNC_TOKEN     = os.environ.get("SYNC_TOKEN", "")
 _DEDUP_WINDOW_MIN = 2
 
 
-def _libre_creds_for_user(user) -> tuple[str, str]:
-    """Credenciales LibreLinkUp del usuario: las suyas (cifradas en users) o,
-    SOLO para el usuario #1, las del entorno como fallback (setup histórico)."""
+def _cgm_config_for_user(user) -> tuple[str, str, str]:
+    """(provider, cred1, cred2) del usuario: sus credenciales cifradas o,
+    SOLO para el usuario #1, las del entorno como fallback (setup histórico).
+    provider: libre | dexcom | nightscout (utils/cgm_connectors)."""
     from utils.crypto_box import decrypt
-    email = decrypt(user.libre_email_enc or "")
-    password = decrypt(user.libre_password_enc or "")
-    if email and password:
-        return email, password
+    provider = (getattr(user, "cgm_provider", None) or "libre").strip().lower()
+    c1 = decrypt(user.libre_email_enc or "")
+    c2 = decrypt(user.libre_password_enc or "")
+    if c1:
+        return provider, c1, c2
     if user.id == _SYNC_OWNER_USER_ID:
-        return _LIBRE_EMAIL, _LIBRE_PASSWORD
-    return "", ""
+        return "libre", _LIBRE_EMAIL, _LIBRE_PASSWORD
+    return provider, "", ""
 
 
-def _do_libre_sync(email: str, password: str) -> dict:
+def _do_libre_sync(email: str, password: str, provider: str = "libre") -> dict:
     """
     Descarga lecturas de LibreLinkUp e inserta las nuevas en la base de datos.
     Retorna {"insertadas": int, "total": int, "error": str|None, "ultima": datetime|None}
     """
-    resultado = libre_sync_all(email, password,
-                               get_setting_fn=_get_setting,
-                               set_setting_fn=_set_setting)
+    from utils.cgm_connectors import fetch as cgm_fetch
+    resultado = cgm_fetch(provider, email, password,
+                          get_setting_fn=_get_setting,
+                          set_setting_fn=_set_setting)
     if resultado["error"]:
         return {"insertadas": 0, "total": 0,
                 "error": resultado["error"], "ultima": None}
+
+    # tratamientos de bomba (nightscout: bolos de Loop/AndroidAPS/Omnipod DIY)
+    try:
+        from models import InsulinDose
+        from helpers import current_user_id as _cui
+        for t in (resultado.get("treatments") or []):
+            _ya = InsulinDose.query.filter(
+                InsulinDose.timestamp >= t["timestamp"] - timedelta(minutes=3),
+                InsulinDose.timestamp <= t["timestamp"] + timedelta(minutes=3),
+                InsulinDose.type == "bolus",
+            ).first()
+            if not _ya and t.get("units"):
+                db.session.add(InsulinDose(
+                    timestamp=t["timestamp"], type="bolus",
+                    units=float(t["units"]), brand="bomba (nightscout)",
+                    user_id=_cui() or _SYNC_OWNER_USER_ID,
+                ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
     readings  = resultado["readings"]
     insertadas = 0
@@ -863,10 +886,10 @@ def api_sync_libre():
     if session.get("user_id"):
         from models import User
         u = db.session.get(User, session["user_id"])
-        email, password = _libre_creds_for_user(u) if u else ("", "")
-        if not email or not password:
-            return jsonify({"error": "Conectá tu sensor en Perfil (cuenta de LibreLinkUp)."}), 400
-        return jsonify(_sync_one_user(email, password, is_manual))
+        provider, email, password = _cgm_config_for_user(u) if u else ("libre", "", "")
+        if not email:
+            return jsonify({"error": "Conectá tu sensor en Perfil."}), 400
+        return jsonify(_sync_one_user(email, password, is_manual, provider))
 
     # ── Cron (SYNC_TOKEN): sincroniza a TODOS los usuarios con credenciales ──
     from models import User
@@ -875,12 +898,12 @@ def api_sync_libre():
     usuarios = db.session.execute(
         db.select(User), execution_options={"all_users": True}).scalars().all()
     for u in usuarios:
-        email, password = _libre_creds_for_user(u)
-        if not email or not password:
+        provider, email, password = _cgm_config_for_user(u)
+        if not email:
             continue
         tok = set_user_context(u.id)
         try:
-            r = _sync_one_user(email, password, is_manual)
+            r = _sync_one_user(email, password, is_manual, provider)
             resultados[u.username] = {k: r.get(k) for k in
                                       ("insertadas", "total", "error", "cooldown")}
             total_ins += r.get("insertadas") or 0
@@ -951,7 +974,7 @@ def _maybe_morning_brief(now=None):
     return push_alert(title, body)
 
 
-def _sync_one_user(email: str, password: str, is_manual: bool) -> dict:
+def _sync_one_user(email: str, password: str, is_manual: bool, provider: str = "libre") -> dict:
     """Cooldown + rate-limit + sync de UN usuario (settings del contexto actual)."""
     # ── Cooldown: no llamar a Abbott más seguido de cada 4 min ──────────────
     # El botón manual (?force=1) siempre bypasea el cooldown local.
@@ -995,7 +1018,7 @@ def _sync_one_user(email: str, password: str, is_manual: bool) -> dict:
             except (ValueError, TypeError):
                 pass
 
-    resultado = _do_libre_sync(email, password)
+    resultado = _do_libre_sync(email, password, provider)
 
     # Limpiar rate-limit si el sync fue exitoso
     if not resultado.get("error") or "429" not in (resultado.get("error") or ""):

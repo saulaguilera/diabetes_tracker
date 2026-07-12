@@ -309,6 +309,12 @@ with app.app_context():
                      "c": datetime.now()})
                 conn.commit()
 
+        # 2b) columna cgm_provider en users (conector multi-CGM)
+        _u_cols = [c["name"] for c in inspector.get_columns("users")]
+        if "cgm_provider" not in _u_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN cgm_provider VARCHAR(20) DEFAULT 'libre'"))
+            conn.commit()
+
         # 3) backfill: todos los datos históricos pertenecen al usuario #1
         for _t in _TENANT_TABLES:
             try:

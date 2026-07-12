@@ -15,8 +15,10 @@ class User(db.Model):
     password_hash = db.Column(db.String(300), nullable=False)
     display_name = db.Column(db.String(120))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    # credenciales LibreLinkUp cifradas (Fernet derivada de SECRET_KEY) — el
-    # sync itera usuarios que las tengan. NUNCA en texto plano.
+    # Conector CGM del usuario: libre | dexcom | nightscout (utils/cgm_connectors).
+    # Las credenciales van cifradas (Fernet derivada de SECRET_KEY), NUNCA en
+    # texto plano. Para nightscout: email_enc = URL del sitio, password_enc = token.
+    cgm_provider = db.Column(db.String(20), default="libre")
     libre_email_enc = db.Column(db.Text)
     libre_password_enc = db.Column(db.Text)
 

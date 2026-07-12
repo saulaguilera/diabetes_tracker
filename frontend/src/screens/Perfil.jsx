@@ -311,12 +311,19 @@ function EditSheet({ theme, name: name0, config, obs = {}, onClose, onSaved }) {
 // cifrada en el servidor) y jamás vuelve.
 function LibreConnect({ theme }) {
   const { t } = useLang()
-  const [st, setSt] = useState(null)        // {connected, email}
+  const [st, setSt] = useState(null)        // {connected, email, provider}
   const [open, setOpen] = useState(false)
+  const [provider, setProvider] = useState('libre')
   const [email, setEmail] = useState('')
   const [pass, setPass] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
+  // etiquetas por proveedor (nightscout usa URL + token)
+  const P = {
+    libre:      { name: 'FreeStyle Libre', c: '#FFC72C', f1: t('perfil.libre.email'), f2: t('perfil.libre.password'), t1: 'email' },
+    dexcom:     { name: 'Dexcom',          c: '#58A618', f1: t('sensor.dexcomUser'), f2: t('perfil.libre.password'), t1: 'text' },
+    nightscout: { name: 'Nightscout',      c: '#8B5CF6', f1: t('sensor.nsUrl'), f2: t('sensor.nsToken'), t1: 'url' },
+  }
 
   useEffect(() => {
     apiGet('/libre').then(setSt).catch(() => {})
@@ -326,7 +333,7 @@ function LibreConnect({ theme }) {
     if (busy) return
     setBusy(true); setMsg(null)
     try {
-      const r = await apiPut('/libre', { email: email.trim(), password: pass })
+      const r = await apiPut('/libre', { provider, email: email.trim(), password: pass })
       setSt(r); setOpen(false); setEmail(''); setPass('')
       setMsg(t('perfil.libre.ok'))
     } catch (e) {
@@ -357,7 +364,7 @@ function LibreConnect({ theme }) {
       {st && st.connected ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ flex: 1, color: theme.inkSoft, fontSize: 13 }}>
-            {t('perfil.libre.connected')} <span style={{ color: theme.ink }}>{st.email}</span>
+            {(P[st.provider] || P.libre).name} · <span style={{ color: theme.ink }}>{st.email}</span>
           </span>
           <button onClick={desconectar} style={btn(false)}>{t('perfil.libre.disconnect')}</button>
         </div>
@@ -370,14 +377,28 @@ function LibreConnect({ theme }) {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ color: theme.inkFaint, fontSize: 12, lineHeight: 1.45 }}>{t('perfil.libre.hint')}</div>
-          <input style={inputStyle} type="email" placeholder={t('perfil.libre.email')}
+          <div style={{ display: 'flex', gap: 8 }}>
+            {Object.entries(P).map(([id, p]) => (
+              <button key={id} onClick={() => setProvider(id)} style={{
+                flex: 1, padding: '8px 4px', borderRadius: 12, cursor: 'pointer', fontFamily: SANS,
+                fontSize: 12, fontWeight: 600,
+                border: `0.5px solid ${provider === id ? p.c : theme.border}`,
+                background: provider === id ? `${p.c}22` : 'transparent',
+                color: provider === id ? theme.ink : theme.inkSoft }}>
+                {p.name}
+              </button>
+            ))}
+          </div>
+          <div style={{ color: theme.inkFaint, fontSize: 12, lineHeight: 1.45 }}>
+            {provider === 'nightscout' ? t('sensor.nsHint') : provider === 'dexcom' ? t('sensor.dexcomHint') : t('perfil.libre.hint')}
+          </div>
+          <input style={inputStyle} type={P[provider].t1} placeholder={P[provider].f1}
             value={email} onChange={e => setEmail(e.target.value)} autoComplete="off"/>
-          <input style={inputStyle} type="password" placeholder={t('perfil.libre.password')}
+          <input style={inputStyle} type="password" placeholder={P[provider].f2}
             value={pass} onChange={e => setPass(e.target.value)} autoComplete="new-password"/>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button onClick={() => { setOpen(false); setMsg(null) }} style={btn(false)}>{t('common.cancel')}</button>
-            <button onClick={conectar} disabled={busy || !email.includes('@') || !pass} style={{ ...btn(true), opacity: busy ? 0.6 : 1 }}>
+            <button onClick={conectar} disabled={busy || !email || (provider !== 'nightscout' && !pass) || (provider === 'libre' && !email.includes('@'))} style={{ ...btn(true), opacity: busy ? 0.6 : 1 }}>
               {busy ? t('perfil.libre.checking') : t('perfil.libre.save')}
             </button>
           </div>

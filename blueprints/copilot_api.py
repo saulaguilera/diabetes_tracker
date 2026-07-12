@@ -978,7 +978,8 @@ def copilot_libre():
         return (name[:2] + "•••@" + dom) if dom else email[:2] + "•••"
 
     if request.method == "GET":
-        return jsonify({"ok": True, "connected": bool(_masked()), "email": _masked()})
+        return jsonify({"ok": True, "connected": bool(_masked()), "email": _masked(),
+                        "provider": (u.cgm_provider or "libre")})
 
     if request.method == "DELETE":
         u.libre_email_enc = None
@@ -986,7 +987,8 @@ def copilot_libre():
         db.session.commit()
         # limpiar el caché de token de Libre de este usuario
         for k in ("libre_token", "libre_base_url", "libre_token_expiry",
-                  "libre_account_id", "libre_last_sync", "libre_rate_limited_at"):
+                  "libre_account_id", "libre_last_sync", "libre_rate_limited_at",
+                  "dexcom_base", "dexcom_session"):
             try:
                 from helpers import _set_setting
                 _set_setting(k, "")
@@ -995,25 +997,34 @@ def copilot_libre():
         return jsonify({"ok": True, "connected": False})
 
     data = request.get_json(silent=True) or {}
-    email = (data.get("email") or "").strip()
-    password = data.get("password") or ""
-    if "@" not in email or not password:
+    provider = (data.get("provider") or "libre").strip().lower()
+    email = (data.get("email") or "").strip()      # libre/dexcom: usuario · nightscout: URL
+    password = data.get("password") or ""          # nightscout: token (opcional)
+    from utils.cgm_connectors import PROVIDERS, validate as cgm_validate
+    if provider not in PROVIDERS:
+        return jsonify({"ok": False, "error": "Sensor no soportado"}), 400
+    if provider == "libre" and ("@" not in email or not password):
         return jsonify({"ok": False, "error": "Email o contraseña inválidos"}), 400
-    # validar contra LibreLinkUp ANTES de guardar (un intento de login)
-    try:
-        from utils.libre_linkup import login as libre_login
-        libre_login(email, password)
-    except Exception as exc:
+    if provider == "dexcom" and (not email or not password):
+        return jsonify({"ok": False, "error": "Usuario o contraseña inválidos"}), 400
+    if provider == "nightscout" and "." not in email:
+        return jsonify({"ok": False, "error": "URL inválida"}), 400
+    # validar contra el proveedor ANTES de guardar (un intento real)
+    err_v = cgm_validate(provider, email, password)
+    if err_v:
         return jsonify({"ok": False,
-                        "error": f"LibreLinkUp rechazó las credenciales: {str(exc)[:120]}"}), 400
+                        "error": f"El proveedor rechazó la conexión: {err_v}"}), 400
+    u.cgm_provider = provider
     u.libre_email_enc = encrypt(email)
     u.libre_password_enc = encrypt(password)
     db.session.commit()
     # invalidar caché de token (el próximo sync loguea fresco con esta cuenta)
     from helpers import _set_setting
-    for k in ("libre_token", "libre_base_url", "libre_token_expiry", "libre_account_id"):
+    for k in ("libre_token", "libre_base_url", "libre_token_expiry", "libre_account_id",
+              "dexcom_base", "dexcom_session"):
         _set_setting(k, "")
-    return jsonify({"ok": True, "connected": True, "email": _masked()})
+    return jsonify({"ok": True, "connected": True, "email": _masked(),
+                    "provider": provider})
 
 
 @bp.route("/api/copilot/profile", endpoint="copilot_profile")
