@@ -27,7 +27,9 @@ _LIBRE_PASSWORD = os.environ.get("LIBRE_PASSWORD", "")
 @bp.route("/login", methods=["GET", "POST"], endpoint="login")
 def login():
     if session.get("logged_in"):
-        return redirect(url_for("dashboard"))
+        # ya hay sesión → a la app (el research clásico vive en / solo
+        # para el usuario 1, por URL directa)
+        return redirect("/copilot")
 
     error = None
     if request.method == "POST":
@@ -124,6 +126,10 @@ def dashboard():
     # La app nativa Orbit (Capacitor) marca su User-Agent con "OrbitApp".
     # Si entra a la raíz, la mandamos al Copilot (no al dashboard de research).
     if "OrbitApp" in (request.headers.get("User-Agent") or ""):
+        return redirect("/copilot")
+    # El dashboard clásico es la superficie de research del usuario 1.
+    # Cualquier otro usuario que caiga en la raíz va al producto.
+    if session.get("user_id") != 1:
         return redirect("/copilot")
     stats   = stats_resumen()
     chart   = chart_glucose_timeline(hours=24)
