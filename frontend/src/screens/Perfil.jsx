@@ -166,6 +166,14 @@ export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleThe
         <Toggle on={dark} onChange={onToggleTheme} color={theme.accent}/>
       </Card>
 
+      {/* cerrar sesión — navegación completa a /logout (limpia la cookie) */}
+      <button onClick={() => { window.location.href = '/logout' }} style={{
+        width: '100%', padding: '13px', borderRadius: 14, cursor: 'pointer',
+        background: 'transparent', border: `0.5px solid ${theme.border}`,
+        color: theme.inkSoft, fontFamily: SANS, fontSize: 14 }}>
+        {t('perfil.logout')}
+      </button>
+
       <div style={{ color: theme.inkFaint, fontSize: 11, textAlign: 'center', lineHeight: 1.5 }}>
         {t('perfil.footer')}
       </div>

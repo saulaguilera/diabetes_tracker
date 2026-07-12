@@ -31,6 +31,9 @@ app.config["SQLALCHEMY_DATABASE_URI"] = (
 )
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB max upload
+# Sesión larga: que iniciar sesión sea un evento raro, no una rutina.
+# (session.permanent=True se setea al loguear; esto estira la vida del cookie)
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=180)
 
 db.init_app(app)
 

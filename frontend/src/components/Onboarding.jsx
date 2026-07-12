@@ -16,7 +16,7 @@ export default function Onboarding({ theme, onDone }) {
   const [objetivo, setObjetivo] = useState('100')
   const [basalTipo, setBasalTipo] = useState('')
   const [basalDose, setBasalDose] = useState('')
-  const [basalHora, setBasalHora] = useState('22')
+  const [basalHora, setBasalHora] = useState('22:00')
   const [email, setEmail] = useState('')
   const [pass, setPass] = useState('')
   const [busy, setBusy] = useState(false)
@@ -41,7 +41,8 @@ export default function Onboarding({ theme, onDone }) {
     try {
       await apiPut('/profile', {
         name: name.trim(), objetivo,
-        basal_tipo: basalTipo.trim(), basal_dose: basalDose || null, basal_hora: basalHora,
+        basal_tipo: basalTipo.trim(), basal_dose: basalDose || null,
+        basal_hora: String(parseInt(basalHora.split(':')[0] || '22', 10)),
       })
       setStep(2)
     } catch { setErr(t('onb.saveError')) } finally { setBusy(false) }
@@ -81,7 +82,7 @@ export default function Onboarding({ theme, onDone }) {
         </div>
 
         {step === 0 && (
-          <div>
+          <div key="s0" className="rise-in">
             <div style={{ color: theme.ink, fontSize: 24, fontWeight: 300, marginBottom: 6 }}>{t('onb.hi')}</div>
             <div style={{ color: theme.inkSoft, fontSize: 14.5, lineHeight: 1.55, marginBottom: 24 }}>{t('onb.intro')}</div>
             <label style={label}>{t('onb.name')}</label>
@@ -94,7 +95,7 @@ export default function Onboarding({ theme, onDone }) {
         )}
 
         {step === 1 && (
-          <div>
+          <div key="s1" className="rise-in">
             <div style={{ color: theme.ink, fontSize: 22, fontWeight: 300, marginBottom: 18 }}>{t('onb.therapy')}</div>
             <label style={label}>{t('onb.target')}</label>
             <input style={{ ...input, marginBottom: 14 }} type="number" inputMode="numeric" value={objetivo} onChange={e => setObjetivo(e.target.value)}/>
@@ -106,8 +107,8 @@ export default function Onboarding({ theme, onDone }) {
                 <input style={input} type="number" inputMode="decimal" value={basalDose} onChange={e => setBasalDose(e.target.value)}/>
               </div>
               <div style={{ flex: 1 }}>
-                <label style={label}>{t('onb.basalHour')}</label>
-                <input style={input} type="number" inputMode="numeric" min="0" max="23" value={basalHora} onChange={e => setBasalHora(e.target.value)}/>
+                <label style={label}>{t('onb.basalHour2')}</label>
+                <input style={input} type="time" step="3600" value={basalHora} onChange={e => setBasalHora(e.target.value)}/>
               </div>
             </div>
             <div style={{ color: theme.inkFaint, fontSize: 12, lineHeight: 1.5, marginTop: 12 }}>{t('onb.therapyNote')}</div>
@@ -120,7 +121,7 @@ export default function Onboarding({ theme, onDone }) {
         )}
 
         {step === 2 && (
-          <div>
+          <div key="s2" className="rise-in">
             <div style={{ color: theme.ink, fontSize: 22, fontWeight: 300, marginBottom: 8 }}>{t('onb.sensor')}</div>
             {/* badge LibreLinkUp (hasta que haya más sensores compatibles) */}
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 12px',

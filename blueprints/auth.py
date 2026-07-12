@@ -45,7 +45,9 @@ def login():
             # Solo se aceptan rutas internas (que empiezan con "/") por seguridad.
             next_url = request.form.get("next") or request.args.get("next") or ""
             if not next_url.startswith("/"):
-                next_url = url_for("dashboard")
+                # el producto es Orbit Copilot; el dashboard clásico (research)
+                # sigue accesible por URL directa
+                next_url = "/copilot"
             return redirect(next_url)
         else:
             error = "Usuario o contraseña incorrectos."
