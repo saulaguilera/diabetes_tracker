@@ -884,6 +884,10 @@ def api_sync_libre():
             resultados[u.username] = {k: r.get(k) for k in
                                       ("insertadas", "total", "error", "cooldown")}
             total_ins += r.get("insertadas") or 0
+            try:
+                _maybe_morning_brief()   # buenos días 🌅 (una vez al día, 7-10h)
+            except Exception:
+                pass
         except Exception as exc:
             resultados[u.username] = {"error": str(exc)[:200]}
         finally:
@@ -899,6 +903,52 @@ def api_sync_libre():
 
     return jsonify({"insertadas": total_ins, "usuarios": resultados,
                     "backup": backup_res, "error": None})
+
+
+def _maybe_morning_brief(now=None):
+    """Push matinal del usuario del contexto: cómo estuvo la noche, en una
+    línea. Una vez al día, entre 7 y 10 AM, solo si hay token de push y datos
+    de la noche. El loop de retención diario: Orbit te saluda, no al revés."""
+    now = now or datetime.now()
+    if not (7 <= now.hour < 10):
+        return None
+    hoy = now.strftime("%Y-%m-%d")
+    if _get_setting("brief_push_last") == hoy:
+        return None
+    if not (_get_setting("app_apns_token") or "").strip():
+        return None
+    _set_setting("brief_push_last", hoy)   # antes de enviar: sin martilleo
+
+    ini = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    reads = GlucoseReading.query.filter(
+        GlucoseReading.timestamp >= ini,
+        GlucoseReading.timestamp < ini + timedelta(hours=8),
+        GlucoseReading.is_artifact == False,           # noqa: E712
+    ).all()
+    if len(reads) < 12:
+        return None   # noche sin datos suficientes → no molestar
+
+    vals = [r.value_mgdl for r in reads]
+    tir = round(100 * sum(1 for v in vals if 70 <= v <= 180) / len(vals))
+    lo = min(vals)
+    hubo_baja = any(v < 70 for v in vals)
+    lang = (_get_setting("ui_lang") or "es").strip().lower()
+    mmol = (_get_setting("glucose_unit") or "mgdl") == "mmol"
+    lo_txt = f"{lo / 18.0182:.1f}" if mmol else f"{int(lo)}"
+
+    if lang == "en":
+        title = "🌅 Good morning"
+        body = f"Overnight: {tir}% in range · low {lo_txt} 🌙"
+        if hubo_baja:
+            body += " — one dip, worth a look in the app"
+    else:
+        title = "🌅 Buenos días"
+        body = f"Tu noche: {tir}% en rango · mínimo {lo_txt} 🌙"
+        if hubo_baja:
+            body += " — hubo una bajada, vale la pena mirarla en la app"
+
+    from drive_mode.apns_push import push_alert
+    return push_alert(title, body)
 
 
 def _sync_one_user(email: str, password: str, is_manual: bool) -> dict:

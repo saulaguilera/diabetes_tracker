@@ -98,6 +98,12 @@ def register():
                            enabled=bool(invite_required))
 
 
+@bp.route("/privacidad", endpoint="privacidad")
+def privacidad():
+    """Política de privacidad — pública (la exige Apple para TestFlight externo)."""
+    return render_template("privacidad.html")
+
+
 @bp.route("/logout", endpoint="logout")
 def logout():
     session.clear()

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <title>Orbit — Privacidad</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Outfit', -apple-system, system-ui, sans-serif;
+      background: radial-gradient(125% 90% at 50% -8%, #16243F 0%, #0B1324 46%, #060B18 100%);
+      color: #EAF2F8; min-height: 100vh; padding: 40px 20px 80px;
+    }
+    .wrap { max-width: 640px; margin: 0 auto; }
+    h1 { font-size: 26px; font-weight: 300; margin: 18px 0 6px; letter-spacing: -0.02em; }
+    .updated { color: rgba(234,242,248,0.4); font-size: 12.5px; margin-bottom: 28px; }
+    h2 { font-size: 16px; font-weight: 600; margin: 26px 0 8px; color: #22D3EE; }
+    p, li { color: rgba(234,242,248,0.72); font-size: 14.5px; line-height: 1.65; }
+    ul { padding-left: 20px; margin: 6px 0; }
+    .card { background: rgba(255,255,255,0.045); border: 0.5px solid rgba(255,255,255,0.085);
+      border-radius: 18px; padding: 18px 20px; margin: 22px 0; }
+    .card p { font-size: 13.5px; }
+    a { color: #22D3EE; text-decoration: none; }
+    .brand { display: flex; align-items: center; gap: 8px; }
+    .brand span { font-size: 18px; font-weight: 300; }
+    .brand b { font-weight: 500;
+      background: linear-gradient(100deg, #22D3EE 0%, #38BDF8 42%, #8B5CF6 100%);
+      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 120 120">
+        <defs><linearGradient id="r" x1="0" y1="0" x2="1" y2="1.1">
+          <stop offset="0%" stop-color="#22D3EE"/><stop offset="45%" stop-color="#38BDF8"/><stop offset="100%" stop-color="#8B5CF6"/>
+        </linearGradient></defs>
+        <circle cx="60" cy="60" r="44" fill="none" stroke="url(#r)" stroke-width="6.5"/>
+        <circle cx="60" cy="60" r="13" fill="#22D3EE"/><circle cx="60" cy="60" r="6" fill="#fff"/>
+      </svg>
+      <span>Orbit <b>Copilot</b></span>
+    </div>
+    <h1>Política de privacidad</h1>
+    <div class="updated">Última actualización: julio 2026</div>
+
+    <p>Orbit es una aplicación para acompañar la diabetes tipo 1, construida por una
+    persona que vive con diabetes tipo 1. Tus datos de salud son tuyos: esta página
+    explica qué guardamos, para qué, y qué no hacemos nunca.</p>
+
+    <h2>Qué datos guardamos</h2>
+    <ul>
+      <li><b>Datos de salud que registrás o sincronizás:</b> lecturas de glucosa, comidas
+      (incluidas fotos que subas para estimar carbohidratos), dosis de insulina, ejercicio,
+      etiquetas de contexto (estrés, enfermedad, etc.) y tu configuración de terapia
+      (objetivo, basal).</li>
+      <li><b>Datos de cuenta:</b> nombre de usuario, nombre que elijas mostrar y una
+      contraseña (guardada con hash — nunca en texto plano).</li>
+      <li><b>Credenciales de LibreLinkUp</b> (si conectás tu sensor): se guardan
+      <b>cifradas</b> y se usan exclusivamente para sincronizar tu glucosa. Podés
+      desconectar y borrarlas cuando quieras desde Perfil.</li>
+    </ul>
+
+    <h2>Para qué los usamos</h2>
+    <ul>
+      <li>Mostrarte tus datos y tendencias en la app.</li>
+      <li>Generar los análisis del copiloto: resúmenes, patrones y respuestas del chat.
+      Para esto, fragmentos de tus datos se procesan con un proveedor de IA
+      (Anthropic). Según la política del proveedor, los datos enviados por API
+      <b>no se usan para entrenar sus modelos</b>.</li>
+      <li>Enviarte notificaciones que vos habilitaste (patrones nuevos, recordatorios).</li>
+    </ul>
+
+    <h2>Qué no hacemos nunca</h2>
+    <ul>
+      <li><b>No vendemos ni compartimos tus datos</b> con anunciantes, aseguradoras ni terceros.</li>
+      <li><b>No usamos tus datos para publicidad.</b></li>
+      <li><b>Orbit no prescribe:</b> nunca calcula dosis ni da indicaciones médicas.
+      Describe y acompaña; las decisiones clínicas son de tu equipo de salud.</li>
+    </ul>
+
+    <h2>Dónde viven tus datos</h2>
+    <p>En servidores de Railway (EE. UU.), con acceso restringido por cuenta: cada
+    usuario ve exclusivamente sus propios datos, garantizado a nivel de base de datos.
+    Se realizan copias de seguridad automáticas <b>cifradas</b>.</p>
+
+    <h2>Tus derechos</h2>
+    <ul>
+      <li>Exportar tus datos: podés pedir una copia completa.</li>
+      <li>Eliminar tu cuenta y todos tus datos: escribinos y se elimina todo de forma
+      permanente (incluidas las copias de seguridad, en su ciclo de rotación de 30 días).</li>
+      <li>Desconectar tu sensor y borrar tus credenciales de LibreLinkUp en cualquier momento.</li>
+    </ul>
+
+    <div class="card">
+      <p><b>Contacto:</b> para exportar o eliminar tus datos, o cualquier duda de
+      privacidad, escribí a <a href="mailto:sauvlogs@gmail.com">sauvlogs@gmail.com</a>.</p>
+    </div>
+
+    <p style="font-size:12.5px; color: rgba(234,242,248,0.4);">Orbit está en fase de
+    prueba con invitación. Esta política puede actualizarse; los cambios relevantes se
+    avisan dentro de la app.</p>
+  </div>
+</body>
+</html>

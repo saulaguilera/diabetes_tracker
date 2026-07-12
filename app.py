@@ -63,7 +63,7 @@ def _protect_all():
     # incluyen ambas formas. Sin "auth.login" aquí, /login se redirige a sí mismo
     # → loop infinito ("too many redirects") cuando no hay sesión.
     exempt = {"login", "logout", "static", "auth.login", "auth.logout",
-              "register", "auth.register"}
+              "register", "auth.register", "privacidad", "auth.privacidad"}
     if request.endpoint in exempt or session.get("logged_in"):
         return
     # Permitir llamadas de cron/API autenticadas con SYNC_TOKEN
