@@ -19,5 +19,8 @@
     "Keyboard": {
       "resize": "native"
     }
+  },
+  "android": {
+    "backgroundColor": "#060B18"
   }
 }
