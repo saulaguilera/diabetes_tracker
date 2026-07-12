@@ -70,7 +70,7 @@ def glucemia_nueva():
 def glucemia_marcar_artefacto_hora():
     """
     Marca como artefacto la lectura CGM más cercana a un timestamp dado.
-    Útil cuando LibreLinkUp no devuelve la corrección y necesitás invalidar
+    Útil cuando LibreLinkUp no devuelve la corrección y necesitas invalidar
     una lectura específica desde el browser.
 
     Query params (GET) o JSON (POST):
@@ -135,7 +135,7 @@ def glucemia_marcar_artefacto_hora():
         "reason":       reason,
         "mensaje":      f"✓ Lectura {closest.timestamp.strftime('%d/%m %H:%M')} "
                         f"({closest.value_mgdl} mg/dL) marcada como artefacto. "
-                        f"Recargá el dashboard para ver el chart limpio.",
+                        f"Recarga el dashboard para ver el chart limpio.",
     })
 
 

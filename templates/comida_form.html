@@ -101,7 +101,7 @@
       <i class="bi bi-layout-split flex-shrink-0" style="font-size:1.1rem; color:#6366f1;"></i>
       <div>
         <strong>Esta comida no tiene ingredientes desglosados.</strong>
-        Agregá los ingredientes abajo para que el análisis de patrones sepa qué alimento
+        Agrega los ingredientes abajo para que el análisis de patrones sepa qué alimento
         realmente causó el pico de glucemia.
       </div>
     </div>
@@ -367,7 +367,7 @@ function addComponent(data = {}) {
       <div class="comp-macro-field">
         <label class="comp-macro-lbl-sm" style="color:#0ea5e9;">
           Gramos
-          <span class="comp-gi-hint" title="Peso del ingrediente. Si ingresás mL en su lugar, se convierte automáticamente.">?</span>
+          <span class="comp-gi-hint" title="Peso del ingrediente. Si ingresas mL en su lugar, se convierte automáticamente.">?</span>
         </label>
         <input type="number" name="comp_grams[]" class="form-control ci-grams"
                step="1" min="0" placeholder="0" value="${data.grams ?? ''}"
@@ -448,7 +448,7 @@ async function estimarMacros(btn) {
   const grams  = parseFloat(row.querySelector('.ci-grams')?.value) || 0;
   const ml     = parseFloat(row.querySelector('.ci-ml')?.value)    || 0;
 
-  if (!nombre) { alert('Escribí primero el nombre del ingrediente.'); return; }
+  if (!nombre) { alert('Escribe primero el nombre del ingrediente.'); return; }
 
   btn.disabled = true;
   btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Estimando…';
@@ -648,10 +648,10 @@ function mostrarResultadoFoto(data) {
   const confWarn  = document.getElementById('foto-confianza-warn');
   const confTxt   = document.getElementById('foto-conf-warn-txt');
   if (data.confianza_general === 'baja') {
-    confTxt.textContent = 'Confianza baja — revisá los valores antes de guardar.';
+    confTxt.textContent = 'Confianza baja — revisa los valores antes de guardar.';
     confWarn.style.display = '';
   } else if (data.confianza_general === 'media') {
-    confTxt.textContent = 'Confianza media — revisá los CH especialmente.';
+    confTxt.textContent = 'Confianza media — revisa los CH especialmente.';
     confWarn.style.display = '';
   } else {
     confWarn.style.display = 'none';

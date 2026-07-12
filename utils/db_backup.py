@@ -11,7 +11,7 @@ Pipeline: sqlite3 backup API (snapshot consistente aunque la DB esté en uso)
 Trigger: el cron de sync llama a maybe_backup() en cada corrida; solo ejecuta
 si pasaron ≥24h del último backup (setting global "backup_last").
 
-Restore (manual, documentado acá):
+Restore (manual, documentado aquí):
     1. Descargar el .db.gz.enc más nuevo del bucket (aws s3 cp / consola).
     2. python -c "from utils.crypto_box import decrypt_bytes; import sys,gzip;
        open('restored.db','wb').write(gzip.decompress(decrypt_bytes(open(sys.argv[1],'rb').read())))" backup.db.gz.enc

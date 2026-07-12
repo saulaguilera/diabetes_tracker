@@ -167,13 +167,13 @@ def _build_html(accuracy: dict, dawn: dict | None = None) -> str:
         interpretacion = (
             f"✅ El modelo está funcionando muy bien: {pct30}% de las predicciones a +30 min "
             f"tuvieron un error ≤ 20 mg/dL (MAE = {mae30} mg/dL). "
-            "Seguí usando la app normalmente para mantener la calibración."
+            "Sigue usando la app normalmente para mantener la calibración."
         )
     elif mae30 and mae30 > 20:
         interpretacion = (
             f"⚠️ El error promedio a +30 min es {mae30} mg/dL — por encima del umbral clínico de 20 mg/dL. "
-            "Revisá si el ISF y el ICR están bien configurados en Configuración, "
-            "o esperá más días para que el modelo acumule más datos."
+            "Revisa si el ISF y el ICR están bien configurados en Configuración, "
+            "o espera más días para que el modelo acumule más datos."
         )
     else:
         interpretacion = (
@@ -314,7 +314,7 @@ def _build_html(accuracy: dict, dawn: dict | None = None) -> str:
             <td style="padding:16px 32px;background:#f8fafc;border-top:1px solid #e5e7eb">
               <div style="font-size:11px;color:#9ca3af;text-align:center">
                 Diabetes Tracker · Reporte generado automáticamente cada lunes a las 9am<br>
-                Para ver más detalles abrí la app → Diagnóstico del modelo.
+                Para ver más detalles abre la app → Diagnóstico del modelo.
               </div>
             </td>
           </tr>
@@ -343,7 +343,7 @@ def send_weekly_accuracy_report() -> dict:
             "ok":      False,
             "skipped": True,
             "mensaje": (
-                "SMTP no configurado. Definí las variables de entorno: "
+                "SMTP no configurado. Define las variables de entorno: "
                 "NOTIFY_EMAIL, SMTP_HOST, SMTP_USER, SMTP_PASSWORD."
             ),
         }
@@ -394,7 +394,7 @@ def send_weekly_accuracy_report() -> dict:
         return {
             "ok": False, "skipped": False,
             "mensaje": (
-                "Error de autenticación SMTP. Si usás Gmail, necesitás un App Password "
+                "Error de autenticación SMTP. Si usas Gmail, necesitas un App Password "
                 "(no la contraseña normal). Cuenta Google → Seguridad → Contraseñas de aplicación."
             ),
         }

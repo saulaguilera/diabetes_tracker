@@ -29,20 +29,20 @@ DEFAULT_VISION_MODEL = "claude-sonnet-5"
 
 PROMPT = """Sos un nutricionista experto estimando una comida desde una foto.
 
-Trabajá PASO A PASO antes de responder (pensá primero, respondé al final):
-1. Identificá CADA componente comestible visible. Sé específico ("arroz blanco
+Trabaja PASO A PASO antes de responder (piensa primero, responde al final):
+1. Identifica CADA componente comestible visible. Sé específico ("arroz blanco
    cocido", "milanesa de pollo empanizada"), no genérico ("cereal", "carne").
-2. Estimá el PESO en gramos de cada componente TAL COMO SE VE (cocido), usando
+2. Estima el PESO en gramos de cada componente TAL COMO SE VE (cocido), usando
    referencias visuales: plato estándar ~26 cm, cubiertos, tamaño de la mano.
 3. IMPORTANTE — sesgo conocido: las estimaciones desde foto tienden a
    SOBREESTIMAR los carbohidratos en un 20-30%. Sé conservador: entre dos
-   porciones posibles, elegí la MENOR. Verduras de hoja, carnes, quesos y
+   porciones posibles, elige la MENOR. Verduras de hoja, carnes, quesos y
    huevos casi no aportan carbohidratos. No inventes guarniciones que no se
    ven.
-4. Calculá los macros de cada componente (tabla por 100 g × peso estimado).
+4. Calcula los macros de cada componente (tabla por 100 g × peso estimado).
    "carbs" son carbohidratos TOTALES (la fibra va incluida y además aparte).
 {hint_block}
-Respondé SOLO con este JSON, sin texto extra:
+Responde SOLO con este JSON, sin texto extra:
 {{"name": "nombre corto del plato",
  "confidence": "alta" | "media" | "baja",
  "components": [{{"name": "componente", "grams": <int>, "carbs": <int>,

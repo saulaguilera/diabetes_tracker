@@ -168,7 +168,7 @@ def api_daily_brief_refresh():
             if age_min < 10:
                 return jsonify({
                     "ok": False,
-                    "error": f"último brief generado hace {age_min:.0f}min — esperá "
+                    "error": f"último brief generado hace {age_min:.0f}min — espera "
                              "10min antes de refrescar de nuevo",
                     "next_available_in_min": round(10 - age_min, 1),
                 }), 429

@@ -243,7 +243,7 @@
           </ul>
           <div class="alert py-2 mt-2" style="background:rgba(99,102,241,.08); border:1px solid rgba(99,102,241,.2); border-radius:10px; font-size:.75rem; color:#6366f1;">
             <i class="bi bi-info-circle me-1"></i>
-            No reemplaza el criterio médico. Usá este análisis como insumo para tu consulta.
+            No reemplaza el criterio médico. Usa este análisis como insumo para tu consulta.
           </div>
           <button onclick="pedirAnalisis()" class="btn btn-primary mt-2 px-4 fw-600" style="border-radius:10px;">
             <i class="bi bi-stars me-2"></i>Generar análisis
@@ -1829,8 +1829,8 @@ a.insight-chip:hover {
       if (d.rate_limited) {
         dot.className = 'sync-dot sync-warn';
         const mins = Math.ceil(d.wait_seconds / 60);
-        if (status) status.textContent = `429 · esperá ${mins} min`;
-        btn.title = `Abbott rate-limit activo. Esperá ${mins} minuto(s) antes de intentar de nuevo.`;
+        if (status) status.textContent = `429 · espera ${mins} min`;
+        btn.title = `Abbott rate-limit activo. Espera ${mins} minuto(s) antes de intentar de nuevo.`;
         return;
       }
       if (d.error) {
@@ -1893,7 +1893,7 @@ a.insight-chip:hover {
         if (dot) dot.className = 'sync-dot sync-warn';
         if (status) {
           const mins = Math.ceil((d.wait_seconds || 300) / 60);
-          status.textContent = `429 · esperá ${mins} min`;
+          status.textContent = `429 · espera ${mins} min`;
         }
       }
     }).catch(() => {});
@@ -2060,7 +2060,7 @@ a.insight-chip:hover {
       if (d.ok) {
         renderDailyBrief(d);
       } else if (d.error && d.next_available_in_min) {
-        alert(`Esperá ${d.next_available_in_min} min antes de refrescar de nuevo.`);
+        alert(`Espera ${d.next_available_in_min} min antes de refrescar de nuevo.`);
       }
     } catch (e) {}
     btn.disabled = false;

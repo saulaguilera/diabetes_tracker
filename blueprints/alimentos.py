@@ -192,7 +192,7 @@ def api_estimar_macros():
     except Exception:
         pass
 
-    return jsonify({"error": f"No encontré datos para «{nombre}». Intentá con otro nombre."}), 404
+    return jsonify({"error": f"No encontré datos para «{nombre}». Intenta con otro nombre."}), 404
 
 
 @bp.route("/api/alimentos/<int:id>/usar", methods=["POST"], endpoint="api_alimento_usar")

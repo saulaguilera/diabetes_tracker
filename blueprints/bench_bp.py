@@ -104,7 +104,7 @@ def api_bench_hypo_post_mortem():
         - si había predicción activa
         - qué valor predijo (g_pred)
         - cuánto era la incertidumbre (sigma)
-        - si la regla `p_hypo >= 0.30` habría disparado alerta
+        - si la regla `p_hypo >= 0.30` habrea disparado alerta
         - error en mg/dL
 
     Sirve para diagnosticar por qué HYPO_RECALL = 0 sin tocar el SSM ni

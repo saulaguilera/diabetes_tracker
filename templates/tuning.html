@@ -29,7 +29,7 @@
   <div class="col-md-8">
     <div id="exp-detail" class="chart-box" style="min-height:200px;">
       <div class="text-muted text-center py-5">
-        Seleccioná un experimento ↖
+        Selecciona un experimento ↖
       </div>
     </div>
   </div>
@@ -46,7 +46,7 @@
       <i class="bi bi-arrow-clockwise"></i> Cargar
     </button>
   </div>
-  <div id="gates-content" class="text-muted">Pulsá "Cargar" para evaluar gates.</div>
+  <div id="gates-content" class="text-muted">Pulsa "Cargar" para evaluar gates.</div>
 </div>
 
 <!-- ── REGIME ANALYSIS ── -->
@@ -59,7 +59,7 @@
       <i class="bi bi-arrow-clockwise"></i> Cargar
     </button>
   </div>
-  <div id="regimes-content" class="text-muted">Pulsá "Cargar" para breakdown por régimen fisiológico.</div>
+  <div id="regimes-content" class="text-muted">Pulsa "Cargar" para breakdown por régimen fisiológico.</div>
 </div>
 
 <!-- ── LINEAGE ── -->
@@ -72,7 +72,7 @@
       <i class="bi bi-arrow-clockwise"></i> Cargar
     </button>
   </div>
-  <div id="lineage-content" class="text-muted">Pulsá "Cargar" para ver evolución de experiments.</div>
+  <div id="lineage-content" class="text-muted">Pulsa "Cargar" para ver evolución de experiments.</div>
 </div>
 
 <!-- ── Deep Diagnostics ── -->
@@ -85,7 +85,7 @@
       <i class="bi bi-arrow-clockwise"></i> Cargar
     </button>
   </div>
-  <div id="diag-content" class="text-muted">Pulsá "Cargar" para analizar innovations del SSM en vivo.</div>
+  <div id="diag-content" class="text-muted">Pulsa "Cargar" para analizar innovations del SSM en vivo.</div>
 </div>
 {% endblock %}
 
@@ -267,7 +267,7 @@ async function loadDiagnostics() {
   const a = d.analysis;
   if (!a.n || a.n < 10) {
     el.innerHTML = `<div class="text-muted">
-      Innovations insuficientes (${a.n || 0}) — esperá más data del SSM en vivo.</div>`;
+      Innovations insuficientes (${a.n || 0}) — espera más data del SSM en vivo.</div>`;
     return;
   }
 

@@ -11,7 +11,7 @@
       </span>
       Backup & Datos
     </h1>
-    <p class="list-page-sub">Exportá, importá y gestioná tu historial</p>
+    <p class="list-page-sub">Exporta, importa y gestiona tu historial</p>
   </div>
 </div>
 
@@ -54,7 +54,7 @@
 {% if active_tab == 'exportar' %}
 <div class="backup-panel">
   <p class="backup-panel-desc">
-    Descargá todos tus datos para hacer backup o analizar offline.
+    Descarga todos tus datos para hacer backup o analizar offline.
   </p>
   <div class="backup-download-cards">
 
@@ -83,7 +83,7 @@
         <div class="backup-dl-title">Backup JSON <span class="backup-badge backup-badge-green">Portátil</span></div>
         <div class="backup-dl-desc">
           Formato para migrar datos entre servidores de la app.
-          Exportá desde Railway → importá en otro servidor (o al revés).
+          Exporta desde Railway → importa en otro servidor (o al revés).
         </div>
       </div>
       <a href="{{ url_for('backup_exportar') }}" class="backup-dl-btn btn-success-dl">
@@ -99,7 +99,7 @@
 {% if active_tab == 'restaurar' %}
 <div class="backup-panel">
   <p class="backup-panel-desc">
-    Subí un archivo <code>.json</code> exportado desde esta app para restaurar tus datos.
+    Sube un archivo <code>.json</code> exportado desde esta app para restaurar tus datos.
     Los registros que ya existen no se duplican.
   </p>
   <form method="post" enctype="multipart/form-data" class="backup-upload-form">
@@ -107,7 +107,7 @@
     <div class="backup-dropzone" id="dropzone-json"
          onclick="document.getElementById('file-json').click()">
       <i class="bi bi-filetype-json" style="font-size:2rem; color:#22c55e;"></i>
-      <div class="bdu-title">Elegí un archivo .json</div>
+      <div class="bdu-title">Elige un archivo .json</div>
       <div class="bdu-sub" id="json-filename">o arrastralo aquí</div>
     </div>
     <input type="file" name="archivo" id="file-json" accept=".json"
@@ -125,7 +125,7 @@
 {% if active_tab == 'libre' %}
 <div class="backup-panel">
   <p class="backup-panel-desc">
-    Importá lecturas del sensor Freestyle Libre desde el CSV de LibreView.
+    Importa lecturas del sensor Freestyle Libre desde el CSV de LibreView.
     Con la <strong>sync automática activa</strong>, esto ya no es necesario — pero sirve para datos históricos.
   </p>
 
@@ -136,7 +136,7 @@
         <div class="backup-dropzone" id="dropzone-csv"
              onclick="document.getElementById('file-csv').click()">
           <i class="bi bi-file-earmark-csv" style="font-size:2rem; color:#3b82f6;"></i>
-          <div class="bdu-title">Elegí un archivo .csv</div>
+          <div class="bdu-title">Elige un archivo .csv</div>
           <div class="bdu-sub" id="csv-filename">exportado desde LibreView</div>
         </div>
         <input type="file" name="archivo" id="file-csv" accept=".csv"
@@ -150,11 +150,11 @@
       <div class="backup-steps mt-3">
         <div class="backup-steps-title">¿Cómo exportar desde FreeStyle LibreLink?</div>
         <ol>
-          <li>Abrí la app <strong>FreeStyle LibreLink</strong></li>
+          <li>Abre la app <strong>FreeStyle LibreLink</strong></li>
           <li>Menú → Mi cuenta → Conexiones</li>
-          <li>Conectá con <strong>LibreView</strong> (libreview.com)</li>
+          <li>Conecta con <strong>LibreView</strong> (libreview.com)</li>
           <li>En LibreView: Reportes → Exportar datos</li>
-          <li>Descargá el <code>.csv</code> y cargalo aquí</li>
+          <li>Descarga el <code>.csv</code> y cargalo aquí</li>
         </ol>
       </div>
     </div>

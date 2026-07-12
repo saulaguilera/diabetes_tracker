@@ -1106,7 +1106,7 @@ def estimate_dia_from_data(days: int = 90, peak_min: int = _DEFAULT_PEAK_MIN) ->
 
     if not estimates:
         tip = (
-            "Etiquetá tus próximas correcciones como 'Corrección' en el formulario "
+            "Etiqueta tus próximas correcciones como 'Corrección' en el formulario "
             "de insulina para mejorar la estimación."
         ) if labeled_count == 0 else ""
         return {

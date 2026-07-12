@@ -115,9 +115,9 @@ def _detectar_somogyi(lecturas, days) -> Optional[dict]:
             f"a la hipo, lo que dispara la glucosa en la madrugada/mañana."
         ),
         "sugerencia": (
-            "Medí tu glucosa entre 02:00 y 03:00 durante 3–5 noches consecutivas. "
-            "Si confirmás hipoglucemia nocturna, la insulina basal puede ser "
-            "demasiado alta. Ajustá con tu médico antes de cambiar la dosis."
+            "Mide tu glucosa entre 02:00 y 03:00 durante 3–5 noches consecutivas. "
+            "Si confirmas hipoglucemia nocturna, la insulina basal puede ser "
+            "demasiado alta. Ajusta con tu médico antes de cambiar la dosis."
         ),
         "episodios": episodios[-5:],  # últimos 5 para no saturar JSON
     }
@@ -197,7 +197,7 @@ def _detectar_fenomeno_alba(lecturas, days) -> Optional[dict]:
             f"de crecimiento al amanecer contrarresta la insulina basal."
         ),
         "sugerencia": (
-            "Hablá con tu médico para considerar ajustar la hora o la dosis de "
+            "Habla con tu médico para considerar ajustar la hora o la dosis de "
             "insulina basal (Tresiba, Lantus, Levemir). Algunos pacientes también "
             "benefician de un micro-bolo de corrección al despertar."
         ),
@@ -251,9 +251,9 @@ def _detectar_hipo_post_ejercicio(lecturas, days) -> Optional[dict]:
             f"hasta 24–48h post-sesión."
         ),
         "sugerencia": (
-            f"Considerá reducir el bolo de la comida previa al ejercicio en "
+            f"Considera reducir el bolo de la comida previa al ejercicio en "
             f"un 20–30%, o consumir 15–20g de carbohidratos sin insulina antes "
-            f"de entrenar. Monitoreá la glucosa antes, durante y 2h después."
+            f"de entrenar. Monitorea la glucosa antes, durante y 2h después."
         ),
         "episodios": episodios[-5:],
     }
@@ -310,9 +310,9 @@ def _detectar_rebote_grasa_proteina(lecturas, meals_periodo) -> Optional[dict]:
             f"eleva la glucosa horas después de que el bolo original ya bajó."
         ),
         "sugerencia": (
-            "Consultá con tu médico la estrategia de bolo dual o extendido "
+            "Consulta con tu médico la estrategia de bolo dual o extendido "
             "para este tipo de comidas: por ejemplo 60% del bolo al empezar "
-            "y 40% extendido 2–3 horas. Alternativamente podés usar un "
+            "y 40% extendido 2–3 horas. Alternativamente puedes usar un "
             "bolo de corrección a las 2h si tu glucosa sigue en rango."
         ),
         "episodios": episodios[-5:],
@@ -349,7 +349,7 @@ def _detectar_variabilidad_alta(lecturas) -> Optional[dict]:
             f"hiperglucemia aunque el promedio parezca aceptable."
         ),
         "sugerencia": (
-            "Revisá la consistencia de horarios de comidas, dosis e "
+            "Revisa la consistencia de horarios de comidas, dosis e "
             "intervalos de inyección. La variabilidad suele mejorar "
             "estandarizando rutinas y ajustando el timing del bolo."
         ),
@@ -413,9 +413,9 @@ def _detectar_hipers_pre_comida(lecturas, meals_periodo) -> Optional[dict]:
             f"postprandial y dificulta el control."
         ),
         "sugerencia": (
-            "Cuando tu glucosa esté > 200 mg/dL antes de comer, considerá "
+            "Cuando tu glucosa esté > 200 mg/dL antes de comer, considera "
             "aplicar un bolo de corrección 15–20 min antes de comenzar. "
-            "Usá la calculadora para estimar la corrección más tu bolo de comida."
+            "Usa la calculadora para estimar la corrección más tu bolo de comida."
         ),
         "episodios": episodios[-5:],
     }
@@ -481,7 +481,7 @@ def _detectar_franja_hipos(lecturas) -> Optional[dict]:
             f"empezaron entre las {ventana}. {mecanismo}"
         ),
         "sugerencia": (
-            "Llevale este dato a tu equipo médico: la concentración horaria es "
+            "Llévale este dato a tu equipo médico: la concentración horaria es "
             "la pista clave para revisar qué la está causando (basal, cena, "
             "ejercicio del día)."
         ),
@@ -547,7 +547,7 @@ def _detectar_hipo_tardia_comida_rica(lecturas, meals_periodo) -> Optional[dict]
             f"la baja llega horas después, muchas veces ya durmiendo."
         ),
         "sugerencia": (
-            "Contale este patrón a tu equipo médico: cómo cubrir comidas altas "
+            "Cuéntale este patrón a tu equipo médico: cómo cubrir comidas altas "
             "en proteína y bajas en carbohidrato es un ajuste clásico (y muy "
             "personal) de la terapia."
         ),
@@ -608,7 +608,7 @@ def _detectar_impacto_contexto(lecturas) -> Optional[dict]:
             f"{mecanismo}"
         ),
         "sugerencia": (
-            "Seguí etiquetando esos días: cuantos más datos, más clara la señal. "
+            "Sigue etiquetando esos días: cuantos más datos, más clara la señal. "
             "Es información valiosa para conversar el manejo de esos días con tu equipo."
         ),
     }
@@ -655,7 +655,7 @@ def _detectar_dia_semana(lecturas) -> Optional[dict]:
             f"este tipo de patrón semanal."
         ),
         "sugerencia": (
-            "Pensá qué hacés distinto ese día (horarios, comidas, movimiento) — "
+            "Piensa qué haces distinto ese día (horarios, comidas, movimiento) — "
             "identificarlo es el primer paso para decidir, con tu equipo, si vale "
             "la pena ajustar algo."
         ),

@@ -231,23 +231,23 @@ def api_calculadora_correccion():
         safety_factor     = 0.0   # nada de insulina
         safety_message    = (
             f"⚠️ HIPOGLUCEMIA ACTIVA ({glucemia:.0f} mg/dL). "
-            f"NO inyectes insulina. Tomá 15g de carbohidratos rápidos "
-            f"(jugo, glucosa) y re-checá en 15 min antes de calcular cualquier bolo."
+            f"NO inyectes insulina. Toma 15g de carbohidratos rápidos "
+            f"(jugo, glucosa) y re-checa en 15 min antes de calcular cualquier bolo."
         )
     elif glucemia < SAFETY_HYPO_SOFT:
         low_glucose_alert = "near_hypo"
         safety_factor     = 0.5   # bolo comida reducido a la mitad
         safety_message    = (
-            f"⚠️ Glucemia baja ({glucemia:.0f} mg/dL). Comé los carbohidratos "
-            f"PRIMERO y esperá a que la glucosa suba a 100+ antes de inyectar. "
-            f"Si insistís, el bolo se reduce automáticamente al 50%."
+            f"⚠️ Glucemia baja ({glucemia:.0f} mg/dL). Come los carbohidratos "
+            f"PRIMERO y espera a que la glucosa suba a 100+ antes de inyectar. "
+            f"Si insistes, el bolo se reduce automáticamente al 50%."
         )
     elif glucemia < SAFETY_CAUTION:
         low_glucose_alert = "caution"
         safety_factor     = 1.0   # bolo normal pero alertar
         safety_message    = (
             f"Glucemia en zona de precaución ({glucemia:.0f} mg/dL). "
-            f"Considerá comer los carbohidratos primero o reducir levemente el bolo."
+            f"Considera comer los carbohidratos primero o reducir levemente el bolo."
         )
 
     # ── Componente de comida ──────────────────────────────────────────────────
@@ -273,7 +273,7 @@ def api_calculadora_correccion():
     # IOB de bolus (insulina rápida activa) — la basal cubre producción hepática
     # y no se resta del bolo.
     # COB = carbohidratos aún absorbiéndose (de comidas anteriores). Importante
-    # para evitar doble-conteo del IOB: si tenés 2U IOB pero también COB
+    # para evitar doble-conteo del IOB: si tienes 2U IOB pero también COB
     # pendiente que va a necesitar ~3U, el IOB "libre" para descontar es 0.
     iob_actual    = 0.0
     cob_actual    = 0.0
@@ -339,7 +339,7 @@ def api_calculadora_correccion():
     #   - el efecto de los carbos que aún están absorbiéndose (COB)
     #   - cualquier hiperglucemia residual del estado actual
     #
-    # Si descontás el IOB total del bolo de comida NUEVA, estás asumiendo que
+    # Si descuentas el IOB total del bolo de comida NUEVA, estás asumiendo que
     # ese IOB va a cubrir los carbos nuevos — pero esos carbos aún no se han
     # absorbido y el IOB ya estará casi extinto cuando lo hagan. Resultado:
     # sub-dosificación de la comida nueva.

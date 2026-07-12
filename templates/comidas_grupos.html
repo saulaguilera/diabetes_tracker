@@ -59,7 +59,7 @@
 {% if n_sin_cat > 0 %}
 <div class="grp-alert mb-3">
   <i class="bi bi-tags text-warning flex-shrink-0"></i>
-  Tenés <strong>{{ n_sin_cat }}</strong> comidas sin categoría.
+  Tienes <strong>{{ n_sin_cat }}</strong> comidas sin categoría.
   <a href="{{ url_for('comidas') }}" style="color:#d97706;">Ir a la lista</a>
   para asignarlas.
 </div>
@@ -229,7 +229,7 @@
   <i class="bi bi-list-check list-empty-icon"></i>
   <p class="list-empty-text">
     No hay ingredientes registrados aún.<br>
-    Al registrar comidas usá el campo de ingredientes para desglosar cada alimento.
+    Al registrar comidas usa el campo de ingredientes para desglosar cada alimento.
   </p>
   <a href="{{ url_for('comida_nueva') }}" class="btn-list-add btn-add-success mt-2">
     <i class="bi bi-plus-lg"></i> Nueva comida con ingredientes

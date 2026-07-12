@@ -67,7 +67,7 @@ def login(email: str, password: str) -> tuple[str, str, str]:
         if data.get("status") != 0:
             raise LibreLinkUpError(
                 f"Login fallido (status {data.get('status')}). "
-                "Verificá tu email y contraseña de LibreView."
+                "Verifica tu email y contraseña de LibreView."
             )
 
         # authTicket puede venir con distintas capitalizaciones según la región
@@ -82,7 +82,7 @@ def login(email: str, password: str) -> tuple[str, str, str]:
             if inner.get("redirect"):
                 raise LibreLinkUpError(
                     "Abbott requiere que aceptes los Términos de Servicio. "
-                    "Abrí la app LibreLink en tu celular, iniciá sesión y aceptá los términos."
+                    "Abre la app LibreLink en tu celular, inicia sesión y acepta los términos."
                 )
             raise LibreLinkUpError(
                 f"No se pudo obtener el token. Respuesta: {list(inner.keys())}"
@@ -267,7 +267,7 @@ def sync_all(email: str, password: str, get_setting_fn=None, set_setting_fn=None
                 set_setting_fn("libre_token", "")
             return {"readings": [], "error": "No hay sensores vinculados en LibreLinkUp."}
 
-        # Usar el primer paciente (en uso personal, sos vos mismo)
+        # Usar el primer paciente (en uso personal, sos tú mismo)
         patient = connections[0]
         patient_id = patient.get("patientId") or patient.get("id")
 
@@ -286,13 +286,13 @@ def sync_all(email: str, password: str, get_setting_fn=None, set_setting_fn=None
             if set_setting_fn:
                 from datetime import datetime as _dt
                 set_setting_fn("libre_rate_limited_at", _dt.now().isoformat())
-            return {"readings": [], "error": "429: Abbott limitó las requests. Esperá 5 minutos antes de sincronizar de nuevo."}
+            return {"readings": [], "error": "429: Abbott limitó las requests. Espera 5 minutos antes de sincronizar de nuevo."}
         # 401/403 con token cacheado → limpiar y reintentar sin caché
         if ("401" in err or "403" in err or "430" in err) and get_setting_fn:
             cached = get_setting_fn("libre_token")
             if cached and set_setting_fn:
                 set_setting_fn("libre_token", "")
-                return {"readings": [], "error": "Token expirado, limpiado. Intentá de nuevo en 1 minuto."}
+                return {"readings": [], "error": "Token expirado, limpiado. Intenta de nuevo en 1 minuto."}
         return {"readings": [], "error": f"Error de red: {e}"}
     except Exception as e:
         return {"readings": [], "error": f"Error inesperado: {e}"}

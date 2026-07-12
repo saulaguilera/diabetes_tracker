@@ -343,7 +343,7 @@ def _construir_prompt(datos: dict, days: int) -> tuple[str, str]:
 
     system = (
         "Sos un asistente especializado en análisis de datos de diabetes tipo 1. "
-        "Tenés acceso a la serie glucémica completa, comidas con macros, dosis de insulina, "
+        "Tienes acceso a la serie glucémica completa, comidas con macros, dosis de insulina, "
         "ejercicio y parámetros personales del usuario. "
         "Tu objetivo es encontrar conexiones entre todas estas variables y explicarlas "
         "en lenguaje claro y empático.\n\n"
@@ -357,18 +357,18 @@ def _construir_prompt(datos: dict, days: int) -> tuple[str, str]:
         "es OTRA: IOB residual de bolos anteriores, sensibilidad post-ejercicio, basal con "
         "efecto, o absorción lenta de la comida. Nunca atribuyas el efecto a un bolo "
         "que no figura en los datos.\n"
-        "- Distinguí siempre RÁPIDA (bolus, acción 15min-4h) de BASAL (acción prolongada, "
+        "- Distingue siempre RÁPIDA (bolus, acción 15min-4h) de BASAL (acción prolongada, "
         "12-42h sin pico) por el tag explícito en cada registro. NUNCA llames a una basal "
         "'bolo' ni viceversa.\n"
-        "- Si encontrás un patrón sin causa obvia en los datos, decí 'no es explicable solo "
+        "- Si encuentras un patrón sin causa obvia en los datos, di 'no es explicable solo "
         "con los datos disponibles' en lugar de inventar una causa.\n\n"
         "Reglas generales:\n"
-        "- Respondé siempre en español, segunda persona (vos/te).\n"
-        "- Cruzá activamente los datos: relacioná picos de glucosa con comidas, "
+        "- Responde siempre en español, segunda persona (vos/te).\n"
+        "- Cruza activamente los datos: relaciona picos de glucosa con comidas, "
         "hipos con ejercicio o insulina, subidas nocturnas con la basal, etc.\n"
         "- Basate SOLO en los datos provistos. No inventes información.\n"
-        "- Nunca indiques dosis concretas a cambiar; sugerí consultar al médico.\n"
-        "- Usá markdown: ## encabezados, **negritas**, listas con -.\n"
+        "- Nunca indiques dosis concretas a cambiar; sugiere consultar al médico.\n"
+        "- Usa markdown: ## encabezados, **negritas**, listas con -.\n"
         "- Máximo 500 palabras. Sé preciso y accionable.\n\n"
         "Reglas clínicas CRÍTICAS — nunca las violes:\n"
         "- HIPOGLUCEMIA se define como glucosa < 70 mg/dL. Valores entre 70–100 mg/dL son "
@@ -386,11 +386,11 @@ def _construir_prompt(datos: dict, days: int) -> tuple[str, str]:
         "- BASAL vs BOLUS: son cosas distintas. 'Basal' es la insulina de acción prolongada "
         "(Toujeo, Tresiba, Lantus). 'Bolus' es la insulina rápida para comidas o corrección. "
         "No uses 'bolus temporal' para referirte a ajustar la basal. Sé preciso con los términos.\n"
-        "- IOB (insulina activa): si mencionás un valor de IOB, explicá brevemente de dónde "
+        "- IOB (insulina activa): si mencionas un valor de IOB, explica brevemente de dónde "
         "surge. No pongas números sin contexto.\n"
         "- Si la glucosa está cayendo (tendencia negativa), nunca sugieras insulina.\n"
         "- HIPOGLUCEMIA: glucosa < 70 mg/dL ES hipoglucemia. No uses términos como 'rozó', "
-        "'casi', 'bordeó' para valores < 70. Si es < 70, decí directamente 'hipoglucemia'.\n"
+        "'casi', 'bordeó' para valores < 70. Si es < 70, di directamente 'hipoglucemia'.\n"
         "- CAUSALIDAD en hipos post-comida: si el usuario tuvo hipo después de una comida "
         "con ejercicio previo, la causa es EXCESO de insulina activa (IOB + sensibilidad "
         "post-ejercicio aumentada), NUNCA 'bolo insuficiente'. Nunca sugieras que faltó "
@@ -403,7 +403,7 @@ def _construir_prompt(datos: dict, days: int) -> tuple[str, str]:
         "y remitila a consulta médica."
     )
 
-    user = f"""Analizá mis datos de las últimas {days*24}h y decime qué encontrás.
+    user = f"""Analiza mis datos de las últimas {days*24}h y dime qué encuentras.
 
 ## Métricas globales (últimos 30 días)
 {_seccion_metricas(resumen, 30)}
@@ -441,7 +441,7 @@ def _construir_prompt(datos: dict, days: int) -> tuple[str, str]:
 
 Por favor, estructurá tu respuesta así:
 1. **Panorama general** — qué está pasando con mi glucosa ahora mismo.
-2. **Conexiones clave** — cruzá la serie con comidas, insulina y ejercicio: ¿qué causa los picos o caídas que ves?
+2. **Conexiones clave** — cruza la serie con comidas, insulina y ejercicio: ¿qué causa los picos o caídas que ves?
 3. **Interpretación de predicciones** — ¿el modelo está prediciendo bien? ¿qué dice sobre lo que viene? ¿hay algo para estar atento?
 4. **Patrones importantes** — de los detectados, ¿cuáles son los que más me afectan?
 5. **3 sugerencias concretas** para llevar a mi próxima consulta médica.
@@ -500,9 +500,9 @@ def generar_analisis(days: int = 2) -> dict:
         }
 
     except anthropic.AuthenticationError:
-        return _error("API key inválida. Verificá ANTHROPIC_API_KEY.")
+        return _error("API key inválida. Verifica ANTHROPIC_API_KEY.")
     except anthropic.RateLimitError:
-        return _error("Límite de rate alcanzado. Intentá en unos minutos.")
+        return _error("Límite de rate alcanzado. Intenta en unos minutos.")
     except Exception as e:
         return _error(str(e))
 

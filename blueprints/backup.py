@@ -109,7 +109,7 @@ def backup_importar():
     if request.method == "POST":
         archivo = request.files.get("archivo")
         if not archivo or not archivo.filename.endswith(".json"):
-            flash("Seleccioná un archivo .json de backup válido.", "danger")
+            flash("Selecciona un archivo .json de backup válido.", "danger")
             return redirect(request.url)
 
         try:

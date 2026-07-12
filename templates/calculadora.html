@@ -115,7 +115,7 @@
                    value="{{ isf_manual_guardado or '' }}">
             <span class="input-group-text text-muted" style="font-size:.75rem;">mg/dL·U</span>
           </div>
-          <div class="form-text" style="font-size:.7rem;">Solo completá si querés forzar un valor fijo.</div>
+          <div class="form-text" style="font-size:.7rem;">Solo completa si quieres forzar un valor fijo.</div>
         </div>
 
         <!-- I:CH -->
@@ -144,7 +144,7 @@
           </div>
           {% else %}
           <div class="text-muted mb-1" style="font-size:.78rem;">
-            <i class="bi bi-info-circle me-1"></i>Ingresá el que te dio tu médico
+            <i class="bi bi-info-circle me-1"></i>Ingresa el que te dio tu médico
           </div>
           {% endif %}
           <div class="input-group">
@@ -207,7 +207,7 @@
           <div class="alert alert-warning py-2 px-3 mb-2" style="font-size:.82rem;">
             <i class="bi bi-exclamation-triangle me-1"></i>
             No hay inyecciones basales registradas.
-            Registrá tu basal en
+            Registra tu basal en
             <a href="{{ url_for('insulina') }}">Insulina</a>
             y el IOB se calculará automáticamente.
           </div>
@@ -225,7 +225,7 @@
             <option value="nph"       {% if basal_tipo_guard == 'nph'       %}selected{% endif %}>NPH (Insulina N) — 12h</option>
           </select>
           <div class="text-muted mt-1" style="font-size:.72rem;">
-            Solo necesitás elegir el tipo — dosis y hora se leen de tus registros.
+            Solo necesitas elegir el tipo — dosis y hora se leen de tus registros.
           </div>
         </div>
 
@@ -323,7 +323,7 @@
       {% else %}
       <div class="text-muted mt-2" style="font-size:.78rem;">
         <i class="bi bi-info-circle me-1"></i>
-        Sin correcciones suficientes aún. Registrá correcciones etiquetadas como
+        Sin correcciones suficientes aún. Registra correcciones etiquetadas como
         <strong>"Corrección"</strong> para activar el ISF circadiano.
       </div>
       {% endif %}
@@ -399,7 +399,7 @@
 
       <div class="mb-3">
         <div class="form-text">
-          Grasa y proteína elevan la glucosa 3–5h después. Si las ingresás,
+          Grasa y proteína elevan la glucosa 3–5h después. Si las ingresas,
           la calculadora sugerirá un <strong>bolo diferido</strong>.
         </div>
       </div>
@@ -418,7 +418,7 @@
 
       <div id="resultado-vacio" class="text-center text-muted py-5">
         <i class="bi bi-arrow-left-circle fs-1 d-block mb-2 opacity-25"></i>
-        Ingresá tu glucemia y presioná Calcular
+        Ingresa tu glucemia y presiona Calcular
       </div>
 
       <div id="resultado-contenido" style="display:none;"></div>
@@ -441,7 +441,7 @@
       <i class="bi bi-shield-exclamation text-warning me-1"></i>
       <strong>Solo orientativo.</strong> El resultado considera IOB activo y ejercicio
       de las últimas 24h, pero no captura toda la variabilidad individual.
-      Consultá con tu médico antes de cambiar dosis.
+      Consulta con tu médico antes de cambiar dosis.
     </div>
   </div>
 
@@ -851,7 +851,7 @@
       const d   = await res.json();
       mostrarResultado(d);
     } catch(e) {
-      mostrarError('Error de conexión. Intentá de nuevo.');
+      mostrarError('Error de conexión. Intenta de nuevo.');
     } finally {
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-calculator me-2"></i>Calcular bolo total';
@@ -880,8 +880,8 @@
             objetivo: ${d.objetivo} mg/dL
           </div>
           <div class="safety-banner-action">
-            <strong>Acción:</strong> Tomá 15g de carbohidratos rápidos (jugo, glucosa en gel, miel).
-            Esperá 15 minutos y re-checá tu glucemia. Solo entonces volvé a calcular un bolo.
+            <strong>Acción:</strong> Toma 15g de carbohidratos rápidos (jugo, glucosa en gel, miel).
+            Espera 15 minutos y re-checa tu glucemia. Solo entonces vuelve a calcular un bolo.
           </div>
         </div>`;
       return;   // bolo NO se muestra
@@ -925,10 +925,10 @@
       // Sugerencia
       const suggestion = narr ? narr.suggestion
         : (hr.severity === 'critical'
-          ? 'Considerá reducir el bolo, agregar una colación o hablar con tu médico.'
+          ? 'Considera reducir el bolo, agregar una colación o hablar con tu médico.'
           : hr.severity === 'high'
-          ? 'Considerá tomar una colación pequeña (10–15g CH) o reducir el bolo.'
-          : 'Tené una colación disponible y activá la alarma del CGM en 70 mg/dL.');
+          ? 'Considera tomar una colación pequeña (10–15g CH) o reducir el bolo.'
+          : 'Ten una colación disponible y activa la alarma del CGM en 70 mg/dL.');
 
       // Nota de confianza
       const confNote = narr ? narr.confidence_note
@@ -966,7 +966,7 @@
     if (d.low_glucose_alert === 'near_hypo' || d.low_glucose_alert === 'caution') {
       const cls = d.low_glucose_alert === 'near_hypo' ? 'safety-near-hypo' : 'safety-caution';
       const title = d.low_glucose_alert === 'near_hypo'
-        ? '⚠ Glucemia baja — comé primero, inyectá después'
+        ? '⚠ Glucemia baja — come primero, inyecta después'
         : '⚠ Zona de precaución';
       const factorNote = d.safety_factor < 1
         ? `<div class="text-muted mt-1" style="font-size:.78rem;">
@@ -1179,7 +1179,7 @@
         </div>
         <div class="split-bolus-detail">
           ~${d.fp_glucose_equiv}g glucosa equivalente (grasa×10% + proteína×50%)
-          se liberan lentamente. Sin este bolo diferido, podés tener hiperglucemia
+          se liberan lentamente. Sin este bolo diferido, puedes tener hiperglucemia
           a partir de las ${new Date(Date.now() + 2.5*60*60*1000).toLocaleTimeString('es', {hour:'2-digit',minute:'2-digit'})}h.
         </div>
       </div>` : ''}
@@ -1220,7 +1220,7 @@
             titulo: `Bajando rápido ${d.roc_arrow} ${d.roc_mgdl_min > 0 ? '+' : ''}${d.roc_mgdl_min?.toFixed(1)} mg/dL/min`,
             msg: `La corrección fue calculada sobre la glucemia proyectada a 30 min
                   (<strong>${Math.round(d.glucemia_proyectada)} mg/dL</strong>).
-                  Considerá esperar o dar solo el bolo de comida.`,
+                  Considera esperar o dar solo el bolo de comida.`,
           },
           bajando: {
             bg: 'rgba(245,158,11,.08)', border: 'rgba(245,158,11,.3)', color: '#d97706',
@@ -1659,7 +1659,7 @@
               <span class="badge bg-${col} mb-1">Confianza ${d.confidence}</span>
               <div style="font-size:.82rem; color:var(--text-muted);">${d.sample_size} evento(s) de corrección analizados</div>
               <div style="font-size:.78rem; color:var(--text-muted); margin-top:.25rem;">
-                Guardá este valor en UserSettings (dia_min) para mejorar el cálculo de IOB.
+                Guarda este valor en UserSettings (dia_min) para mejorar el cálculo de IOB.
               </div>
             </div>
           </div>`;

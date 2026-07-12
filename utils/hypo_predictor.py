@@ -26,9 +26,9 @@ empíricamente (devuelve p_hipo directamente).
 
 Niveles de alarma
 -----------------
-  critical (p_hipo > 0.5  AND horizon ≤ 30 min)  → "Tomá 15-20g AHORA"
-  alert    (p_hipo > 0.3)                         → "Considerá 10-15g preventivos"
-  watch    (p_hipo > 0.15)                        → "Monitoreá los próximos minutos"
+  critical (p_hipo > 0.5  AND horizon ≤ 30 min)  → "Toma 15-20g AHORA"
+  alert    (p_hipo > 0.3)                         → "Considera 10-15g preventivos"
+  watch    (p_hipo > 0.15)                        → "Monitorea los próximos minutos"
   normal   (p_hipo < 0.15)                        → sin acción
 
 Referencias
@@ -316,24 +316,24 @@ def compute_hypo_risk(force: bool = False) -> dict:
         #   - Sino, el risk_score combinado
         if hard_gate == "critical":
             level = "critical"
-            action = ("Tomá 15–20g de carbohidratos rápidos AHORA "
-                      "(jugo, glucosa en gel, miel). Re-checá en 15 min.")
+            action = ("Toma 15–20g de carbohidratos rápidos AHORA "
+                      "(jugo, glucosa en gel, miel). Re-checa en 15 min.")
         elif hard_gate == "alert":
             level = "alert"
             action = ("Tu glucosa o tendencia disparan alerta directa. "
-                      "Tomá 10–15g de carbohidratos preventivos.")
+                      "Toma 10–15g de carbohidratos preventivos.")
         elif risk_score >= _THRESH_CRITICAL and h_w <= 30:
             level   = "critical"
-            action  = ("Tomá 15–20g de carbohidratos rápidos AHORA. "
-                       "Re-checá tu glucemia en 15 min.")
+            action  = ("Toma 15–20g de carbohidratos rápidos AHORA. "
+                       "Re-checa tu glucemia en 15 min.")
         elif risk_score >= _THRESH_ALERT:
             level   = "alert"
-            action  = ("Considerá tomar 10–15g de carbohidratos preventivos. "
+            action  = ("Considera tomar 10–15g de carbohidratos preventivos. "
                        "Si vas a manejar o hacer ejercicio, hacelo ya.")
         elif risk_score >= _THRESH_WATCH:
             level   = "watch"
-            action  = ("Monitoreá tu glucosa en los próximos 15–20 min. "
-                       "Evitá nuevas dosis de insulina sin re-evaluar.")
+            action  = ("Monitorea tu glucosa en los próximos 15–20 min. "
+                       "Evita nuevas dosis de insulina sin re-evaluar.")
         else:
             level   = "normal"
             action  = ""

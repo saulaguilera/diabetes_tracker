@@ -173,13 +173,13 @@ def explicar_prediccion(
 
     if g_pred < _HIPO_UMBRAL:
         if roc is not None and roc < _ROC_RAPIDO_SUB:
-            alerta = f"⚠️ Hipoglucemia inminente — caída rápida ({roc:.1f} mg/dL/min) y glucosa proyectada {round(g_pred)} mg/dL. Considerá tomar carbohidratos ahora."
+            alerta = f"⚠️ Hipoglucemia inminente — caída rápida ({roc:.1f} mg/dL/min) y glucosa proyectada {round(g_pred)} mg/dL. Considera tomar carbohidratos ahora."
         else:
-            alerta = f"⚠️ Glucosa proyectada por debajo de rango ({round(g_pred)} mg/dL). Revisá en {delta_min} minutos."
+            alerta = f"⚠️ Glucosa proyectada por debajo de rango ({round(g_pred)} mg/dL). Revisa en {delta_min} minutos."
     elif g_pred < 80 and roc is not None and roc < -1.0:
-        alerta = f"⚠️ Tendencia a la baja con glucosa cercana al límite — monitoreá de cerca."
+        alerta = f"⚠️ Tendencia a la baja con glucosa cercana al límite — monitorea de cerca."
     elif g_pred > _HIPER_UMBRAL and cob > 10 and iob < 0.5:
-        alerta = f"⚠️ {round(cob)}g de carbohidratos activos con poco IOB — considerá corrección."
+        alerta = f"⚠️ {round(cob)}g de carbohidratos activos con poco IOB — considera corrección."
     elif roc is not None and roc < _ROC_RAPIDO_SUB and iob > 2:
         alerta = f"⚠️ Caída rápida con {iob:.1f} U de insulina activa — riesgo de hipoglucemia."
 

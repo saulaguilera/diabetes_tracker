@@ -16,7 +16,7 @@ Proveedores:
                  Trae glucosa Y tratamientos (bolos de bombas: Loop/AndroidAPS/Omnipod DIY).
 
 HealthKit (Dexcom comercial, Omnipod 5, Tandem) es la fase NATIVA: el teléfono
-lee Salud y postea al backend — no vive acá.
+lee Salud y postea al backend — no vive aquí.
 """
 from __future__ import annotations
 

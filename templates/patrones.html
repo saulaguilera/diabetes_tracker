@@ -28,7 +28,7 @@
   <i class="bi bi-graph-up-arrow" style="color:#6366f1;font-size:2.5rem;"></i>
   <div class="list-empty-title">Sin datos suficientes</div>
   <p style="color:var(--text-muted);font-size:.9rem;max-width:400px;text-align:center;">
-    Para ver patrones necesitás comidas con ingredientes registrados, una dosis de bolus cercana
+    Para ver patrones necesitas comidas con ingredientes registrados, una dosis de bolus cercana
     y lecturas de glucosa antes y después de comer.
   </p>
 </div>
@@ -106,12 +106,12 @@
         ({{ ratio_resumen.mejor_pct }}% en rango).
       {% elif ratio_resumen.pct_hiper > ratio_resumen.pct_hipo %}
         Estás terminando <strong>en hiper el {{ ratio_resumen.pct_hiper }}%</strong> de las veces.
-        Tu ratio puede ser muy permisivo — considerá ajustarlo a <strong>1:{{ ratio_resumen.mejor_ratio }}g</strong>
-        ({{ ratio_resumen.mejor_pct }}% en rango histórico). Consultá con tu médico.
+        Tu ratio puede ser muy permisivo — considera ajustarlo a <strong>1:{{ ratio_resumen.mejor_ratio }}g</strong>
+        ({{ ratio_resumen.mejor_pct }}% en rango histórico). Consulta con tu médico.
       {% else %}
         Estás terminando <strong>en hipo el {{ ratio_resumen.pct_hipo }}%</strong> de las veces.
         Tu ratio puede ser muy agresivo — el histórico sugiere <strong>1:{{ ratio_resumen.mejor_ratio }}g</strong>
-        ({{ ratio_resumen.mejor_pct }}% en rango). Consultá con tu médico antes de ajustar.
+        ({{ ratio_resumen.mejor_pct }}% en rango). Consulta con tu médico antes de ajustar.
       {% endif %}
     </div>
   </div>
@@ -202,7 +202,7 @@
       <strong>{{ n_alto }} comida{{ 's' if n_alto > 1 else '' }}</strong> con >35g grasa
       o >50g proteína detectada{{ 's' if n_alto > 1 else '' }}.
       Según Wolpert et al. (2013), la grasa retrasa la absorción 3–5h
-      (<em>"efecto pizza"</em>). Considerá bolo extendido en estas comidas.
+      (<em>"efecto pizza"</em>). Considera bolo extendido en estas comidas.
     </div>
   </div>
   {% endif %}
@@ -400,7 +400,7 @@
       menor en <strong>{{ min_bloque.label }}</strong>
       (+{{ min_bloque.avg_delta | int }} mg/dL).
       {% if max_bloque.avg_delta - min_bloque.avg_delta > 20 %}
-        La diferencia es relevante: considerá ajustar el ratio según la hora del día.
+        La diferencia es relevante: considera ajustar el ratio según la hora del día.
       {% else %}
         La sensibilidad es bastante uniforme durante el día.
       {% endif %}
@@ -429,7 +429,7 @@
     <div class="text-muted" style="font-size:.85rem;">
       <i class="bi bi-info-circle me-1"></i>
       El modelo registra cada predicción y la compara contra el valor real cuando llega.
-      Presioná "Actualizar" para ver las métricas acumuladas.
+      Presiona "Actualizar" para ver las métricas acumuladas.
     </div>
   </div>
 </div>
@@ -689,12 +689,12 @@ async function backfillFiberGi() {
     } else {
       res.innerHTML =
         `<span style="color:#22c55e;">✓ Actualizados: <b>${gi}</b> con ÍG · <b>${fi}</b> con fibra ` +
-        `(de ${tot} candidatos). <a href="" style="color:#0ea5e9;">Recargá la página para ver los cambios.</a></span>`;
+        `(de ${tot} candidatos). <a href="" style="color:#0ea5e9;">Recarga la página para ver los cambios.</a></span>`;
     }
     res.style.display = '';
     btn.innerHTML = '<i class="bi bi-check-circle-fill"></i> Completado';
   } catch (e) {
-    res.innerHTML = '<span style="color:#ef4444;">Error al conectar. Intentá de nuevo.</span>';
+    res.innerHTML = '<span style="color:#ef4444;">Error al conectar. Intenta de nuevo.</span>';
     res.style.display = '';
     btn.disabled = false;
     btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Completar fibra e ÍG en ingredientes ya guardados';

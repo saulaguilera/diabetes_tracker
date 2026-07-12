@@ -14,10 +14,10 @@ Tres piezas, todas de SOLO LECTURA sobre datos ya registrados:
    copiloto pueda hablar de la evolución y no solo del día.
 
 3. NOTAS PERSISTENTES: cosas que el usuario le pidió recordar al copiloto
-   ("recordá que la pizza me sube de noche"). Viven en settings como JSON.
+   ("recuerda que la pizza me sube de noche"). Viven en settings como JSON.
 
 Los cálculos pesados se cachean en settings con TTL (la memoria de comidas
-recorre 60 días de lecturas). Nada acá escribe en Meal/GlucoseReading.
+recorre 60 días de lecturas). Nada aquí escribe en Meal/GlucoseReading.
 """
 from __future__ import annotations
 
@@ -222,7 +222,7 @@ def add_note(text: str) -> bool:
 def extract_remember_request(message: str) -> str | None:
     """
     Si el mensaje le pide al copiloto recordar algo, devuelve el contenido.
-    'recordá que la pizza me sube de noche' → 'la pizza me sube de noche'.
+    'recuerda que la pizza me sube de noche' → 'la pizza me sube de noche'.
     """
     import re
     m = re.search(

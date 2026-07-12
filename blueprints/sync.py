@@ -445,7 +445,7 @@ def api_sync_libre_recheck():
     las correcciones (incluso cambios mínimos de >=1 mg/dL).
 
     Caso de uso: el usuario ve que Libre corrigió una hipo en su app oficial
-    pero acá sigue apareciendo. Este endpoint hace re-fetch y compara todas
+    pero aquí sigue apareciendo. Este endpoint hace re-fetch y compara todas
     las lecturas de la ventana (~8h) contra lo que hay en DB.
 
     Retorna detalle de las correcciones aplicadas para visibilidad.
@@ -529,7 +529,7 @@ def api_sync_libre_reset():
     for key in ("libre_token", "libre_base_url", "libre_token_expiry",
                 "libre_account_id", "libre_last_sync", "libre_rate_limited_at"):
         _set_setting(key, "")
-    return jsonify({"ok": True, "mensaje": "Caché borrado. Apretá ↺ para hacer login fresco."})
+    return jsonify({"ok": True, "mensaje": "Caché borrado. Aprieta ↺ para hacer login fresco."})
 
 
 @bp.route("/api/sync/status", endpoint="api_sync_status")
@@ -670,7 +670,7 @@ def api_sync_libre_debug():
     if not token or not base_url:
         return jsonify({
             "estado": "sin_token",
-            "mensaje": "No hay token cacheado. Apretá ↺ en el dashboard para hacer el primer login (esperá 15 min si tuviste errores 430).",
+            "mensaje": "No hay token cacheado. Aprieta ↺ en el dashboard para hacer el primer login (espera 15 min si tuviste errores 430).",
         })
 
     try:
@@ -732,7 +732,7 @@ def api_sync_libre_verbose():
     if not token or not base_url:
         return jsonify({
             "estado": "sin_token",
-            "mensaje": "No hay token cacheado. Apretá ↺ para hacer login.",
+            "mensaje": "No hay token cacheado. Aprieta ↺ para hacer login.",
         })
 
     now = datetime.now()
@@ -888,7 +888,7 @@ def api_sync_libre():
         u = db.session.get(User, session["user_id"])
         provider, email, password = _cgm_config_for_user(u) if u else ("libre", "", "")
         if not email:
-            return jsonify({"error": "Conectá tu sensor en Perfil."}), 400
+            return jsonify({"error": "Conecta tu sensor en Perfil."}), 400
         return jsonify(_sync_one_user(email, password, is_manual, provider))
 
     # ── Cron (SYNC_TOKEN): sincroniza a TODOS los usuarios con credenciales ──
@@ -994,7 +994,7 @@ def _sync_one_user(email: str, password: str, is_manual: bool, provider: str = "
                 wait = int(_RATELIMIT_MIN * 60 - secs_since_rl)
                 return {
                     "insertadas": 0, "total": 0,
-                    "error": f"Abbott limitó las requests (429). Esperá {wait // 60}m {wait % 60}s más.",
+                    "error": f"Abbott limitó las requests (429). Espera {wait // 60}m {wait % 60}s más.",
                     "rate_limited": True, "wait_seconds": wait,
                 }
         except (ValueError, TypeError):
@@ -1379,7 +1379,7 @@ def api_predict_glucose():
             roc           = roc_regression
             kalman_active = False
         if isf_ef is None:
-            return jsonify({"ok": False, "error": "Sin ISF configurado — ingresalo en Configuración"})
+            return jsonify({"ok": False, "error": "Sin ISF configurado — ingrésalo en Configuración"})
 
         # ── Fenómeno del alba ─────────────────────────────────────────────────
         # Cortisol + GH secretan glucosa hepática entre las 3–8am.
@@ -1639,7 +1639,7 @@ def api_predict_glucose():
                 # Ejercicio unificado: forward_predict recalcula por step la
                 # baja directa + la sensibilidad (mismo modelo que el resto).
                 # Pasamos las actividades ya cargadas para no re-consultar.
-                # (Antes acá se inyectaba ex_factor a mano → ahora se computa
+                # (Antes aquí se inyectaba ex_factor a mano → ahora se computa
                 #  internamente; evitamos el doble conteo.)
                 ssm_preds = forward_predict(
                     ssm_result,

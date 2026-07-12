@@ -583,9 +583,9 @@ def get_recalibration_suggestions() -> dict:
                 # ICR mayor = menos insulina por gramo = más resistente post-comida
                 # ICR menor = más insulina por gramo = más sensible post-comida
                 if diff_abs > 0:
-                    interpretacion = "necesitás menos insulina por gramo de CH de lo que el modelo asume"
+                    interpretacion = "necesitas menos insulina por gramo de CH de lo que el modelo asume"
                 else:
-                    interpretacion = "necesitás más insulina por gramo de CH de lo que el modelo asume"
+                    interpretacion = "necesitas más insulina por gramo de CH de lo que el modelo asume"
                 sugerencias.append({
                     "tipo":           "ICR",
                     "setting_key":    "icr",
@@ -640,9 +640,9 @@ def get_recalibration_suggestions() -> dict:
                     f"bias persistente puede indicar que el ISF o el ICR necesitan ajuste."
                 ),
                 "impacto": (
-                    "Revisá si tu ISF está generando correcciones "
+                    "Revisa si tu ISF está generando correcciones "
                     f"{'insuficientes' if bias_30 > 0 else 'excesivas'}. "
-                    "Si el bias persiste >30 días, considerá recalibrarlo."
+                    "Si el bias persiste >30 días, considera recalibrarlo."
                 ),
             })
     except Exception:

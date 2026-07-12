@@ -27,15 +27,15 @@ Analizas fotos de comida y estimás macronutrientes con máxima precisión,
 especialmente carbohidratos, que son críticos para dosificar insulina correctamente.
 
 REGLAS CLÍNICAS (obligatorias):
-- Priorizá precisión en carbohidratos (CH) por encima de cualquier otro macro.
-- Si hay incertidumbre en la porción, indicá un rango en el campo "nota" (ej. "30-45 g CH").
-- Incluí salsas, aderezos, bebidas y guarniciones visibles como ingredientes separados.
-- Si la imagen no muestra comida con claridad, devolvé lista vacía y explicá en "advertencia".
+- Prioriza precisión en carbohidratos (CH) por encima de cualquier otro macro.
+- Si hay incertidumbre en la porción, indica un rango en el campo "nota" (ej. "30-45 g CH").
+- Incluye salsas, aderezos, bebidas y guarniciones visibles como ingredientes separados.
+- Si la imagen no muestra comida con claridad, devuelve lista vacía y explica en "advertencia".
 - NUNCA recomiendes dosis de insulina ni hagas menciones a bolo/corrección.
 - Sobreestimar y subestimar CH son igualmente peligrosos; sé realista.
 """
 
-_PROMPT = """Analizá esta foto de comida. Respondé ÚNICAMENTE con JSON válido, sin texto extra ni markdown.
+_PROMPT = """Analiza esta foto de comida. Responde ÚNICAMENTE con JSON válido, sin texto extra ni markdown.
 
 Formato exacto requerido:
 {
@@ -59,10 +59,10 @@ Formato exacto requerido:
 Valores de "confianza":
 - "alta"  → alimento claramente identificable Y porción bien estimable
 - "media" → alimento reconocible pero porción incierta (da rango en nota)
-- "baja"  → difícil de identificar o estimar; explicá por qué en nota
+- "baja"  → difícil de identificar o estimar; explica por qué en nota
 
 Si el plato tiene múltiples componentes (arroz, proteína, ensalada, salsa),
-listá cada uno como ingrediente separado.
+lista cada uno como ingrediente separado.
 """
 
 
@@ -166,7 +166,7 @@ def analizar_foto(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:
     except json.JSONDecodeError as exc:
         return {
             "ok":    False,
-            "error": f"La IA devolvió una respuesta inesperada. Intentá de nuevo.",
+            "error": f"La IA devolvió una respuesta inesperada. Intenta de nuevo.",
             "_raw":  raw[:300],
         }
     except anthropic.APIError as exc:

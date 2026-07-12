@@ -1,7 +1,7 @@
 // Onboarding.jsx — bienvenida de un usuario nuevo (3 pasos, overlay a pantalla
-// completa): 1) nombre · 2) objetivo + basal · 3) conectar sensor LibreLinkUp.
-// Aparece cuando /profile dice onboarded:false; al terminar marca onboarded.
-// Saltear el sensor es válido (puede conectarlo después en Perfil).
+// completa): 1) nombre · 2) objetivo + basal · 3) conectar sensor (Libre /
+// Dexcom / Nightscout). Aparece cuando /profile dice onboarded:false; al
+// terminar marca onboarded. Saltar el sensor es válido (Perfil lo permite después).
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { apiPut } from '../api.js'
@@ -18,10 +18,18 @@ export default function Onboarding({ theme, onDone }) {
   const [basalTipo, setBasalTipo] = useState('')
   const [basalDose, setBasalDose] = useState('')
   const [basalHora, setBasalHora] = useState('22:00')
+  const [provider, setProvider] = useState('libre')
   const [email, setEmail] = useState('')
   const [pass, setPass] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
+
+  // proveedores CGM compatibles (mismo mapa que Perfil → LibreConnect)
+  const P = {
+    libre:      { name: 'FreeStyle Libre', c: '#FFC72C', f1: t('perfil.libre.email'), f2: t('perfil.libre.password'), t1: 'email' },
+    dexcom:     { name: 'Dexcom',          c: '#58A618', f1: t('sensor.dexcomUser'), f2: t('perfil.libre.password'), t1: 'text' },
+    nightscout: { name: 'Nightscout',      c: '#8B5CF6', f1: t('sensor.nsUrl'), f2: t('sensor.nsToken'), t1: 'url' },
+  }
 
   const input = {
     width: '100%', padding: '13px 15px', borderRadius: 14, fontSize: 15, fontFamily: SANS,
@@ -53,7 +61,7 @@ export default function Onboarding({ theme, onDone }) {
     if (busy) return
     setBusy(true); setErr(null)
     try {
-      await apiPut('/libre', { email: email.trim(), password: pass })
+      await apiPut('/libre', { provider, email: email.trim(), password: pass })
       await finish()
     } catch { setErr(t('perfil.libre.badCreds')); setBusy(false) }
   }
@@ -156,23 +164,31 @@ export default function Onboarding({ theme, onDone }) {
         {step === 2 && (
           <div key="s2" className="rise-in">
             <div style={{ color: theme.ink, fontSize: 22, fontWeight: 300, marginBottom: 8 }}>{t('onb.sensor')}</div>
-            {/* badge LibreLinkUp (hasta que haya más sensores compatibles) */}
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 12px',
-              borderRadius: 100, marginBottom: 14, background: 'rgba(255,199,44,0.12)',
-              border: '0.5px solid rgba(255,199,44,0.45)' }}>
-              <span style={{ width: 18, height: 18, borderRadius: '50%', background: '#FFC72C',
-                display: 'grid', placeItems: 'center', color: '#1A1A1A', fontSize: 10, fontWeight: 800 }}>L</span>
-              <span style={{ color: theme.ink, fontSize: 13, fontWeight: 600 }}>FreeStyle LibreLinkUp</span>
+            {/* selector de proveedor CGM */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              {Object.entries(P).map(([id, p]) => (
+                <button key={id} onClick={() => { setProvider(id); setEmail(''); setPass(''); setErr(null) }} style={{
+                  flex: 1, padding: '9px 4px', borderRadius: 12, cursor: 'pointer', fontFamily: SANS,
+                  fontSize: 12.5, fontWeight: 600,
+                  border: `0.5px solid ${provider === id ? p.c : theme.border}`,
+                  background: provider === id ? `${p.c}22` : 'transparent',
+                  color: provider === id ? theme.ink : theme.inkSoft }}>
+                  {p.name}
+                </button>
+              ))}
             </div>
-            <div style={{ color: theme.inkSoft, fontSize: 13.5, lineHeight: 1.55, marginBottom: 18 }}>{t('onb.sensorHint')}</div>
-            <label style={label}>{t('perfil.libre.email')}</label>
-            <input style={{ ...input, marginBottom: 14 }} type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="off"/>
-            <label style={label}>{t('perfil.libre.password')}</label>
+            <div style={{ color: theme.inkSoft, fontSize: 13.5, lineHeight: 1.55, marginBottom: 18 }}>
+              {provider === 'nightscout' ? t('sensor.nsHint') : provider === 'dexcom' ? t('sensor.dexcomHint') : t('onb.sensorHint')}
+            </div>
+            <label style={label}>{P[provider].f1}</label>
+            <input style={{ ...input, marginBottom: 14 }} type={P[provider].t1} value={email} onChange={e => setEmail(e.target.value)} autoComplete="off"/>
+            <label style={label}>{P[provider].f2}</label>
             <input style={input} type="password" value={pass} onChange={e => setPass(e.target.value)} autoComplete="new-password"/>
             {err && <div style={{ color: '#E8A79B', fontSize: 13, marginTop: 10 }}>{err}</div>}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 22 }}>
               <button style={{ ...btn(false), border: 'none' }} onClick={finish}>{t('onb.skip')}</button>
-              <button style={btn(true)} disabled={busy || !email.includes('@') || !pass} onClick={connectSensor}>
+              <button style={btn(true)} onClick={connectSensor}
+                disabled={busy || !email.trim() || (provider !== 'nightscout' && !pass) || (provider === 'libre' && !email.includes('@'))}>
                 {busy ? t('perfil.libre.checking') : t('perfil.libre.save')}
               </button>
             </div>

@@ -97,7 +97,7 @@
 
   {# Mensaje inicial si nada seleccionado #}
   <p class="ql-hint" id="ql-hint">
-    Tocá lo que querés registrar
+    Toca lo que quieres registrar
   </p>
 
   {# ── Hora (colapsable) ─────────────────────────────────────────────────── #}
@@ -1284,8 +1284,8 @@ function qlMostrarResultado(data) {
   const warn = document.getElementById('ql-foto-warn');
   if (data.confianza_general !== 'alta') {
     warn.textContent = data.confianza_general === 'baja'
-      ? '⚠️ Confianza baja — revisá los CH antes de guardar.'
-      : '⚠️ Confianza media — verificá los carbohidratos.';
+      ? '⚠️ Confianza baja — revisa los CH antes de guardar.'
+      : '⚠️ Confianza media — verifica los carbohidratos.';
     warn.style.display = '';
   } else {
     warn.style.display = 'none';
