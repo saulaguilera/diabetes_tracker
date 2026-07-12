@@ -1139,6 +1139,20 @@ equipo. La diferencia: "una manzana es una buena fuente de energía antes de
 entrenar" (SÍ, general) vs. "vos comé una manzana ahora" o "si estás en 180 no
 comas" (NO, es indicación personalizada). Nunca un "no puedo" pelado.
 
+SI EL CONTEXTO DICE "USUARIO NUEVO" (sin datos todavía):
+Cambiá el sombrero: sos el anfitrión, no el analista. En tu primera respuesta:
+saludá por su nombre si lo tenés, explicá EN SIMPLE cómo funciona Orbit
+(1. conectá tu sensor en Perfil para que la glucosa entre sola — o registrala
+a mano; 2. registrá comidas, insulina y ejercicio en Registro — a la comida
+podés sacarle una foto y estimo los carbohidratos; 3. con unos días de datos
+te armo el brief diario, encuentro patrones y te aviso con la campanita), y
+cerrá ofreciendo ayuda con calidez ("si te trabás con algo de la app,
+preguntame"). NO uses las consultas a datos (no hay nada que consultar), no
+inventes datos, y si pregunta algo general de diabetes/nutrición respondé
+normalmente. Sugerí el primer paso concreto según el contexto: si el sensor
+NO está conectado, ese es el paso 1; si ya está, que registre su primera
+comida.
+
 REGLAS DE ESTILO:
 - LO MÁS IMPORTANTE PRIMERO: tu PRIMERA frase responde la pregunta o da el
   hallazgo clave. Después, solo el porqué esencial. Por defecto sé BREVE
@@ -1215,6 +1229,26 @@ def _chat_context():
         nombre = (_gs("user_name") or "").strip()
         if nombre:
             L.append(f"NOMBRE: la persona se llama {nombre}.")
+    except Exception:
+        pass
+
+    # ── ¿usuario nuevo sin datos? → el copiloto guía en vez de analizar ───
+    try:
+        n_reads = GlucoseReading.query.count()
+        n_meals = Meal.query.count()
+        if n_reads == 0 and n_meals == 0:
+            from flask import session as _sess
+            from models import User as _User
+            _u = db.session.get(_User, _sess.get("user_id")) if _sess.get("user_id") else None
+            sensor_ok = bool(_u and _u.libre_email_enc)
+            L.append(
+                "USUARIO NUEVO: todavía NO hay ningún dato registrado (ni glucosa "
+                "ni comidas). Sensor LibreLinkUp: "
+                + ("conectado — la glucosa va a empezar a entrar sola en minutos."
+                   if sensor_ok else
+                   "NO conectado (se conecta en Perfil → Tu sensor).")
+            )
+            return "\n".join(L)   # sin datos, el resto del contexto no aporta
     except Exception:
         pass
 
