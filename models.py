@@ -4,7 +4,39 @@ from datetime import datetime
 db = SQLAlchemy()
 
 
-class GlucoseReading(db.Model):
+class User(db.Model):
+    """Cuenta de usuario (multi-usuario fase 1). El usuario #1 se siembra al
+    primer arranque desde APP_USERNAME/APP_PASSWORD — todos los datos
+    históricos pre-multiusuario le pertenecen (backfill en app.py)."""
+    __tablename__ = "users"
+
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    password_hash = db.Column(db.String(300), nullable=False)
+    display_name = db.Column(db.String(120))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # credenciales LibreLinkUp cifradas (Fernet derivada de SECRET_KEY) — el
+    # sync itera usuarios que las tengan. NUNCA en texto plano.
+    libre_email_enc = db.Column(db.Text)
+    libre_password_enc = db.Column(db.Text)
+
+    def __repr__(self):
+        return f"<User {self.id} {self.username!r}>"
+
+
+class TenantScoped:
+    """Mixin: marca un modelo como DATOS DE UN USUARIO. Los eventos del final
+    de este archivo (a) filtran automáticamente todo SELECT por el usuario del
+    contexto y (b) asignan user_id en cada insert. Un solo punto de
+    enforcement: imposible olvidar un filter_by en algún endpoint.
+
+    Para consultas administrativas sin filtro (scripts, migraciones):
+        db.session.execute(stmt, execution_options={"all_users": True})
+    o correr sin contexto de usuario (current_user_id() → None)."""
+    user_id = db.Column(db.Integer, index=True)
+
+
+class GlucoseReading(TenantScoped, db.Model):
     __tablename__ = "glucose_readings"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -40,7 +72,7 @@ class GlucoseReading(db.Model):
             return "hiperglucemia"
 
 
-class Meal(db.Model):
+class Meal(TenantScoped, db.Model):
     __tablename__ = "meals"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -63,7 +95,7 @@ class Meal(db.Model):
         return f"<Comida {self.name} {self.carbs_g}g CH>"
 
 
-class MealComponent(db.Model):
+class MealComponent(TenantScoped, db.Model):
     """Ingrediente individual dentro de una comida."""
     __tablename__ = "meal_components"
 
@@ -87,7 +119,7 @@ class MealComponent(db.Model):
         return f"<Componente {self.name} {self.carbs_g}g CH>"
 
 
-class InsulinDose(db.Model):
+class InsulinDose(TenantScoped, db.Model):
     __tablename__ = "insulin_doses"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -107,7 +139,7 @@ class InsulinDose(db.Model):
         return f"<Insulina {self.type} {self.units}U @ {self.timestamp}>"
 
 
-class Activity(db.Model):
+class Activity(TenantScoped, db.Model):
     __tablename__ = "activities"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -125,7 +157,7 @@ class Activity(db.Model):
         return f"<Actividad {self.activity_type} {self.duration_min}min>"
 
 
-class ContextTag(db.Model):
+class ContextTag(TenantScoped, db.Model):
     """Etiqueta de contexto: estrés, enfermedad, mal sueño, viaje…
     Cosas que mueven la glucosa pero no son comida/insulina/ejercicio.
     Alimentan el contexto del copiloto y el análisis de excursiones."""
@@ -141,7 +173,7 @@ class ContextTag(db.Model):
         return f"<Contexto {self.tag} @ {self.timestamp:%d/%m %H:%M}>"
 
 
-class CopilotNotification(db.Model):
+class CopilotNotification(TenantScoped, db.Model):
     """Notificación in-app de Orbit Copilot (p.ej. «🧠 Orbit encontró algo»
     cuando el detector encuentra un patrón nuevo). Se listan en la campanita
     del header; read_at marca cuándo se vieron."""
@@ -158,7 +190,7 @@ class CopilotNotification(db.Model):
         return f"<Notif {self.kind} {self.title[:30]!r} @ {self.created_at:%d/%m %H:%M}>"
 
 
-class FoodItem(db.Model):
+class FoodItem(TenantScoped, db.Model):
     """Alimentos frecuentes con sus valores nutricionales."""
     __tablename__ = "food_items"
 
@@ -238,7 +270,7 @@ class GlucosePrediction(db.Model):
         return f"<Prediccion {self.predicted_at} pred30={self.g_pred_30} real={self.g_real_30}>"
 
 
-class MealPreset(db.Model):
+class MealPreset(TenantScoped, db.Model):
     """
     Comidas favoritas / presets para registro rápido.
 
@@ -273,7 +305,7 @@ class MealPreset(db.Model):
         return f"<MealPreset {self.name} {self.carbs_g}g CH>"
 
 
-class CGMImport(db.Model):
+class CGMImport(TenantScoped, db.Model):
     """Registro de archivos CSV importados desde Freestyle Libre."""
     __tablename__ = "cgm_imports"
 
@@ -292,7 +324,7 @@ class CGMImport(db.Model):
 # Personal Metabolic Model (PMM) — tablas de aprendizaje adaptativo
 # ══════════════════════════════════════════════════════════════════════════════
 
-class DailyBrief(db.Model):
+class DailyBrief(TenantScoped, db.Model):
     """
     Resumen narrativo diario del estado metabólico.
 
@@ -719,3 +751,40 @@ class HypoRiskAudit(db.Model):
         return (f"<HypoRiskAudit {self.assessed_at} "
                 f"risk={self.risk_score:.2f} sev={self.severity} "
                 f"G={self.current_glucose} bolus={self.proposed_bolus}U{outcome}>")
+
+
+# ── Multi-usuario: enforcement automático de tenancy ─────────────────────────
+# (a) Todo SELECT que involucre un modelo TenantScoped se filtra por el usuario
+#     del contexto (with_loader_criteria se propaga a joins, relaciones y
+#     lazy-loads). (b) Todo insert de un TenantScoped recibe user_id.
+# Sin contexto de usuario (arranque, scripts, tests de infraestructura) no se
+# filtra — los endpoints de datos exigen login, así que un request autenticado
+# SIEMPRE tiene contexto.
+from sqlalchemy import event as _sa_event
+from sqlalchemy.orm import Session as _SASession, with_loader_criteria as _wlc
+
+
+@_sa_event.listens_for(_SASession, "do_orm_execute")
+def _tenant_read_filter(execute_state):
+    if not execute_state.is_select:
+        return
+    if execute_state.execution_options.get("all_users", False):
+        return
+    from helpers import current_user_id
+    uid = current_user_id()
+    if uid is None:
+        return
+    execute_state.statement = execute_state.statement.options(
+        _wlc(TenantScoped, lambda cls: cls.user_id == uid, include_aliases=True)
+    )
+
+
+@_sa_event.listens_for(_SASession, "before_flush")
+def _tenant_write_assign(session, flush_context, instances):
+    from helpers import current_user_id
+    uid = current_user_id()
+    if uid is None:
+        return
+    for obj in session.new:
+        if isinstance(obj, TenantScoped) and obj.user_id is None:
+            obj.user_id = uid

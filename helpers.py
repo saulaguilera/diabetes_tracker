@@ -75,21 +75,69 @@ ACTIVIDADES_COMUNES = [
 ]
 
 
+# ── Contexto de usuario (multi-usuario fase 1) ───────────────────────────────
+# En un request el usuario sale de la sesión de Flask; fuera de un request
+# (cron de sync, scripts) se fija explícitamente con set_user_context().
+from contextvars import ContextVar
+
+_user_ctx: ContextVar = ContextVar("orbit_user_id", default=None)
+
+
+def current_user_id():
+    """ID del usuario actual, o None si no hay contexto (p. ej. arranque)."""
+    uid = _user_ctx.get()
+    if uid is not None:
+        return uid
+    try:
+        from flask import has_request_context, session
+        if has_request_context():
+            return session.get("user_id")
+    except Exception:
+        pass
+    return None
+
+
+def set_user_context(uid):
+    """Fija el usuario para código fuera de request (sync/cron). Devuelve un
+    token para restaurar con reset_user_context()."""
+    return _user_ctx.set(uid)
+
+
+def reset_user_context(token):
+    _user_ctx.reset(token)
+
+
+# ── Settings per-usuario ─────────────────────────────────────────────────────
+# El K-V se namespacea por usuario de forma transparente (prefijo interno
+# "u{id}::"), así los ~250 call sites no cambian. Claves realmente globales
+# (caches compartidos) van en la allowlist. Sin contexto de usuario, la clave
+# queda global (arranque/migraciones).
+_GLOBAL_SETTING_PREFIXES = ("pat_i18n_", "settings_ns_")
+
+
+def _skey(key):
+    if any(key.startswith(p) for p in _GLOBAL_SETTING_PREFIXES):
+        return key
+    uid = current_user_id()
+    return f"u{uid}::{key}" if uid else key
+
+
 def _get_setting(key, default=None):
-    """Lee un valor de configuración personal."""
-    s = UserSettings.query.filter_by(key=key).first()
+    """Lee un valor de configuración del usuario actual."""
+    s = UserSettings.query.filter_by(key=_skey(key)).first()
     return s.value if s else default
 
 
 def _set_setting(key, value):
-    """Guarda o actualiza un valor de configuración personal."""
+    """Guarda o actualiza un valor de configuración del usuario actual."""
     from datetime import datetime as _dt
-    s = UserSettings.query.filter_by(key=key).first()
+    k = _skey(key)
+    s = UserSettings.query.filter_by(key=k).first()
     if s:
         s.value = str(value)
         s.updated_at = _dt.now()
     else:
-        db.session.add(UserSettings(key=key, value=str(value)))
+        db.session.add(UserSettings(key=k, value=str(value)))
     db.session.commit()
 
 

@@ -1,13 +1,37 @@
 import math as _math
 import os
 from datetime import datetime, timedelta
-from flask import Blueprint, jsonify, request, redirect, url_for, flash, session
+from flask import Blueprint, jsonify, request, redirect, url_for, flash, session, g
 from models import db, GlucoseReading, MealComponent
-from helpers import _get_setting, _set_setting
+from helpers import _get_setting, _set_setting, set_user_context, reset_user_context
 from utils.libre_linkup import sync_all as libre_sync_all
 from pmm.ssm.version import MODEL_VERSION
 
 bp = Blueprint("sync", __name__)
+
+# ── Multi-usuario: contexto del cron ─────────────────────────────────────────
+# El sync por cron llega SIN sesión (autenticado por SYNC_TOKEN): los datos que
+# trae Libre con las credenciales del entorno pertenecen al usuario #1. Cuando
+# haya credenciales Libre por usuario, esto pasa a iterar usuarios. Un request
+# CON sesión conserva el contexto de su usuario (no se pisa).
+_SYNC_OWNER_USER_ID = 1
+
+
+@bp.before_request
+def _sync_user_context():
+    if not session.get("user_id"):
+        g._tenant_token = set_user_context(_SYNC_OWNER_USER_ID)
+
+
+@bp.teardown_request
+def _sync_user_context_reset(exc=None):
+    tok = getattr(g, "_tenant_token", None)
+    if tok is not None:
+        try:
+            reset_user_context(tok)
+        except Exception:
+            pass
+        g._tenant_token = None
 # Este blueprint está exento de CSRF: recibe llamadas de cron externos
 # (autenticados por SYNC_TOKEN) y APIs JSON del navegador.
 

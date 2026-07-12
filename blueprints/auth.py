@@ -34,13 +34,13 @@ def login():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
 
-        if not _APP_PASSWORD:
-            error = "El servidor no tiene contraseña configurada. Definí APP_PASSWORD."
-        elif (username == _APP_USER and
-              check_password_hash(_get_pass_hash(), password)):
+        from models import User
+        u = User.query.filter_by(username=username).first()
+        if u and check_password_hash(u.password_hash, password):
             session.permanent = True
             session["logged_in"] = True
-            session["username"] = username
+            session["username"] = u.username
+            session["user_id"] = u.id
             # next puede venir por query (?next=) o por el campo oculto del form.
             # Solo se aceptan rutas internas (que empiezan con "/") por seguridad.
             next_url = request.form.get("next") or request.args.get("next") or ""
@@ -51,6 +51,47 @@ def login():
             error = "Usuario o contraseña incorrectos."
 
     return render_template("login.html", error=error)
+
+
+@bp.route("/registro", methods=["GET", "POST"], endpoint="register")
+def register():
+    """Alta de usuario con código de invitación (INVITE_CODE en el entorno).
+    Sin código configurado, el registro queda deshabilitado."""
+    invite_required = os.environ.get("INVITE_CODE", "")
+    error = None
+    if request.method == "POST":
+        if not invite_required:
+            error = "El registro está deshabilitado por ahora."
+        else:
+            code = request.form.get("invite", "").strip()
+            username = request.form.get("username", "").strip().lower()
+            password = request.form.get("password", "")
+            confirm = request.form.get("confirm", "")
+            from models import User, db as _db
+            if code != invite_required:
+                error = "Código de invitación incorrecto."
+            elif not username or len(username) < 3 or not username.replace("_", "").isalnum():
+                error = "Usuario inválido (mínimo 3 caracteres, letras/números/_)."
+            elif len(password) < 8:
+                error = "La contraseña necesita al menos 8 caracteres."
+            elif password != confirm:
+                error = "Las contraseñas no coinciden."
+            elif User.query.filter_by(username=username).first():
+                error = "Ese usuario ya existe."
+            else:
+                from werkzeug.security import generate_password_hash
+                u = User(username=username,
+                         password_hash=generate_password_hash(password),
+                         display_name=username)
+                _db.session.add(u)
+                _db.session.commit()
+                session.permanent = True
+                session["logged_in"] = True
+                session["username"] = u.username
+                session["user_id"] = u.id
+                return redirect("/copilot")
+    return render_template("register.html", error=error,
+                           enabled=bool(invite_required))
 
 
 @bp.route("/logout", endpoint="logout")

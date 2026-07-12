@@ -122,7 +122,9 @@ TAG_LABELS = {
 
 
 def _require_login():
-    if not session.get("logged_in"):
+    # user_id es obligatorio: sin él, el filtro de tenancy no aplica y un
+    # request autenticado "a medias" vería datos de todos. Defensa doble.
+    if not session.get("logged_in") or not session.get("user_id"):
         return jsonify({"ok": False, "error": "No autorizado"}), 401
     return None
 

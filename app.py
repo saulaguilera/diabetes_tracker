@@ -59,7 +59,8 @@ def _protect_all():
     # Los endpoints reales llevan prefijo de blueprint (auth.login), por eso se
     # incluyen ambas formas. Sin "auth.login" aquí, /login se redirige a sí mismo
     # → loop infinito ("too many redirects") cuando no hay sesión.
-    exempt = {"login", "logout", "static", "auth.login", "auth.logout"}
+    exempt = {"login", "logout", "static", "auth.login", "auth.logout",
+              "register", "auth.register"}
     if request.endpoint in exempt or session.get("logged_in"):
         return
     # Permitir llamadas de cron/API autenticadas con SYNC_TOKEN
@@ -86,6 +87,23 @@ def page_not_found(e):
 def internal_error(e):
     db.session.rollback()   # evita transacciones colgadas
     return render_template("500.html"), 500
+
+
+@app.before_request
+def _map_legacy_session():
+    """Sesiones anteriores a multi-usuario: tienen logged_in pero no user_id.
+    Se mapean por username (el usuario #1 seedea con las credenciales viejas),
+    así nadie tiene que re-loguear por la migración."""
+    if session.get("logged_in") and not session.get("user_id"):
+        try:
+            from models import User
+            u = User.query.filter_by(username=session.get("username", "")).first()
+            if u:
+                session["user_id"] = u.id
+            else:
+                session.clear()   # sesión huérfana → re-login
+        except Exception:
+            pass
 
 
 with app.app_context():
@@ -242,6 +260,60 @@ with app.app_context():
                 if col_name not in te_cols:
                     conn.execute(text(ddl))
                     conn.commit()
+
+        # ── Multi-usuario fase 1 ──────────────────────────────────────────
+        # 1) columna user_id en las tablas de datos de usuario (idempotente)
+        _TENANT_TABLES = ["glucose_readings", "meals", "meal_components",
+                          "insulin_doses", "activities", "context_tags",
+                          "copilot_notifications", "food_items", "meal_presets",
+                          "cgm_imports", "daily_briefs"]
+        for _t in _TENANT_TABLES:
+            try:
+                _cols = [c["name"] for c in inspector.get_columns(_t)]
+            except Exception:
+                continue   # tabla aún no existe (create_all la crea con user_id)
+            if "user_id" not in _cols:
+                conn.execute(text(f"ALTER TABLE {_t} ADD COLUMN user_id INTEGER"))
+                conn.commit()
+
+        # 2) seed del usuario #1 desde APP_USERNAME/APP_PASSWORD (una vez)
+        from werkzeug.security import generate_password_hash as _gph
+        _u1 = conn.execute(text("SELECT COUNT(*) FROM users")).scalar()
+        if _u1 == 0:
+            _seed_user = os.environ.get("APP_USERNAME", "admin")
+            _seed_pass = os.environ.get("APP_PASSWORD", "")
+            if _seed_pass:
+                conn.execute(text(
+                    "INSERT INTO users (username, password_hash, display_name, created_at) "
+                    "VALUES (:u, :p, :d, :c)"),
+                    {"u": _seed_user, "p": _gph(_seed_pass), "d": _seed_user,
+                     "c": datetime.now()})
+                conn.commit()
+
+        # 3) backfill: todos los datos históricos pertenecen al usuario #1
+        for _t in _TENANT_TABLES:
+            try:
+                conn.execute(text(f"UPDATE {_t} SET user_id = 1 WHERE user_id IS NULL"))
+            except Exception:
+                pass
+        conn.commit()
+
+        # 4) settings → namespace del usuario #1 (u1::clave), salvo las globales.
+        #    Marcador para correr una sola vez.
+        _ns_done = conn.execute(text(
+            "SELECT COUNT(*) FROM user_settings WHERE key = 'settings_ns_migrated'"
+        )).scalar()
+        if not _ns_done:
+            _rows = conn.execute(text("SELECT id, key FROM user_settings")).fetchall()
+            for _rid, _key in _rows:
+                if _key.startswith("u1::") or _key.startswith("pat_i18n_") \
+                        or _key.startswith("settings_ns_"):
+                    continue
+                conn.execute(text("UPDATE user_settings SET key = :nk WHERE id = :i"),
+                             {"nk": f"u1::{_key}", "i": _rid})
+            conn.execute(text(
+                "INSERT INTO user_settings (key, value) VALUES ('settings_ns_migrated', '1')"))
+            conn.commit()
 
         # Migración de datos: unificar la intensidad de actividad a los códigos
         # canónicos baja/media/alta (modelo, dashboard clásico, quicklog e histórico
