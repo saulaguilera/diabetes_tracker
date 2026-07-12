@@ -149,7 +149,9 @@ export default function Patrones({ theme, refreshKey = 0 }) {
 
       {/* observaciones detectadas */}
       <div>
-        <Eyebrow theme={theme} style={{ marginBottom: 12 }}>{t('pat.observations')}</Eyebrow>
+        <Eyebrow theme={theme} style={{ marginBottom: 12 }}>{(data.patterns && data.patterns.length > 0)
+          ? t(data.patterns.length === 1 ? 'pat.foundOne' : 'pat.foundN', { n: data.patterns.length })
+          : t('pat.observations')}</Eyebrow>
         {(!data.patterns || data.patterns.length === 0) ? (
           <Card theme={theme} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#5FC6A8', boxShadow: '0 0 8px #5FC6A8' }}/>

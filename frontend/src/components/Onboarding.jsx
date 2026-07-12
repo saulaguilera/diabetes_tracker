@@ -11,6 +11,7 @@ import OrbitLogo from './OrbitLogo.jsx'
 
 export default function Onboarding({ theme, onDone }) {
   const { t } = useLang()
+  const [story, setStory] = useState(0)   // 0..2 historia · 3 → formulario
   const [step, setStep] = useState(0)
   const [name, setName] = useState('')
   const [objetivo, setObjetivo] = useState('100')
@@ -67,6 +68,38 @@ export default function Onboarding({ theme, onDone }) {
       background: theme.dark ? 'radial-gradient(125% 90% at 50% -8%, #16243F 0%, #0B1324 46%, #060B18 100%)' : theme.bg,
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div style={{ width: '100%', maxWidth: 420 }}>
+        {story < 3 ? (
+          /* ── historia: tres pantallas, pocas palabras ── */
+          <div key={'st' + story} className="rise-in" onClick={() => setStory(v => v + 1)}
+            style={{ textAlign: 'center', cursor: 'pointer', padding: '40px 8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 34 }}>
+              <OrbitLogo size={52}/>
+            </div>
+            <div style={{ color: theme.ink, fontSize: 30, fontWeight: 300, lineHeight: 1.3,
+              letterSpacing: '-0.02em', minHeight: 118 }}>
+              {story === 0 && t('onb.story1')}
+              {story === 1 && t('onb.story2')}
+              {story === 2 && (
+                <>
+                  {t('onb.story3')}
+                  <div style={{ fontSize: 17, color: theme.inkSoft, marginTop: 14 }}>{t('onb.story3b')} 💙</div>
+                </>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 6, justifyContent: 'center', margin: '30px 0 26px' }}>
+              {[0, 1, 2].map(i => (
+                <div key={i} style={{ width: i === story ? 22 : 8, height: 8, borderRadius: 4,
+                  background: i <= story ? theme.accent : theme.border, transition: 'all .3s' }}/>
+              ))}
+            </div>
+            <button onClick={e => { e.stopPropagation(); setStory(v => v + 1) }} style={{
+              padding: '13px 34px', borderRadius: 100, cursor: 'pointer', border: 'none',
+              background: theme.accent, color: '#0A0C1E', fontFamily: SANS, fontSize: 15, fontWeight: 600 }}>
+              {story === 2 ? t('onb.start') : t('onb.continue')}
+            </button>
+          </div>
+        ) : (
+        <>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', marginBottom: 8 }}>
           <OrbitLogo size={30}/>
           <span style={{ fontSize: 21, fontWeight: 300, color: theme.ink }}>Orbit <span style={{ fontWeight: 500,
@@ -144,6 +177,8 @@ export default function Onboarding({ theme, onDone }) {
               </button>
             </div>
           </div>
+        )}
+        </>
         )}
       </div>
     </div>
