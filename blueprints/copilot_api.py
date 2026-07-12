@@ -1200,14 +1200,25 @@ REGLAS DE ESTILO:
   concentradas en una franja, hipos tardías) — menciónalo aunque no lo haya
   preguntado: UNA frase que conecte, sin sermonear ni repetirlo en cada mensaje.
 - LÍNEA DE TIEMPO: el contexto trae los eventos de las últimas 48h (comidas,
-  insulina, ejercicio, contexto, bajadas/subidas) MEZCLADOS en orden
-  cronológico, con la glucosa del momento. Piensa el día como una SECUENCIA
-  causa→efecto: lo que pasó antes explica lo que vino después (comida grasosa
-  al mediodía → subida tardía; fuerza a la tarde → más sensibilidad a la
-  noche; estrés a la mañana → resistencia el resto del día). Cuando expliques
-  algo, ánclalo en esa secuencia concreta ("a las 14:02 comiste el bife, te
-  aplicaste 4U a las 14:10, y para las 16:00 estabas en 180") en vez de tratar
-  cada dato como un hecho suelto.
+  insulina, ejercicio, contexto, episodios extremos, Y los TRAMOS de la curva
+  de glucosa: cada subida/bajada/deriva con hora de inicio, hora de fin,
+  magnitud y duración) MEZCLADOS en orden cronológico, con la glucosa del
+  momento. Piensa el día como una SECUENCIA causa→efecto: lo que pasó antes
+  explica lo que vino después (comida grasosa al mediodía → subida tardía;
+  fuerza a la tarde → más sensibilidad a la noche; estrés a la mañana →
+  resistencia el resto del día). Cuando expliques algo, ánclalo en esa
+  secuencia concreta ("a las 14:02 comiste el bife, te aplicaste 4U a las
+  14:10, y para las 16:00 estabas en 180") en vez de tratar cada dato como
+  un hecho suelto.
+- ANALIZA LA SERIE TEMPORAL, no solo los extremos: conecta cada tramo de la
+  curva con los eventos que lo preceden por horario — una comida suele
+  explicar la subida que empieza 15–60 min después; un bolo, la bajada
+  1–2 h después; el ejercicio aeróbico, una bajada durante o después (hasta
+  6 h); una subida de madrugada sin eventos apunta a alba o rebote. Fíjate
+  también en la VELOCIDAD (+80 en 50 min es distinto que +80 en 4 h) y en lo
+  que NO se movió (una noche plana en rango vale la pena celebrarla). Si un
+  movimiento no tiene ningún evento que lo explique, dilo con honestidad y
+  pregunta qué pasó a esa hora ("¿comiste algo cerca de las 17:30?").
 - Tienes CONSULTAS a los datos reales (ejercicio, hipos, franjas horarias,
   comidas, impacto de eventos, relación carbos-insulina, impacto de contexto
   como estrés/enfermedad/mal sueño). Cuando la pregunta lo amerite, úsalas y
@@ -1385,6 +1396,26 @@ def _chat_context():
         eventos.append((ep[0].timestamp,
                         f"glucosa muy alta: pico {int(pico)} "
                         f"({ep[0].timestamp.strftime('%H:%M')}–{ep[-1].timestamp.strftime('%H:%M')})"))
+
+    # tramos de la CURVA (subidas/bajadas con hora, magnitud y duración) como
+    # eventos propios: el copiloto ve la forma de la serie temporal completa,
+    # no solo los extremos, y puede conectar cada movimiento con lo que lo
+    # precede (comida → subida, bolo → bajada, madrugada sin eventos → alba).
+    try:
+        from utils.glucose_curve import segmentos, huecos, duracion_txt
+        pts = [(r.timestamp, r.value_mgdl) for r in reads48]
+        for s in segmentos(pts)[-18:]:
+            signo = "+" if s["delta"] > 0 else "−"
+            etiq = {"subida": "SUBIDA", "bajada": "bajada",
+                    "deriva": "deriva lenta"}[s["tipo"]]
+            eventos.append((s["t0"],
+                            f"curva: {etiq} {int(s['v0'])}→{int(s['v1'])} "
+                            f"({signo}{abs(int(s['delta']))} en {duracion_txt(s['minutos'])}, "
+                            f"termina {s['t1'].strftime('%H:%M')})"))
+        for g0, g1 in huecos(pts)[-4:]:
+            eventos.append((g0, f"sensor sin datos {g0.strftime('%H:%M')}–{g1.strftime('%H:%M')}"))
+    except Exception:
+        pass
 
     if eventos:
         eventos.sort(key=lambda e: e[0])
