@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "79586493975",
+    "project_id": "orbit-copilot-ai",
+    "storage_bucket": "orbit-copilot-ai.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:79586493975:android:b2f8a6a975fa1192717e52",
+        "android_client_info": {
+          "package_name": "com.saulaguilera.orbit"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCeAVfj_SejXG02sbqIyK_Z4q-S_sdD0uY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
