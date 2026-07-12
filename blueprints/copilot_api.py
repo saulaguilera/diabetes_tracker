@@ -1043,9 +1043,16 @@ def copilot_profile():
         except (TypeError, ValueError):
             return None
 
+    # Valores OBSERVADOS (PMM bayesiano): el modelo de research está calibrado
+    # con los datos del usuario #1 y sus tablas NO son multi-tenant — mostrarlo
+    # a otro usuario sería filtrar la fisiología de otra persona. Gate duro.
+    observed = _observed_params() if session.get("user_id") == 1 else {}
+
     return jsonify({
         "ok": True,
         "name": _get_setting("user_name") or None,
+        # onboarding: usuarios nuevos completan nombre/objetivo/basal + sensor
+        "onboarded": bool(_get_setting("onboarding_done")) or session.get("user_id") == 1,
         "sensor": {
             "last_reading": int(round(last.value_mgdl)) if last else None,
             "last_reading_ago": _hace(last.timestamp) if last else None,
@@ -1061,10 +1068,8 @@ def copilot_profile():
             "basal_tipo": _get_setting("basal_tipo"),
             "glucose_unit": _get_setting("glucose_unit") or "mgdl",
         },
-        # Valores OBSERVADOS en los datos (PMM bayesiano, research). Solo se
-        # muestran como referencia descriptiva — jamás se auto-aplican a la
-        # terapia: ese ajuste es una decisión con el equipo médico.
-        "observed": _observed_params(),
+        # Solo referencia descriptiva — jamás se auto-aplica a la terapia.
+        "observed": observed,
     })
 
 
@@ -1996,6 +2001,9 @@ def copilot_profile_edit():
             u = (data.get("glucose_unit") or "").strip().lower()
             if u in ("mgdl", "mmol"):
                 _set_setting("glucose_unit", u)
+        # onboarding completado (lo marca la pantalla de bienvenida)
+        if data.get("onboarded"):
+            _set_setting("onboarding_done", "1")
         return jsonify({"ok": True})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400

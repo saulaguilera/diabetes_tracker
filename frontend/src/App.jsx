@@ -12,6 +12,7 @@ import Copiloto from './screens/Copiloto.jsx'
 import Perfil from './screens/Perfil.jsx'
 import DriveModeScreen from './drive_mode/DriveModeScreen.jsx'
 import NotifSheet from './components/NotifSheet.jsx'
+import Onboarding from './components/Onboarding.jsx'
 import { apiGet, apiPost } from './api.js'
 import { initAppPush } from './pushBridge.js'
 import { useLang } from './i18n.jsx'
@@ -192,6 +193,12 @@ export default function App() {
   const [showDrive, setShowDrive] = useState(false)
   const [showNotifs, setShowNotifs] = useState(false)
   const [unread, setUnread] = useState(0)
+  const [showOnboarding, setShowOnboarding] = useState(false)
+
+  // usuario recién registrado → bienvenida (nombre, terapia, sensor)
+  useEffect(() => {
+    apiGet('/profile').then(d => { if (d.onboarded === false) setShowOnboarding(true) }).catch(() => {})
+  }, [])
 
   // contador de notificaciones no leídas (al abrir la app y tras cada refresh)
   useEffect(() => {
@@ -248,6 +255,7 @@ export default function App() {
         <BottomNav theme={theme} current={tab} onChange={setTab}/>
         {showDrive && <DriveModeScreen onClose={() => setShowDrive(false)}/>}
         {showNotifs && <NotifSheet theme={theme} onClose={() => { setShowNotifs(false); setUnread(0) }}/>}
+        {showOnboarding && <Onboarding theme={theme} onDone={() => { setShowOnboarding(false); setRefreshKey(k => k + 1) }}/>}
       </div>
     </div>
   )

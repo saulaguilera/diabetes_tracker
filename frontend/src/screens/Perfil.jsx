@@ -98,10 +98,10 @@ export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleThe
         <Row theme={theme} label={t('perfil.target')} value={c.objetivo != null ? `${gVal(c.objetivo)} ${gUnit}` : '—'}/>
         <Row theme={theme} label={t('perfil.isf')}
           value={c.isf != null ? `${gVal(c.isf)} ${gUnit}/U` : 'auto'}
-          sub={obs.isf ? t('perfil.inYourData', { v: gVal(obs.isf.mu), n: obs.isf.n }) : null}/>
+          sub={obs.isf ? t('perfil.inYourData', { v: gVal(obs.isf.mu), n: obs.isf.n }) : t('perfil.noDataYet')}/>
         <Row theme={theme} label={t('perfil.icr')}
           value={c.icr != null ? `${c.icr} g/U` : 'auto'}
-          sub={obs.icr ? t('perfil.inYourData', { v: obs.icr.mu, n: obs.icr.n }) : null}/>
+          sub={obs.icr ? t('perfil.inYourData', { v: obs.icr.mu, n: obs.icr.n }) : t('perfil.noDataYet')}/>
         <Row theme={theme} label={t('perfil.basal')} value={basalTxt}/>
         {(obs.isf || obs.icr) && (
           <div style={{ color: theme.inkFaint, fontSize: 11, lineHeight: 1.5, marginTop: 10 }}>
