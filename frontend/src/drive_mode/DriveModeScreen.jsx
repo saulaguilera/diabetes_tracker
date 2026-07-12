@@ -1,6 +1,6 @@
 // DriveModeScreen.jsx — contenedor de Drive Mode (pantalla completa).
 // Consume GET /api/copilot/drive, auto-refresca, mantiene la pantalla encendida.
-// Modo demo: previsualiza los 6 estados (tocá para ciclar). No usa predicción.
+// Modo demo: previsualiza los 6 estados (toca para ciclar). No usa predicción.
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { apiGet, apiPost } from '../api.js'
