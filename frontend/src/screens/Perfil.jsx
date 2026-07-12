@@ -1,7 +1,7 @@
 // Perfil.jsx — datos del usuario, sensor, terapia (editable), médico y tema.
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { apiGet, apiPut } from '../api.js'
+import { apiGet, apiPut, apiDelete } from '../api.js'
 import { PAL, SANS } from '../theme.js'
 import { Card, Eyebrow, Stepper, Field, Loading, useSheetClose, backdropAnim, sheetAnim } from '../components/ui.jsx'
 import { useLang, LANGS } from '../i18n.jsx'
@@ -86,6 +86,7 @@ export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleThe
         <Row theme={theme} label={t('perfil.lastReading')} value={s.last_reading != null ? `${gVal(s.last_reading)} ${gUnit} · ${s.last_reading_ago}` : '—'}/>
         <Row theme={theme} label={t('perfil.sync')} value={s.last_sync_ago || '—'}/>
         <Row theme={theme} label={t('perfil.source')} value={s.source === 'cgm_libre' ? 'FreeStyle Libre' : (s.source || '—')}/>
+        <LibreConnect theme={theme}/>
       </Card>
 
       {/* terapia — configurado + observado en tus datos (referencia, no auto-aplica) */}
@@ -295,4 +296,86 @@ function EditSheet({ theme, name: name0, config, obs = {}, onClose, onSaved }) {
       </div>
     </div>
   ), document.body)
+}
+
+// ── Conexión del sensor: cuenta LibreLinkUp del usuario ──────────────────────
+// GET/PUT/DELETE /api/copilot/libre. La contraseña viaja UNA vez (se guarda
+// cifrada en el servidor) y jamás vuelve.
+function LibreConnect({ theme }) {
+  const { t } = useLang()
+  const [st, setSt] = useState(null)        // {connected, email}
+  const [open, setOpen] = useState(false)
+  const [email, setEmail] = useState('')
+  const [pass, setPass] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null)
+
+  useEffect(() => {
+    apiGet('/libre').then(setSt).catch(() => {})
+  }, [])
+
+  const conectar = async () => {
+    if (busy) return
+    setBusy(true); setMsg(null)
+    try {
+      const r = await apiPut('/libre', { email: email.trim(), password: pass })
+      setSt(r); setOpen(false); setEmail(''); setPass('')
+      setMsg(t('perfil.libre.ok'))
+    } catch (e) {
+      setMsg(t('perfil.libre.badCreds'))
+    } finally { setBusy(false) }
+  }
+
+  const desconectar = async () => {
+    if (busy) return
+    setBusy(true); setMsg(null)
+    try { const r = await apiDelete('/libre'); setSt(r) } catch (e) {}
+    setBusy(false)
+  }
+
+  const inputStyle = {
+    width: '100%', padding: '10px 12px', borderRadius: 12, fontSize: 14, fontFamily: SANS,
+    background: theme.bg, border: `0.5px solid ${theme.border}`, color: theme.ink, outline: 'none',
+  }
+  const btn = (primary) => ({
+    padding: '9px 16px', borderRadius: 100, cursor: 'pointer', fontFamily: SANS, fontSize: 13,
+    border: primary ? 'none' : `0.5px solid ${theme.border}`,
+    background: primary ? theme.accent : 'transparent',
+    color: primary ? '#0A0C1E' : theme.inkSoft,
+  })
+
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `0.5px solid ${theme.border}` }}>
+      {st && st.connected ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ flex: 1, color: theme.inkSoft, fontSize: 13 }}>
+            {t('perfil.libre.connected')} <span style={{ color: theme.ink }}>{st.email}</span>
+          </span>
+          <button onClick={desconectar} style={btn(false)}>{t('perfil.libre.disconnect')}</button>
+        </div>
+      ) : !open ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ flex: 1, color: theme.inkFaint, fontSize: 12.5, lineHeight: 1.45 }}>
+            {t('perfil.libre.pitch')}
+          </span>
+          <button onClick={() => setOpen(true)} style={btn(true)}>{t('perfil.libre.connect')}</button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ color: theme.inkFaint, fontSize: 12, lineHeight: 1.45 }}>{t('perfil.libre.hint')}</div>
+          <input style={inputStyle} type="email" placeholder={t('perfil.libre.email')}
+            value={email} onChange={e => setEmail(e.target.value)} autoComplete="off"/>
+          <input style={inputStyle} type="password" placeholder={t('perfil.libre.password')}
+            value={pass} onChange={e => setPass(e.target.value)} autoComplete="new-password"/>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button onClick={() => { setOpen(false); setMsg(null) }} style={btn(false)}>{t('common.cancel')}</button>
+            <button onClick={conectar} disabled={busy || !email.includes('@') || !pass} style={{ ...btn(true), opacity: busy ? 0.6 : 1 }}>
+              {busy ? t('perfil.libre.checking') : t('perfil.libre.save')}
+            </button>
+          </div>
+        </div>
+      )}
+      {msg && <div style={{ color: theme.inkFaint, fontSize: 12, marginTop: 8 }}>{msg}</div>}
+    </div>
+  )
 }

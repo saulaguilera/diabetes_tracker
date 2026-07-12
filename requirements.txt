@@ -16,3 +16,4 @@ Flask-WTF==1.2.2
 anthropic>=0.40.0
 PyJWT[crypto]==2.10.1
 httpx[http2]>=0.27.0
+cryptography>=42

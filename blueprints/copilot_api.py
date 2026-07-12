@@ -952,6 +952,70 @@ def copilot_test_push():
     return jsonify({"ok": bool(res.get("ok")), "result": res})
 
 
+@bp.route("/api/copilot/libre", methods=["GET", "PUT", "DELETE"],
+          endpoint="copilot_libre")
+def copilot_libre():
+    """Conexión del sensor: credenciales de LibreLinkUp del usuario.
+    GET → estado; PUT {email, password} → valida contra LibreLinkUp y guarda
+    cifrado; DELETE → desconecta. La contraseña jamás se devuelve."""
+    err = _require_login()
+    if err:
+        return err
+    from models import db, User
+    from utils.crypto_box import encrypt, decrypt
+    import os as _os
+    u = db.session.get(User, session["user_id"])
+    if not u:
+        return jsonify({"ok": False, "error": "Usuario no encontrado"}), 404
+
+    def _masked():
+        email = decrypt(u.libre_email_enc or "")
+        if not email and u.id == 1 and _os.environ.get("LIBRE_EMAIL"):
+            email = _os.environ["LIBRE_EMAIL"]   # fallback histórico del usuario 1
+        if not email:
+            return None
+        name, _, dom = email.partition("@")
+        return (name[:2] + "•••@" + dom) if dom else email[:2] + "•••"
+
+    if request.method == "GET":
+        return jsonify({"ok": True, "connected": bool(_masked()), "email": _masked()})
+
+    if request.method == "DELETE":
+        u.libre_email_enc = None
+        u.libre_password_enc = None
+        db.session.commit()
+        # limpiar el caché de token de Libre de este usuario
+        for k in ("libre_token", "libre_base_url", "libre_token_expiry",
+                  "libre_account_id", "libre_last_sync", "libre_rate_limited_at"):
+            try:
+                from helpers import _set_setting
+                _set_setting(k, "")
+            except Exception:
+                pass
+        return jsonify({"ok": True, "connected": False})
+
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip()
+    password = data.get("password") or ""
+    if "@" not in email or not password:
+        return jsonify({"ok": False, "error": "Email o contraseña inválidos"}), 400
+    # validar contra LibreLinkUp ANTES de guardar (un intento de login)
+    try:
+        from utils.libre_linkup import login as libre_login
+        libre_login(email, password)
+    except Exception as exc:
+        return jsonify({"ok": False,
+                        "error": f"LibreLinkUp rechazó las credenciales: {str(exc)[:120]}"}), 400
+    u.libre_email_enc = encrypt(email)
+    u.libre_password_enc = encrypt(password)
+    db.session.commit()
+    # invalidar caché de token (el próximo sync loguea fresco con esta cuenta)
+    from helpers import _set_setting
+    for k in ("libre_token", "libre_base_url", "libre_token_expiry", "libre_account_id"):
+        _set_setting(k, "")
+    return jsonify({"ok": True, "connected": True, "email": _masked()})
+
+
 @bp.route("/api/copilot/profile", endpoint="copilot_profile")
 def copilot_profile():
     """Pantalla Perfil — datos del usuario, sensor y terapia (solo lectura).

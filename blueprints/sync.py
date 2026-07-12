@@ -47,6 +47,19 @@ _SYNC_TOKEN     = os.environ.get("SYNC_TOKEN", "")
 _DEDUP_WINDOW_MIN = 2
 
 
+def _libre_creds_for_user(user) -> tuple[str, str]:
+    """Credenciales LibreLinkUp del usuario: las suyas (cifradas en users) o,
+    SOLO para el usuario #1, las del entorno como fallback (setup histórico)."""
+    from utils.crypto_box import decrypt
+    email = decrypt(user.libre_email_enc or "")
+    password = decrypt(user.libre_password_enc or "")
+    if email and password:
+        return email, password
+    if user.id == _SYNC_OWNER_USER_ID:
+        return _LIBRE_EMAIL, _LIBRE_PASSWORD
+    return "", ""
+
+
 def _do_libre_sync(email: str, password: str) -> dict:
     """
     Descarga lecturas de LibreLinkUp e inserta las nuevas en la base de datos.
@@ -838,22 +851,49 @@ def api_sync_libre():
         if not _SYNC_TOKEN or token_param != _SYNC_TOKEN:
             return jsonify({"error": "No autorizado"}), 401
 
-    email    = _LIBRE_EMAIL
-    password = _LIBRE_PASSWORD
+    is_manual = request.args.get("force") == "1"
 
-    if not email or not password:
-        return jsonify({
-            "error": "Configurá LIBRE_EMAIL y LIBRE_PASSWORD en las variables de entorno de Railway."
-        }), 400
+    # ── Sesión de un usuario: sincroniza SOLO su sensor ──────────────────────
+    if session.get("user_id"):
+        from models import User
+        u = db.session.get(User, session["user_id"])
+        email, password = _libre_creds_for_user(u) if u else ("", "")
+        if not email or not password:
+            return jsonify({"error": "Conectá tu sensor en Perfil (cuenta de LibreLinkUp)."}), 400
+        return jsonify(_sync_one_user(email, password, is_manual))
 
+    # ── Cron (SYNC_TOKEN): sincroniza a TODOS los usuarios con credenciales ──
+    from models import User
+    from helpers import set_user_context, reset_user_context
+    resultados, total_ins = {}, 0
+    usuarios = db.session.execute(
+        db.select(User), execution_options={"all_users": True}).scalars().all()
+    for u in usuarios:
+        email, password = _libre_creds_for_user(u)
+        if not email or not password:
+            continue
+        tok = set_user_context(u.id)
+        try:
+            r = _sync_one_user(email, password, is_manual)
+            resultados[u.username] = {k: r.get(k) for k in
+                                      ("insertadas", "total", "error", "cooldown")}
+            total_ins += r.get("insertadas") or 0
+        except Exception as exc:
+            resultados[u.username] = {"error": str(exc)[:200]}
+        finally:
+            reset_user_context(tok)
+    return jsonify({"insertadas": total_ins, "usuarios": resultados, "error": None})
+
+
+def _sync_one_user(email: str, password: str, is_manual: bool) -> dict:
+    """Cooldown + rate-limit + sync de UN usuario (settings del contexto actual)."""
     # ── Cooldown: no llamar a Abbott más seguido de cada 4 min ──────────────
     # El botón manual (?force=1) siempre bypasea el cooldown local.
     # El rate-limit de Abbott (429) se respeta siempre.
     _COOLDOWN_MIN  = 4    # mínimo entre syncs automáticas
     _RATELIMIT_MIN = 10   # espera tras un 429 de Abbott (10 min)
 
-    is_manual = request.args.get("force") == "1"
-    now       = datetime.now()
+    now = datetime.now()
 
     # Rate-limit de Abbott: se respeta incluso en sync manual
     rl_at_str = _get_setting("libre_rate_limited_at")
@@ -863,11 +903,11 @@ def api_sync_libre():
             secs_since_rl = (now - rl_at).total_seconds()
             if secs_since_rl < _RATELIMIT_MIN * 60:
                 wait = int(_RATELIMIT_MIN * 60 - secs_since_rl)
-                return jsonify({
+                return {
                     "insertadas": 0, "total": 0,
                     "error": f"Abbott limitó las requests (429). Esperá {wait // 60}m {wait % 60}s más.",
                     "rate_limited": True, "wait_seconds": wait,
-                })
+                }
         except (ValueError, TypeError):
             _set_setting("libre_rate_limited_at", "")   # timestamp corrupto → limpiar
 
@@ -880,12 +920,12 @@ def api_sync_libre():
                 secs_since = (now - last_sync).total_seconds()
                 if secs_since < _COOLDOWN_MIN * 60:
                     wait = int(_COOLDOWN_MIN * 60 - secs_since)
-                    return jsonify({
+                    return {
                         "insertadas": 0, "total": 0,
                         "error": None,
                         "cooldown": True, "wait_seconds": wait,
                         "mensaje": f"Ya sincronizaste hace {int(secs_since)}s. Próxima sync en {wait}s.",
-                    })
+                    }
             except (ValueError, TypeError):
                 pass
 
@@ -895,7 +935,7 @@ def api_sync_libre():
     if not resultado.get("error") or "429" not in (resultado.get("error") or ""):
         _set_setting("libre_rate_limited_at", "")
 
-    return jsonify(resultado)
+    return resultado
 
 
 @bp.route("/sync/libre", endpoint="sync_libre_manual")
