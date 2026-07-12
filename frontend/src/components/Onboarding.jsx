@@ -8,6 +8,7 @@ import { apiPut } from '../api.js'
 import { SANS } from '../theme.js'
 import { useLang } from '../i18n.jsx'
 import OrbitLogo from './OrbitLogo.jsx'
+import AyudaSheet from './AyudaSheet.jsx'
 
 export default function Onboarding({ theme, onDone }) {
   const { t } = useLang()
@@ -23,6 +24,7 @@ export default function Onboarding({ theme, onDone }) {
   const [pass, setPass] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   // proveedores CGM compatibles (mismo mapa que Perfil → LibreConnect)
   const P = {
@@ -177,9 +179,13 @@ export default function Onboarding({ theme, onDone }) {
                 </button>
               ))}
             </div>
-            <div style={{ color: theme.inkSoft, fontSize: 13.5, lineHeight: 1.55, marginBottom: 18 }}>
+            <div style={{ color: theme.inkSoft, fontSize: 13.5, lineHeight: 1.55, marginBottom: 6 }}>
               {provider === 'nightscout' ? t('sensor.nsHint') : provider === 'dexcom' ? t('sensor.dexcomHint') : t('onb.sensorHint')}
             </div>
+            <button onClick={() => setHelpOpen(true)} style={{ background: 'none', border: 'none', padding: 0,
+              color: theme.accent, fontSize: 13, fontFamily: SANS, cursor: 'pointer', marginBottom: 16 }}>
+              {t('onb.sensorHelp')}
+            </button>
             <label style={label}>{P[provider].f1}</label>
             <input style={{ ...input, marginBottom: 14 }} type={P[provider].t1} value={email} onChange={e => setEmail(e.target.value)} autoComplete="off"/>
             <label style={label}>{P[provider].f2}</label>
@@ -197,6 +203,7 @@ export default function Onboarding({ theme, onDone }) {
         </>
         )}
       </div>
+      {helpOpen && <AyudaSheet theme={theme} initial={provider} onClose={() => setHelpOpen(false)}/>}
     </div>
   ), document.body)
 }

@@ -5,6 +5,7 @@ import { apiGet, apiPut, apiDelete } from '../api.js'
 import { PAL, SANS } from '../theme.js'
 import { Card, Eyebrow, Stepper, Field, Loading, useSheetClose, backdropAnim, sheetAnim } from '../components/ui.jsx'
 import { useLang, LANGS } from '../i18n.jsx'
+import AyudaSheet from '../components/AyudaSheet.jsx'
 
 function Centered({ theme, children }) {
   return <div style={{ minHeight: '50%', display: 'grid', placeItems: 'center', textAlign: 'center', padding: '0 32px', color: theme.inkSoft, fontSize: 14, fontFamily: SANS }}>{children}</div>
@@ -48,6 +49,7 @@ export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleThe
   const [err, setErr] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [editing, setEditing] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -166,6 +168,16 @@ export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleThe
         <Toggle on={dark} onChange={onToggleTheme} color={theme.accent}/>
       </Card>
 
+      {/* centro de ayuda — guía de uso y conexión de sensores */}
+      <Card theme={theme} onClick={() => setHelpOpen(true)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontSize: 22 }}>🛟</span>
+        <div style={{ flex: 1 }}>
+          <div style={{ color: theme.ink, fontSize: 15 }}>{t('perfil.helpTitle')}</div>
+          <div style={{ color: theme.inkSoft, fontSize: 12.5, lineHeight: 1.45, marginTop: 2 }}>{t('perfil.helpDesc')}</div>
+        </div>
+        <span style={{ color: theme.inkFaint, fontSize: 16 }}>›</span>
+      </Card>
+
       {/* cerrar sesión — navegación completa a /logout (limpia la cookie) */}
       <button onClick={() => { window.location.href = '/logout' }} style={{
         width: '100%', padding: '13px', borderRadius: 14, cursor: 'pointer',
@@ -180,6 +192,7 @@ export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleThe
 
       {editing && <EditSheet theme={theme} name={data.name} config={c} obs={obs}
         onClose={() => setEditing(false)} onSaved={() => { setEditing(false); setReloadKey(k => k + 1) }}/>}
+      {helpOpen && <AyudaSheet theme={theme} onClose={() => setHelpOpen(false)}/>}
     </div>
   )
 }
