@@ -106,8 +106,24 @@ def _map_legacy_session():
             pass
 
 
+
+def _safe_create_all():
+    """_safe_create_all() tolerante a la carrera entre workers de gunicorn:
+    ambos corren el boot a la vez y el CREATE TABLE del perdedor explota con
+    'table already exists'. Reintento breve: el esquema del ganador alcanza."""
+    try:
+        db.create_all()
+    except Exception:
+        import time as _t
+        _t.sleep(1.5)
+        try:
+            db.create_all()
+        except Exception as exc:
+            print(f"create_all: esquema ya creado por otro worker ({exc})")
+
+
 with app.app_context():
-    db.create_all()
+    _safe_create_all()
     from sqlalchemy import text, inspect
     inspector = inspect(db.engine)
     with db.engine.connect() as conn:
@@ -182,9 +198,9 @@ with app.app_context():
                 conn.execute(text(ddl))
                 conn.commit()
         # Migración: tabla glucose_predictions (feedback del modelo)
-        # db.create_all() ya la crea si no existe — esto es solo un guard extra
+        # _safe_create_all() ya la crea si no existe — esto es solo un guard extra
         if "glucose_predictions" not in existing_tables:
-            db.create_all()   # dialect-aware: funciona en SQLite y PostgreSQL
+            _safe_create_all()   # dialect-aware: funciona en SQLite y PostgreSQL
         else:
             # Migración incremental: columnas para calibración y versionado
             gp_cols = [c["name"] for c in inspector.get_columns("glucose_predictions")]
@@ -199,25 +215,25 @@ with app.app_context():
                 conn.commit()
 
         # ── PMM: Personal Metabolic Model ─────────────────────────────────────
-        # db.create_all() crea las tablas nuevas automáticamente.
+        # _safe_create_all() crea las tablas nuevas automáticamente.
         # Las guardamos aquí por si el create_all inicial fue antes de agregar los modelos.
         if "pmm_parameters" not in existing_tables:
-            db.create_all()
+            _safe_create_all()
         if "pmm_observations" not in existing_tables:
-            db.create_all()
+            _safe_create_all()
         if "pmm_drift_state" not in existing_tables:
-            db.create_all()
+            _safe_create_all()
 
         # Tablas de validación científica (logging + diagnostics)
         if "prediction_audit" not in existing_tables:
-            db.create_all()
+            _safe_create_all()
         if "ssm_innovations" not in existing_tables:
-            db.create_all()
+            _safe_create_all()
         if "tuning_experiments" not in existing_tables:
-            db.create_all()
+            _safe_create_all()
         # Hito 8: audit trail de alertas de hipoglucemia nocturna
         if "hypo_risk_audit" not in existing_tables:
-            db.create_all()
+            _safe_create_all()
         else:
             # Migración incremental: campos de outcome tracking + alert fatigue
             hra_cols = [c["name"] for c in inspector.get_columns("hypo_risk_audit")]
@@ -243,7 +259,7 @@ with app.app_context():
                     conn.commit()
 
         if "daily_briefs" not in existing_tables:
-            db.create_all()
+            _safe_create_all()
         else:
             # Migración incremental: extensiones para lineage / reproducibility / gates
             te_cols = [c["name"] for c in inspector.get_columns("tuning_experiments")]
