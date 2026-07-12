@@ -112,7 +112,7 @@ def reset_user_context(token):
 # "u{id}::"), así los ~250 call sites no cambian. Claves realmente globales
 # (caches compartidos) van en la allowlist. Sin contexto de usuario, la clave
 # queda global (arranque/migraciones).
-_GLOBAL_SETTING_PREFIXES = ("pat_i18n_", "settings_ns_")
+_GLOBAL_SETTING_PREFIXES = ("pat_i18n_", "settings_ns_", "backup_")
 
 
 def _skey(key):

@@ -882,7 +882,17 @@ def api_sync_libre():
             resultados[u.username] = {"error": str(exc)[:200]}
         finally:
             reset_user_context(tok)
-    return jsonify({"insertadas": total_ins, "usuarios": resultados, "error": None})
+
+    # backup diario de la DB (piggyback del cron: corre si pasaron ≥24h)
+    backup_res = None
+    try:
+        from utils.db_backup import maybe_backup
+        backup_res = maybe_backup()
+    except Exception:
+        pass
+
+    return jsonify({"insertadas": total_ins, "usuarios": resultados,
+                    "backup": backup_res, "error": None})
 
 
 def _sync_one_user(email: str, password: str, is_manual: bool) -> dict:
@@ -936,6 +946,32 @@ def _sync_one_user(email: str, password: str, is_manual: bool) -> dict:
         _set_setting("libre_rate_limited_at", "")
 
     return resultado
+
+
+@bp.route("/api/backup/run", methods=["POST"], endpoint="api_backup_run")
+def api_backup_run():
+    """Backup manual (cron token o sesión del usuario 1)."""
+    token_param = request.args.get("token", "")
+    es_cron = _SYNC_TOKEN and token_param == _SYNC_TOKEN
+    if not es_cron and session.get("user_id") != 1:
+        return jsonify({"error": "No autorizado"}), 401
+    from utils.db_backup import run_backup
+    return jsonify(run_backup())
+
+
+@bp.route("/api/backup/status", endpoint="api_backup_status")
+def api_backup_status():
+    """Estado del backup automático (usuario 1)."""
+    if session.get("user_id") != 1:
+        return jsonify({"error": "No autorizado"}), 401
+    from helpers import _get_setting
+    return jsonify({
+        "ok": True,
+        "last_attempt": _get_setting("backup_last"),
+        "last_ok": _get_setting("backup_last_ok"),
+        "last_key": _get_setting("backup_last_key"),
+        "configured": bool(os.environ.get("BACKUP_S3_ENDPOINT")),
+    })
 
 
 @bp.route("/sync/libre", endpoint="sync_libre_manual")

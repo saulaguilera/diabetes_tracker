@@ -34,3 +34,11 @@ def decrypt(token: str) -> str:
         return _fernet().decrypt(token.encode()).decode()
     except Exception:
         return ""
+
+
+def encrypt_bytes(data: bytes) -> bytes:
+    return _fernet().encrypt(data)
+
+
+def decrypt_bytes(token: bytes) -> bytes:
+    return _fernet().decrypt(token)
