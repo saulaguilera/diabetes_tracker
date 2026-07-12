@@ -88,11 +88,17 @@ def _do_libre_sync(email: str, password: str) -> dict:
             GlucoseReading.timestamp <= ts + timedelta(minutes=_DEDUP_WINDOW_MIN),
         ).first()
         if not existe:
+            # user_id EXPLÍCITO: el evento before_flush lo asignaría desde el
+            # contexto, pero si el contexto llega vacío la lectura queda
+            # huérfana (invisible para todos). Cinturón y tiradores.
+            from helpers import current_user_id
+            _uid = current_user_id() or _SYNC_OWNER_USER_ID
             db.session.add(GlucoseReading(
                 timestamp=ts,
                 value_mgdl=r["value_mgdl"],
                 source="cgm_libre",
                 notes=r.get("trend", ""),
+                user_id=_uid,
             ))
             insertadas += 1
             if ultima_ts is None or ts > ultima_ts:
