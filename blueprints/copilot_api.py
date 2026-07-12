@@ -869,7 +869,7 @@ def _check_new_patterns():
     # push real al teléfono (si APNs está configurado y hay token registrado);
     # UN solo push por escaneo para no ametrallar
     try:
-        from drive_mode.apns_push import push_alert
+        from drive_mode.notify import push_alert
         if len(cuerpos) == 1:
             push_alert(titulo_notif, cuerpos[0])
         elif cuerpos:
@@ -923,16 +923,20 @@ def copilot_notifications_read():
 
 @bp.route("/api/copilot/push-token", methods=["POST"], endpoint="copilot_push_token")
 def copilot_push_token():
-    """La app nativa registra el token APNs del DISPOSITIVO (notificaciones
-    normales; distinto del token de la Live Activity)."""
+    """La app nativa registra el token push del DISPOSITIVO (notificaciones
+    normales; distinto del token de la Live Activity). platform decide el
+    canal: iOS → APNs (default, retrocompatible), Android → FCM."""
     err = _require_login()
     if err:
         return err
-    token = ((request.get_json(silent=True) or {}).get("token") or "").strip()
-    if not token or len(token) > 200:
+    data = request.get_json(silent=True) or {}
+    token = (data.get("token") or "").strip()
+    if not token or len(token) > 300:
         return jsonify({"ok": False, "error": "Token inválido"}), 400
+    platform = (data.get("platform") or "ios").strip().lower()
+    key = "app_fcm_token" if platform in ("android", "fcm") else "app_apns_token"
     from helpers import _set_setting
-    _set_setting("app_apns_token", token)
+    _set_setting(key, token)
     return jsonify({"ok": True})
 
 
@@ -943,7 +947,7 @@ def copilot_test_push():
     err = _require_login()
     if err:
         return err
-    from drive_mode.apns_push import push_alert
+    from drive_mode.notify import push_alert
     lang = _ui_lang()
     res = push_alert(_NOTIF_TITLES.get(lang, _NOTIF_TITLES["es"]), {
         "es": "Notificación de prueba — el push de la campanita funciona ✅",

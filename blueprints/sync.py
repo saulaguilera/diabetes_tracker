@@ -970,7 +970,7 @@ def _maybe_morning_brief(now=None):
         if hubo_baja:
             body += " — hubo una bajada, vale la pena mirarla en la app"
 
-    from drive_mode.apns_push import push_alert
+    from drive_mode.notify import push_alert
     return push_alert(title, body)
 
 

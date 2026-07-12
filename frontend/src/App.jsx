@@ -206,9 +206,12 @@ export default function App() {
   }, [refreshKey])
 
   // push nativo: pedir permiso + registrar el token del dispositivo en el
-  // backend (solo en la app iOS; en navegador es no-op)
+  // backend (iOS → APNs, Android → FCM; en navegador es no-op)
   useEffect(() => {
-    return initAppPush(token => { apiPost('/push-token', { token }).catch(() => {}) })
+    return initAppPush(token => {
+      const platform = (window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform()) || 'ios'
+      apiPost('/push-token', { token, platform }).catch(() => {})
+    })
   }, [])
 
   // recarga la pantalla activa; el spinner queda ~650ms mientras refetchea
