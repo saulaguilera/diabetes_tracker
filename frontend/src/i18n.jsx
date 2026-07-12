@@ -14,7 +14,7 @@ const DICT = {
     // navegación
     'nav.hoy': 'Hoy', 'nav.patrones': 'Patrones', 'nav.registro': 'Registro',
     'nav.copiloto': 'Copiloto', 'nav.perfil': 'Perfil',
-    'app.driveAria': 'Modo conducción',
+    'app.driveAria': 'Orbit Drive',
     // comunes
     'common.loading': 'Cargando…', 'common.save': 'Guardar', 'common.saving': 'Guardando…',
     'common.cancel': 'Cancelar', 'common.delete': 'Eliminar', 'common.deleting': 'Eliminando…',
@@ -164,7 +164,7 @@ const DICT = {
   en: {
     'nav.hoy': 'Today', 'nav.patrones': 'Patterns', 'nav.registro': 'Log',
     'nav.copiloto': 'Copilot', 'nav.perfil': 'Profile',
-    'app.driveAria': 'Drive mode',
+    'app.driveAria': 'Orbit Drive',
     'common.loading': 'Loading…', 'common.save': 'Save', 'common.saving': 'Saving…',
     'common.cancel': 'Cancel', 'common.delete': 'Delete', 'common.deleting': 'Deleting…',
     'onb.story1': 'Your glucose tells a story.',

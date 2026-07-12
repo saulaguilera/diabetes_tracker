@@ -40,7 +40,10 @@ export default function DriveModeExpanded({ data, onClose }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <OrbitMark color="#9BB3C9"/>
         <span style={{ fontSize: 14, letterSpacing: '0.22em', color: '#9BB3C9', fontWeight: 600 }}>ORBIT</span>
-        <span style={{ fontSize: 12, letterSpacing: '0.14em', color: dim, marginLeft: 4 }}>DRIVE</span>
+        {/* sub-marca de la familia: DRIVE con el degradado Orbit (como "Copilot") */}
+        <span style={{ fontSize: 14, letterSpacing: '0.22em', fontWeight: 700, marginLeft: 2,
+          background: 'linear-gradient(100deg, #22D3EE 0%, #38BDF8 42%, #8B5CF6 100%)',
+          WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>DRIVE</span>
         <div style={{ flex: 1 }}/>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, color: dim }}>
           <span style={{ width: 9, height: 9, borderRadius: '50%',
