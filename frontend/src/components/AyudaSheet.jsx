@@ -4,6 +4,9 @@
 // (con la sección del proveedor elegido ya abierta, vía `initial`).
 // El contenido largo vive aquí en es/en en lugar de i18n.jsx: son párrafos
 // completos, no etiquetas de UI.
+// OJO: el copiloto tiene una versión condensada de esta guía en su prompt
+// (blueprints/copilot_api.py, sección GUÍA DE USO DE ORBIT) — si cambias
+// pasos aquí, actualízala también.
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { SANS } from '../theme.js'

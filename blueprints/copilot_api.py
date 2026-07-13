@@ -1247,6 +1247,42 @@ REGLAS DE ESTILO:
   de lo que va a pasar. Para preguntas analíticas: el NÚMERO clave + el
   porqué, en 3-5 frases; sin listas salvo que ayuden de verdad.
 
+GUÍA DE USO DE ORBIT (misma info que Perfil → Centro de ayuda). Cuando
+pregunten cómo usar la app o conectar un sensor, responde con ESTOS pasos
+(en el idioma de la persona) — jamás inventes menús o pantallas que no
+están aquí. Si algo no aparece en esta guía, dilo y sugiere escribir a
+sauvlogs@gmail.com.
+- Conectar FreeStyle Libre: Orbit se conecta vía LibreLinkUp (la app de
+  seguidores), NO con la app LibreLink principal. Pasos: (1) en LibreLink:
+  Menú → Compartir → Aplicaciones conectadas → LibreLinkUp → invitar un
+  correo (puede ser uno tuyo distinto); (2) descargar la app LibreLinkUp,
+  entrar con ese correo y aceptar la invitación; (3) en Orbit (Perfil → Tu
+  sensor → Conectar, o durante el registro) elegir FreeStyle Libre y poner
+  el email y contraseña de ESA cuenta LibreLinkUp.
+- Conectar Dexcom (G6/G7): en la app de Dexcom activar Compartir (Share)
+  con al menos un seguidor activo; en Orbit elegir Dexcom y usar el usuario
+  y contraseña de la cuenta Dexcom PRINCIPAL (no la del seguidor).
+- Conectar Nightscout: en Orbit elegir Nightscout, poner la URL del sitio
+  (sin https:// está bien) y el token de acceso solo si el sitio es privado
+  (Admin tools → Subjects). Trae también los bolos de la bomba (Loop,
+  AndroidAPS, Omnipod DIY) automáticamente.
+- Registrar: pestaña Registro → comida, insulina, ejercicio o contexto
+  (estrés, enfermedad, dormir mal…). A las comidas se les puede sacar foto
+  y Orbit estima los carbohidratos (ajustables). Todo editable.
+- Patrones y avisos: Orbit busca patrones solo y avisa con la campanita 🔔;
+  la pestaña Patrones tiene el detalle. El brief matutino llega como
+  notificación si están habilitadas (en iPhone: Ajustes → Orbit).
+- Orbit Drive: botón arriba a la derecha; muestra la glucosa en la pantalla
+  de bloqueo/Dynamic Island. iOS lo apaga a las ~8 horas: reabrir Drive lo
+  reactiva.
+- Perfil: editar objetivo/basal/ISF/ICR (botón Editar), cambiar idioma y
+  unidad (mg/dL ↔ mmol/L), descargar reporte PDF para la consulta médica,
+  desconectar/reconectar el sensor, Centro de ayuda, cerrar sesión.
+- Problemas frecuentes: si no llegan lecturas → revisar credenciales, que
+  el seguidor (LibreLinkUp) o Share (Dexcom) siga activo y que el teléfono
+  del sensor tenga internet; Orbit sincroniza cada ~5 min. Credenciales
+  equivocadas → Perfil → Sensor → Desconectar y volver a conectar.
+
 CONTEXTO ACTUAL DE LA PERSONA:
 {context}"""
 
@@ -1278,7 +1314,7 @@ def _chat_context():
             sensor_ok = bool(_u and _u.libre_email_enc)
             L.append(
                 "USUARIO NUEVO: todavía NO hay ningún dato registrado (ni glucosa "
-                "ni comidas). Sensor LibreLinkUp: "
+                "ni comidas). Sensor CGM: "
                 + ("conectado — la glucosa va a empezar a entrar sola en minutos."
                    if sensor_ok else
                    "NO conectado (se conecta en Perfil → Tu sensor).")
