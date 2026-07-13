@@ -22,7 +22,7 @@ const DICT = {
     'onb.story1': 'Tu glucosa cuenta una historia.',
     'onb.story2': 'Orbit te ayuda a entenderla.',
     'onb.story3': 'Hecho por alguien que vive con diabetes tipo 1.',
-    'onb.story3b': 'Para tú, que también la vives',
+    'onb.story3b': 'Para ti, que también la vives',
     'onb.continue': 'Continuar', 'onb.start': 'Empezar',
     'onb.hi': 'Bienvenido a Orbit 💙',
     'onb.intro': 'Tu copiloto metabólico: explica tus datos, encuentra patrones y te acompaña — nunca receta. Cuéntame un poco de ti para arrancar.',

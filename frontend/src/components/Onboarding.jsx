@@ -8,7 +8,49 @@ import { apiPut } from '../api.js'
 import { SANS } from '../theme.js'
 import { useLang } from '../i18n.jsx'
 import OrbitLogo from './OrbitLogo.jsx'
+import Starfield from './Starfield.jsx'
 import AyudaSheet from './AyudaSheet.jsx'
+
+// texto que entra palabra por palabra (esencia: la historia se va contando)
+function PalabrasVivas({ texto, base = 0.15 }) {
+  return texto.split(' ').map((w, i) => (
+    <span key={i} className="onb-word" style={{ animationDelay: `${(base + i * 0.09).toFixed(2)}s` }}>
+      {w}{' '}
+    </span>
+  ))
+}
+
+// la curva de glucosa que se dibuja sola — el corazón visual de la marca.
+// Con `marcadores`, los eventos del día (comida/insulina/movimiento) aparecen
+// sobre la curva: "Orbit te ayuda a entenderla".
+function OndaHistoria({ marcadores = false }) {
+  const d = 'M4,56 C34,52 48,20 74,18 C100,16 110,46 136,52 C162,58 172,28 198,24 C224,20 234,50 258,54 C282,58 298,36 316,32'
+  const eventos = [[74, 18, '🍎'], [136, 52, '💧'], [198, 24, '🏃']]
+  return (
+    <svg viewBox="0 0 320 78" style={{ width: '100%', maxWidth: 300, height: 74, display: 'block',
+      margin: '0 auto 26px', overflow: 'visible' }}>
+      <defs>
+        <linearGradient id="ondaOnb" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#22D3EE"/>
+          <stop offset="55%" stopColor="#38BDF8"/>
+          <stop offset="100%" stopColor="#8B5CF6"/>
+        </linearGradient>
+      </defs>
+      <path d={d} fill="none" stroke="url(#ondaOnb)" strokeWidth="3.5" strokeLinecap="round"
+        opacity="0.28" filter="blur(5px)"
+        style={{ strokeDasharray: 560, strokeDashoffset: 560, animation: 'waveDraw 2.1s cubic-bezier(.45,0,.2,1) .25s forwards' }}/>
+      <path d={d} fill="none" stroke="url(#ondaOnb)" strokeWidth="3" strokeLinecap="round"
+        style={{ strokeDasharray: 560, strokeDashoffset: 560, animation: 'waveDraw 2.1s cubic-bezier(.45,0,.2,1) .25s forwards' }}/>
+      {marcadores && eventos.map(([x, y, emoji], i) => (
+        <g key={i} className="onb-pop" style={{ animationDelay: `${(0.9 + i * 0.35).toFixed(2)}s` }}>
+          <circle cx={x} cy={y} r="5.5" fill="#0B1324" stroke="#22D3EE" strokeWidth="1.5"/>
+          <circle cx={x} cy={y} r="2.4" fill="#22D3EE"/>
+          <text x={x} y={y - 13} textAnchor="middle" fontSize="15">{emoji}</text>
+        </g>
+      ))}
+    </svg>
+  )
+}
 
 export default function Onboarding({ theme, onDone }) {
   const { t } = useLang()
@@ -76,23 +118,47 @@ export default function Onboarding({ theme, onDone }) {
   return createPortal((
     <div style={{ position: 'fixed', inset: 0, zIndex: 300, fontFamily: SANS,
       background: theme.dark ? 'radial-gradient(125% 90% at 50% -8%, #16243F 0%, #0B1324 46%, #060B18 100%)' : theme.bg,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div style={{ width: '100%', maxWidth: 420 }}>
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, overflow: 'hidden' }}>
+      {/* esencia de marca: nebulosa a la deriva + estrellas que titilan */}
+      {theme.dark && (
+        <>
+          <div className="onb-nebula" style={{ position: 'absolute', inset: '-12%', pointerEvents: 'none',
+            background: 'radial-gradient(55% 32% at 18% 8%, rgba(139,92,246,0.15) 0%, transparent 70%), ' +
+                        'radial-gradient(50% 30% at 88% 62%, rgba(34,211,238,0.11) 0%, transparent 70%), ' +
+                        'radial-gradient(48% 28% at 50% 102%, rgba(56,189,248,0.09) 0%, transparent 70%)' }}/>
+          <Starfield count={46} seed={7} opacity={0.85}/>
+        </>
+      )}
+      <div style={{ width: '100%', maxWidth: 420, position: 'relative' }}>
         {story < 3 ? (
-          /* ── historia: tres pantallas, pocas palabras ── */
+          /* ── historia: tres pantallas, pocas palabras, cada una con su visual ── */
           <div key={'st' + story} className="rise-in" onClick={() => setStory(v => v + 1)}
             style={{ textAlign: 'center', cursor: 'pointer', padding: '40px 8px' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 34 }}>
-              <OrbitLogo size={52}/>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 30 }}>
+              <OrbitLogo size={60}/>
             </div>
+
+            {/* visual temático: la curva se dibuja → los eventos la explican → el corazón */}
+            <div style={{ minHeight: 86 }}>
+              {story === 0 && <OndaHistoria/>}
+              {story === 1 && <OndaHistoria marcadores/>}
+              {story === 2 && (
+                <div className="onb-pop" style={{ fontSize: 42, marginBottom: 18, animationDelay: '0.2s' }}>
+                  <span className="onb-heart">💙</span>
+                </div>
+              )}
+            </div>
+
             <div style={{ color: theme.ink, fontSize: 30, fontWeight: 300, lineHeight: 1.3,
               letterSpacing: '-0.02em', minHeight: 118 }}>
-              {story === 0 && t('onb.story1')}
-              {story === 1 && t('onb.story2')}
+              {story === 0 && <PalabrasVivas texto={t('onb.story1')} base={0.5}/>}
+              {story === 1 && <PalabrasVivas texto={t('onb.story2')} base={0.5}/>}
               {story === 2 && (
                 <>
-                  {t('onb.story3')}
-                  <div style={{ fontSize: 17, color: theme.inkSoft, marginTop: 14 }}>{t('onb.story3b')} 💙</div>
+                  <PalabrasVivas texto={t('onb.story3')} base={0.4}/>
+                  <div style={{ fontSize: 17, color: theme.inkSoft, marginTop: 14 }}>
+                    <PalabrasVivas texto={t('onb.story3b')} base={1.1}/>
+                  </div>
                 </>
               )}
             </div>
@@ -104,7 +170,8 @@ export default function Onboarding({ theme, onDone }) {
             </div>
             <button onClick={e => { e.stopPropagation(); setStory(v => v + 1) }} style={{
               padding: '13px 34px', borderRadius: 100, cursor: 'pointer', border: 'none',
-              background: theme.accent, color: '#0A0C1E', fontFamily: SANS, fontSize: 15, fontWeight: 600 }}>
+              background: theme.accent, color: '#0A0C1E', fontFamily: SANS, fontSize: 15, fontWeight: 600,
+              boxShadow: '0 0 26px rgba(34,211,238,0.35)' }}>
               {story === 2 ? t('onb.start') : t('onb.continue')}
             </button>
           </div>

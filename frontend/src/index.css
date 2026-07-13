@@ -63,10 +63,23 @@ body::after {
 @keyframes twBlink { 0%, 100% { opacity: 0.7; } 50% { opacity: 0; } }
 .tw-caret { animation: twBlink 0.9s steps(1) infinite; margin-left: 1px; font-weight: 300; }
 
+/* onboarding: la historia que cuenta la glucosa (intro de marca) */
+@keyframes wordIn   { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes waveDraw { to { stroke-dashoffset: 0; } }
+@keyframes popIn    { 0% { opacity: 0; transform: scale(0.3); } 70% { transform: scale(1.18); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes heartBeat{ 0%,100% { transform: scale(1); } 12% { transform: scale(1.14); } 24% { transform: scale(1.04); } 36% { transform: scale(1.1); } }
+@keyframes nebDrift { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(2.5%, -2%) scale(1.05); } }
+.onb-word   { display: inline-block; opacity: 0; animation: wordIn .55s cubic-bezier(.2,.8,.2,1) forwards; }
+.onb-pop    { opacity: 0; animation: popIn .5s cubic-bezier(.2,.8,.2,1) forwards; transform-origin: 50% 100%; }
+.onb-heart  { animation: heartBeat 1.9s ease-in-out .6s infinite; transform-origin: center; display: inline-block; }
+.onb-nebula { animation: nebDrift 14s ease-in-out infinite; }
+
 /* respetar la preferencia de reducir movimiento */
 @media (prefers-reduced-motion: reduce) {
   .msg-in, .rise-in { animation: none; }
   .tw-caret { display: none; }
+  .onb-word, .onb-pop { animation: none; opacity: 1; }
+  .onb-heart, .onb-nebula { animation: none; }
 }
 
 @keyframes aiSpin { to { transform: rotate(360deg); } }
