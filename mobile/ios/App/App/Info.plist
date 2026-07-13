@@ -12,6 +12,8 @@
 	<string>Orbit no usa el micrófono, pero iOS lo requiere para la cámara.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
+	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>CAPACITOR_DEBUG</key>

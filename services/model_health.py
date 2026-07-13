@@ -520,11 +520,18 @@ def is_ready_for_bench(days: int = 7) -> dict:
 
 # ── Guardrails ──────────────────────────────────────────────────────────────
 
+_ultimo_warn = {"fp": None, "at": 0.0}
+_WARN_CADA_S = 12 * 3600   # el mismo warning repetido: 1 vez cada 12 h
+
+
 def log_health_warnings() -> None:
     """
     Revisa el estado y emite warnings al logger 'model_health'.
     Pensado para ser llamado al final de cada sync. NO bloquea: cualquier
     excepción se traga silenciosamente.
+    Los blocking se loguean SIEMPRE; los warnings repetidos se silencian
+    12 h para no inundar los logs de Railway (p. ej. coverage_ratio en
+    warm-up repetía la misma línea cada 5 minutos).
     """
     try:
         health = get_model_health(days=1)   # sólo últimas 24h, barato
@@ -538,5 +545,13 @@ def log_health_warnings() -> None:
 
     for issue in health.get("blocking_issues", []):
         logger.error("blocking: %s", issue)
-    for w in health.get("warnings", []):
+
+    import time as _time
+    ws = health.get("warnings", [])
+    fp = "|".join(ws)
+    ahora = _time.time()
+    if fp == _ultimo_warn["fp"] and (ahora - _ultimo_warn["at"]) < _WARN_CADA_S:
+        return
+    _ultimo_warn["fp"], _ultimo_warn["at"] = fp, ahora
+    for w in ws:
         logger.warning("warn: %s", w)

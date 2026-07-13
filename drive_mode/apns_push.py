@@ -177,11 +177,17 @@ def _send(device_token: str, content_state: dict) -> dict:
             "stale-date":    now + _STALE_AFTER_S,
         }
     }
+    # Presupuesto de iOS: los updates de Live Activity con prioridad 10 tienen
+    # un cupo por hora; agotado el cupo, el sistema los descarta en el
+    # dispositivo (APNs igual responde 200 → desde el servidor "todo bien"
+    # pero la actividad se congela). Rutina → prioridad 5 (no consume cupo);
+    # estados de riesgo → 10 (entrega inmediata).
+    urgente = content_state.get("statusLevel") in ("urgent", "caution")
     headers = {
         "authorization":   f"bearer {jwt_token}",
         "apns-topic":      _topic(),
         "apns-push-type":  "liveactivity",
-        "apns-priority":   "10",
+        "apns-priority":   "10" if urgente else "5",
         "apns-expiration": "0",
     }
 
