@@ -104,6 +104,37 @@ def privacidad():
     return render_template("privacidad.html")
 
 
+# ── Descarga de Orbit para Android (beta por APK directo) ────────────────────
+# Página pública con la estética de la marca + el APK servido desde el propio
+# dominio: un solo link para los testers, y al reemplazar static/descargas/
+# orbit.apk el mismo link entrega siempre la última versión.
+_APK_PATH = os.path.join(os.path.dirname(__file__), "..", "static", "descargas", "orbit.apk")
+
+
+@bp.route("/android", endpoint="android")
+def android():
+    disponible, tam_mb, fecha = False, None, None
+    try:
+        st = os.stat(_APK_PATH)
+        disponible = st.st_size > 0
+        tam_mb = round(st.st_size / (1024 * 1024), 1)
+        from datetime import datetime as _dt
+        fecha = _dt.fromtimestamp(st.st_mtime).strftime("%d/%m/%Y")
+    except OSError:
+        pass
+    return render_template("android.html", disponible=disponible,
+                           tam_mb=tam_mb, fecha=fecha)
+
+
+@bp.route("/android/orbit.apk", endpoint="android_apk")
+def android_apk():
+    from flask import send_file, abort
+    if not os.path.exists(_APK_PATH):
+        abort(404)
+    return send_file(_APK_PATH, as_attachment=True, download_name="Orbit.apk",
+                     mimetype="application/vnd.android.package-archive")
+
+
 @bp.route("/logout", endpoint="logout")
 def logout():
     session.clear()

@@ -76,7 +76,8 @@ def _protect_all():
     # → loop infinito ("too many redirects") cuando no hay sesión.
     exempt = {"login", "logout", "static", "auth.login", "auth.logout",
               "register", "auth.register", "privacidad", "auth.privacidad",
-              "healthz", "admin.healthz"}   # latido público para UptimeRobot
+              "healthz", "admin.healthz",   # latido público para UptimeRobot
+              "android", "auth.android", "android_apk", "auth.android_apk"}
     if request.endpoint in exempt or session.get("logged_in"):
         return
     # Permitir llamadas de cron/API autenticadas con SYNC_TOKEN

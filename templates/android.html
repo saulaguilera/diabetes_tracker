@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <title>Orbit para Android</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      font-family: 'Outfit', -apple-system, system-ui, sans-serif;
+      background: radial-gradient(125% 90% at 50% -8%, #16243F 0%, #0B1324 46%, #060B18 100%);
+      color: #EAF2F8; min-height: 100vh; min-height: 100dvh;
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px; overflow: hidden; position: relative;
+    }
+    .glow { position: fixed; inset: -15%; pointer-events: none; z-index: 0;
+      background:
+        radial-gradient(55% 30% at 18% 8%, rgba(139,92,246,0.14) 0%, transparent 70%),
+        radial-gradient(50% 28% at 88% 60%, rgba(34,211,238,0.11) 0%, transparent 70%),
+        radial-gradient(45% 26% at 50% 100%, rgba(56,189,248,0.08) 0%, transparent 70%);
+      animation: neb 14s ease-in-out infinite; }
+    @keyframes neb { 0%,100% { transform: translate(0,0) } 50% { transform: translate(2%,-1.5%) scale(1.04) } }
+    .star { position: fixed; border-radius: 50%; background: #fff; pointer-events: none; z-index: 0;
+      animation: tw 3.6s ease-in-out infinite; }
+    @keyframes tw { 0%,100% { opacity: .16 } 50% { opacity: .7 } }
+    .card {
+      position: relative; z-index: 1; width: 100%; max-width: 420px; text-align: center;
+      background: rgba(255,255,255,0.045); border: 0.5px solid rgba(255,255,255,0.085);
+      border-radius: 26px; padding: 38px 28px calc(30px + env(safe-area-inset-bottom));
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      animation: rise .5s cubic-bezier(.2,.8,.2,1);
+    }
+    @keyframes rise { from { opacity: 0; transform: translateY(16px) } to { opacity: 1; transform: none } }
+    .brand { display: flex; align-items: center; justify-content: center; gap: 9px; margin-bottom: 4px; }
+    .wordmark { font-size: 22px; font-weight: 300; display: flex; align-items: center; gap: 7px; }
+    .wordmark .grad { font-weight: 500;
+      background: linear-gradient(100deg, #22D3EE 0%, #38BDF8 42%, #8B5CF6 100%);
+      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; margin: 10px 0 6px;
+      font-size: 12px; font-weight: 700; letter-spacing: .05em; color: #34D399;
+      background: rgba(52,211,153,0.12); border: 0.5px solid rgba(52,211,153,0.4);
+      border-radius: 100px; padding: 5px 12px; }
+    .sub { color: rgba(234,242,248,0.6); font-size: 14px; line-height: 1.55; margin: 10px 0 24px; }
+    .dl {
+      display: block; width: 100%; padding: 16px; border: none; border-radius: 100px;
+      background: #22D3EE; color: #0A0C1E; font-family: inherit; text-decoration: none;
+      font-size: 16px; font-weight: 700; cursor: pointer;
+      box-shadow: 0 0 34px rgba(34,211,238,0.4); transition: transform .12s;
+    }
+    .dl:active { transform: scale(0.98); }
+    .meta { color: rgba(234,242,248,0.4); font-size: 12px; margin-top: 10px; }
+    .pasos { text-align: left; margin-top: 26px; display: flex; flex-direction: column; gap: 13px; }
+    .paso { display: flex; gap: 12px; align-items: flex-start; }
+    .n { flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; margin-top: 1px;
+      background: rgba(34,211,238,0.14); color: #22D3EE; font-weight: 700; font-size: 13px;
+      display: grid; place-items: center; }
+    .paso div { color: rgba(234,242,248,0.72); font-size: 13.5px; line-height: 1.55; }
+    .paso b { color: #EAF2F8; font-weight: 600; }
+    .foot { color: rgba(234,242,248,0.35); font-size: 11.5px; line-height: 1.6; margin-top: 26px; }
+    .foot a { color: #22D3EE; text-decoration: none; }
+    svg { display: block; overflow: visible; }
+  </style>
+</head>
+<body>
+  <div class="glow"></div>
+  <div class="star" style="top:10%; left:12%; width:2px; height:2px;"></div>
+  <div class="star" style="top:20%; left:80%; width:3px; height:3px; animation-delay:.7s;"></div>
+  <div class="star" style="top:62%; left:7%;  width:2px; height:2px; animation-delay:1.3s;"></div>
+  <div class="star" style="top:80%; left:88%; width:2px; height:2px; animation-delay:2s;"></div>
+  <div class="star" style="top:40%; left:93%; width:2px; height:2px; animation-delay:.4s;"></div>
+  <div class="star" style="top:90%; left:34%; width:3px; height:3px; animation-delay:1.7s;"></div>
+  <div class="star" style="top:6%;  left:55%; width:2px; height:2px; animation-delay:2.4s;"></div>
+
+  <div class="card">
+    <div class="brand">
+      <svg width="34" height="34" viewBox="0 0 120 120">
+        <defs>
+          <linearGradient id="r" x1="0" y1="0" x2="1" y2="1.1">
+            <stop offset="0%" stop-color="#22D3EE"/><stop offset="45%" stop-color="#38BDF8"/><stop offset="100%" stop-color="#8B5CF6"/>
+          </linearGradient>
+          <radialGradient id="c" cx="44%" cy="40%" r="60%">
+            <stop offset="0%" stop-color="#FFFFFF"/><stop offset="35%" stop-color="#5FE3F5"/>
+            <stop offset="72%" stop-color="#22D3EE" stop-opacity="0.7"/><stop offset="100%" stop-color="#22D3EE" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <circle cx="60" cy="60" r="44" fill="none" stroke="url(#r)" stroke-width="6.5" stroke-linecap="round"/>
+        <circle cx="60" cy="60" r="25" fill="none" stroke="#22D3EE" stroke-width="1" stroke-dasharray="2 4.5" opacity="0.5"/>
+        <circle cx="60" cy="60" r="13" fill="url(#c)"/>
+        <circle cx="60" cy="60" r="6" fill="#FFFFFF"/>
+        <circle cx="94" cy="32" r="4" fill="#FFFFFF"/>
+        <circle cx="94" cy="32" r="4" fill="none" stroke="#22D3EE" stroke-width="1.5"/>
+      </svg>
+      <span class="wordmark">Orbit <span class="grad">Copilot</span></span>
+    </div>
+    <div class="chip">🤖 PARA ANDROID · BETA</div>
+    <p class="sub">Tu copiloto metabólico: glucosa, comidas, insulina y ejercicio,
+    explicados con claridad — hecho por alguien que vive con diabetes tipo 1.</p>
+
+    {% if disponible %}
+      <a class="dl" href="{{ url_for('auth.android_apk') }}">Descargar Orbit</a>
+      <div class="meta">orbit.apk · {{ tam_mb }} MB · actualizado {{ fecha }}</div>
+    {% else %}
+      <div class="dl" style="opacity:.45; box-shadow:none; cursor:default;">Disponible pronto</div>
+    {% endif %}
+
+    <div class="pasos">
+      <div class="paso"><div class="n">1</div>
+        <div><b>Descarga</b> el archivo y ábrelo desde la notificación o tu carpeta de Descargas.</div></div>
+      <div class="paso"><div class="n">2</div>
+        <div>Android te pedirá <b>permitir instalar apps desconocidas</b> — acéptalo, es solo para esta instalación.</div></div>
+      <div class="paso"><div class="n">3</div>
+        <div>Abre Orbit, toca <b>Crea tu cuenta</b> y usa tu <b>código de invitación</b>. Ahí mismo conectas tu sensor (Libre, Dexcom o Nightscout).</div></div>
+    </div>
+
+    <div class="foot">
+      Beta privada por invitación · Tus datos, cifrados y solo tuyos ·
+      <a href="/privacidad">Política de privacidad</a>
+    </div>
+  </div>
+</body>
+</html>
