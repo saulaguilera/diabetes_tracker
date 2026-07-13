@@ -410,17 +410,14 @@ def _inject_nav_endpoint():
     return {'ep': simple}
 
 
-# ── Scheduler automático (cada 5 min si hay credenciales configuradas) ────────
+# ── Scheduler automático (cada 5 min; cada usuario con sus credenciales) ──────
 def _iniciar_scheduler():
-    """Inicia APScheduler para sync automática si hay credenciales disponibles."""
-    if not _LIBRE_EMAIL or not _LIBRE_PASSWORD:
-        return  # Sin credenciales, no hay nada que hacer
-
+    """Inicia APScheduler para la sync automática multi-usuario."""
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
         from apscheduler.events import EVENT_JOB_ERROR
         import threading, fcntl, tempfile
-        from blueprints.sync import _do_libre_sync
+        from blueprints.sync import sync_all_users
 
         # Lock de archivo para evitar que múltiples workers de gunicorn
         # ejecuten el scheduler al mismo tiempo
@@ -434,9 +431,11 @@ def _iniciar_scheduler():
                 return  # Otro worker ya tiene el lock
 
             def _sync_job():
+                # Todos los usuarios, cada uno bajo su contexto de tenant
+                # (settings u{id}:: visibles: token de Drive, brief, etc.)
                 with app.app_context():
                     try:
-                        _do_libre_sync(_LIBRE_EMAIL, _LIBRE_PASSWORD)
+                        sync_all_users()
                     except Exception:
                         pass
 

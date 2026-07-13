@@ -146,11 +146,15 @@ def push_drive_update() -> dict:
     Nunca levanta excepciones al caller. Devuelve un dict con el resultado.
     """
     if not _enabled():
-        return {"ok": False, "reason": "disabled"}
+        res = {"ok": False, "reason": "disabled"}
+        _marcar_ultimo_push(res)
+        return res
 
     token = _get_registered_token()
     if not token:
-        return {"ok": False, "reason": "no_token"}
+        res = {"ok": False, "reason": "no_token"}
+        _marcar_ultimo_push(res)
+        return res
 
     content = None
     try:

@@ -892,6 +892,16 @@ def api_sync_libre():
         return jsonify(_sync_one_user(email, password, is_manual, provider))
 
     # ── Cron (SYNC_TOKEN): sincroniza a TODOS los usuarios con credenciales ──
+    return jsonify(sync_all_users(is_manual))
+
+
+def sync_all_users(is_manual: bool = False) -> dict:
+    """Sincroniza el sensor de TODOS los usuarios con credenciales, cada uno
+    bajo SU contexto de tenant (así el push de la Live Activity, el brief
+    matutino y los settings per-usuario resuelven las claves u{id}:: bien).
+    La usan el endpoint de cron (SYNC_TOKEN) y el APScheduler interno —
+    que antes llamaba _do_libre_sync sin contexto y por eso el push de
+    Drive salía por no_token sin actualizar jamás la Live Activity."""
     from models import User
     from helpers import set_user_context, reset_user_context
     resultados, total_ins = {}, 0
@@ -924,8 +934,8 @@ def api_sync_libre():
     except Exception:
         pass
 
-    return jsonify({"insertadas": total_ins, "usuarios": resultados,
-                    "backup": backup_res, "error": None})
+    return {"insertadas": total_ins, "usuarios": resultados,
+            "backup": backup_res, "error": None}
 
 
 def _maybe_morning_brief(now=None):
