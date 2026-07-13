@@ -152,15 +152,37 @@ def push_drive_update() -> dict:
     if not token:
         return {"ok": False, "reason": "no_token"}
 
+    content = None
     try:
         from drive_mode import build_drive_mode_state, to_live_activity_payload
         state   = build_drive_mode_state()
         payload = to_live_activity_payload(state)
         content = build_content_state(payload)
-        return _send(token, content)
+        res = _send(token, content)
     except Exception as exc:
         log.warning("APNs push falló: %s", exc)
-        return {"ok": False, "reason": f"error: {exc}"}
+        res = {"ok": False, "reason": f"error: {exc}"}
+    _marcar_ultimo_push(res, content)
+    return res
+
+
+def _marcar_ultimo_push(res: dict, content=None) -> None:
+    """Observabilidad: guarda el resultado del último push en settings para
+    poder diagnosticar 'la actividad no se actualiza' con evidencia (la
+    respuesta 200 de APNs no garantiza que el teléfono lo haya aplicado,
+    pero al menos prueba si el servidor está empujando y con qué resultado)."""
+    try:
+        import json as _json
+        from datetime import datetime as _dt
+        from helpers import _set_setting
+        _set_setting("drive_push_last", _json.dumps({
+            "at": _dt.now().isoformat(timespec="seconds"),
+            "ok": bool(res.get("ok")),
+            "reason": res.get("reason", ""),
+            "value": (content or {}).get("glucoseValueMgdl"),
+        }))
+    except Exception:
+        pass
 
 
 def _send(device_token: str, content_state: dict) -> dict:
@@ -177,18 +199,20 @@ def _send(device_token: str, content_state: dict) -> dict:
             "stale-date":    now + _STALE_AFTER_S,
         }
     }
-    # Presupuesto de iOS: los updates de Live Activity con prioridad 10 tienen
-    # un cupo por hora; agotado el cupo, el sistema los descarta en el
-    # dispositivo (APNs igual responde 200 → desde el servidor "todo bien"
-    # pero la actividad se congela). Rutina → prioridad 5 (no consume cupo);
-    # estados de riesgo → 10 (entrega inmediata).
-    urgente = content_state.get("statusLevel") in ("urgent", "caution")
+    # Prioridad 10 SIEMPRE: para glucosa la entrega oportunista (prioridad 5)
+    # puede diferirse indefinidamente con el teléfono en reposo — inaceptable.
+    # El cupo por hora de updates prioridad-10 lo resuelve el entitlement
+    # NSSupportsLiveActivitiesFrequentUpdates (build 4 de la app).
+    # apns-expiration: si el teléfono está inalcanzable en este instante
+    # (sin señal, reposo profundo), APNs guarda el push hasta esta marca en
+    # vez de descartarlo — con "0" se perdía y la actividad quedaba congelada
+    # hasta el próximo sync que sí lo encontrara despierto.
     headers = {
         "authorization":   f"bearer {jwt_token}",
         "apns-topic":      _topic(),
         "apns-push-type":  "liveactivity",
-        "apns-priority":   "10" if urgente else "5",
-        "apns-expiration": "0",
+        "apns-priority":   "10",
+        "apns-expiration": str(now + 270),   # vigente hasta ~el próximo sync
     }
 
     import httpx   # lazy: HTTP/2 (APNs es HTTP/2-only)
