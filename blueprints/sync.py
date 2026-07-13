@@ -904,6 +904,16 @@ def sync_all_users(is_manual: bool = False) -> dict:
     Drive salía por no_token sin actualizar jamás la Live Activity."""
     from models import User
     from helpers import set_user_context, reset_user_context
+    import json as _json
+    from datetime import datetime as _dt
+
+    # latido del scheduler (clave GLOBAL "sched_"): /healthz y el panel admin
+    # lo usan para saber que el sync automático respira
+    try:
+        _set_setting("sched_last_run", _dt.now().isoformat(timespec="seconds"))
+    except Exception:
+        pass
+
     resultados, total_ins = {}, 0
     usuarios = db.session.execute(
         db.select(User), execution_options={"all_users": True}).scalars().all()
@@ -924,6 +934,17 @@ def sync_all_users(is_manual: bool = False) -> dict:
         except Exception as exc:
             resultados[u.username] = {"error": str(exc)[:200]}
         finally:
+            # bitácora por usuario (clave u{id}::sync_last) para el panel admin
+            try:
+                res_u = resultados.get(u.username) or {}
+                _set_setting("sync_last", _json.dumps({
+                    "at": _dt.now().isoformat(timespec="seconds"),
+                    "ok": not res_u.get("error"),
+                    "insertadas": res_u.get("insertadas"),
+                    "error": (res_u.get("error") or "")[:200] or None,
+                }))
+            except Exception:
+                pass
             reset_user_context(tok)
 
     # backup diario de la DB (piggyback del cron: corre si pasaron ≥24h)

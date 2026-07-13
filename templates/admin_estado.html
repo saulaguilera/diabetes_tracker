@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Orbit — Estado</title>
+  <meta http-equiv="refresh" content="60">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Outfit', system-ui, sans-serif; color: #EAF2F8; padding: 28px 18px 60px;
+      background: radial-gradient(125% 90% at 50% -8%, #16243F 0%, #0B1324 46%, #060B18 100%); min-height: 100vh; }
+    .wrap { max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 22px; font-weight: 300; margin-bottom: 4px; }
+    .sub { color: rgba(234,242,248,0.45); font-size: 12.5px; margin-bottom: 20px; }
+    .pills { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 22px; }
+    .pill { background: rgba(255,255,255,0.05); border: 0.5px solid rgba(255,255,255,0.1);
+      border-radius: 14px; padding: 10px 16px; font-size: 13px; }
+    .pill b { font-weight: 600; }
+    .ok { color: #34D399; } .bad { color: #F87171; } .warn { color: #FBBF24; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; color: rgba(234,242,248,0.45); font-weight: 500; font-size: 11.5px;
+      text-transform: uppercase; letter-spacing: 0.06em; padding: 8px 10px; }
+    td { padding: 10px; border-top: 0.5px solid rgba(255,255,255,0.08); vertical-align: top; }
+    .muted { color: rgba(234,242,248,0.45); }
+    .card { background: rgba(255,255,255,0.035); border: 0.5px solid rgba(255,255,255,0.09);
+      border-radius: 18px; padding: 6px 8px 10px; overflow-x: auto; }
+    .err { color: #F87171; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Orbit · estado operativo</h1>
+    <div class="sub">Generado {{ g.generado }} · se refresca solo cada 60 s</div>
+
+    <div class="pills">
+      <div class="pill">Scheduler:
+        {% if g.sched_age_s is not none and g.sched_age_s < 720 %}
+          <b class="ok">vivo</b> <span class="muted">(hace {{ g.sched_age_s // 60 }} min)</span>
+        {% elif g.sched_age_s is not none %}
+          <b class="bad">atrasado {{ g.sched_age_s // 60 }} min</b>
+        {% else %}<b class="warn">sin registro</b>{% endif %}
+      </div>
+      <div class="pill">Backup: {% if g.backup_last %}<b>{{ g.backup_last[:16].replace('T',' ') }}</b>{% else %}<b class="warn">nunca</b>{% endif %}</div>
+      <div class="pill">Usuarios: <b>{{ filas|length }}</b></div>
+    </div>
+
+    <div class="card">
+      <table>
+        <tr>
+          <th>Usuario</th><th>Sensor</th><th>Última lectura</th><th>24 h</th>
+          <th>Último sync</th><th>Push Drive</th><th>Push app</th>
+        </tr>
+        {% for f in filas %}
+        <tr>
+          <td><b>{{ f.usuario }}</b></td>
+          <td>{% if f.sensor %}{{ f.provider }}{% else %}<span class="muted">no conectado</span>{% endif %}</td>
+          <td>
+            {% if f.ultima_lectura %}
+              {{ f.ultima_lectura }}
+              {% if f.lectura_hace_min is not none %}
+                {% if f.lectura_hace_min <= 15 %}<span class="ok">· hace {{ f.lectura_hace_min }} min</span>
+                {% elif f.lectura_hace_min <= 120 %}<span class="warn">· hace {{ f.lectura_hace_min }} min</span>
+                {% else %}<span class="bad">· hace {{ (f.lectura_hace_min / 60) | round(1) }} h</span>{% endif %}
+              {% endif %}
+            {% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          <td>{{ f.lecturas_24h }}</td>
+          <td>
+            {% if f.sync_last %}
+              {% if f.sync_last.ok %}<span class="ok">ok</span>{% else %}<span class="bad">error</span>{% endif %}
+              <span class="muted">{{ f.sync_last.at[11:16] }}</span>
+              {% if f.sync_last.error %}<div class="err">{{ f.sync_last.error }}</div>{% endif %}
+            {% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          <td>
+            {% if f.drive_push %}
+              {% if f.drive_push.ok %}<span class="ok">ok</span>{% else %}<span class="bad">{{ f.drive_push.reason }}</span>{% endif %}
+              <span class="muted">{{ f.drive_push.at[11:16] }} · {{ f.drive_push.value or '—' }}</span>
+            {% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          <td>
+            {% if f.token_apns %}<span class="ok"></span>{% endif %}
+            {% if f.token_fcm %}<span class="ok">🤖</span>{% endif %}
+            {% if not f.token_apns and not f.token_fcm %}<span class="muted">—</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+</body>
+</html>

@@ -23,6 +23,18 @@ from datetime import datetime, timedelta, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import db, GlucoseReading, Meal, MealComponent, InsulinDose, Activity, CGMImport, FoodItem, UserSettings
 
+# ── Sentry (rastreo de errores) — inerte sin SENTRY_DSN ──────────────────────
+# Solo errores (sin tracing) para quedarse en el plan gratis; sin PII.
+if os.environ.get("SENTRY_DSN"):
+    try:
+        import sentry_sdk
+        sentry_sdk.init(dsn=os.environ["SENTRY_DSN"],
+                        traces_sample_rate=0.0,
+                        send_default_pii=False,
+                        environment=os.environ.get("RAILWAY_ENVIRONMENT_NAME", "production"))
+    except Exception:
+        pass
+
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "diabetes-tracker-secret-2024")
 app.config["SQLALCHEMY_DATABASE_URI"] = (
@@ -63,7 +75,8 @@ def _protect_all():
     # incluyen ambas formas. Sin "auth.login" aquí, /login se redirige a sí mismo
     # → loop infinito ("too many redirects") cuando no hay sesión.
     exempt = {"login", "logout", "static", "auth.login", "auth.logout",
-              "register", "auth.register", "privacidad", "auth.privacidad"}
+              "register", "auth.register", "privacidad", "auth.privacidad",
+              "healthz", "admin.healthz"}   # latido público para UptimeRobot
     if request.endpoint in exempt or session.get("logged_in"):
         return
     # Permitir llamadas de cron/API autenticadas con SYNC_TOKEN
@@ -618,11 +631,12 @@ from blueprints.tuning_bp    import bp as tuning_bp
 from blueprints.daily_brief_bp import bp as daily_brief_bp
 from blueprints.health_bp     import bp as health_bp
 from blueprints.copilot_api   import bp as copilot_api_bp
+from blueprints.admin_bp      import bp as admin_bp
 
 for _bp in [auth_bp, glucemia_bp, insulina_bp, actividad_bp, alimentos_bp,
             backup_bp, sync_bp, comidas_bp, herramientas_bp, reportes_bp,
             patrones_bp, pmm_bp, bench_bp, tuning_bp, daily_brief_bp,
-            health_bp, copilot_api_bp]:
+            health_bp, copilot_api_bp, admin_bp]:
     app.register_blueprint(_bp)
 
 # PMM blueprint exento de CSRF (API JSON)
