@@ -27,7 +27,7 @@ from datetime import datetime
 # mucho vs Haiku). Override por env si hay que bajar costo.
 DEFAULT_VISION_MODEL = "claude-sonnet-5"
 
-PROMPT = """Sos un nutricionista experto estimando una comida desde una foto.
+PROMPT = """Eres un nutricionista experto estimando una comida desde una foto.
 
 Trabaja PASO A PASO antes de responder (piensa primero, responde al final):
 1. Identifica CADA componente comestible visible. Sé específico ("arroz blanco

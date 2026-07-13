@@ -267,7 +267,7 @@ def sync_all(email: str, password: str, get_setting_fn=None, set_setting_fn=None
                 set_setting_fn("libre_token", "")
             return {"readings": [], "error": "No hay sensores vinculados en LibreLinkUp."}
 
-        # Usar el primer paciente (en uso personal, sos tú mismo)
+        # Usar el primer paciente (en uso personal, eres tú mismo)
         patient = connections[0]
         patient_id = patient.get("patientId") or patient.get("id")
 

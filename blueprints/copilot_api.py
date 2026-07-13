@@ -511,8 +511,8 @@ def _brief_fallback(s):
     return txt
 
 
-_BRIEF_SYSTEM = """Sos el copiloto de Orbit: escribes el brief diario de una persona
-con diabetes tipo 1. Sos como un buen educador en diabetes / nutricionista amigo:
+_BRIEF_SYSTEM = """Eres el copiloto de Orbit: escribes el brief diario de una persona
+con diabetes tipo 1. Eres como un buen educador en diabetes / nutricionista amigo:
 cálido, humano, claro, y con criterio — no un robot que enumera métricas.
 
 TU MIRADA (úsala para dar el PORQUÉ, no para indicar):
@@ -531,7 +531,7 @@ REGLAS INVIOLABLES:
   glucosa en {UNIDAD}. Los datos de abajo vienen en mg/dL; si la unidad es
   mmol/L, convierte (mmol/L = mg/dL ÷ 18) y muestra 1 decimal.
 - Prosa, sin listas ni bullets. 3 a 5 frases. Usa 1-2 emojis suaves que sumen
-  calma (🌙 💙 ✅ ☀️) — sos un acompañante que tranquiliza, no un informe.
+  calma (🌙 💙 ✅ ☀️) — eres un acompañante que tranquiliza, no un informe.
 - No inventes nada que no esté en los datos.
 
 CÓMO ESCRIBIRLO (adáptalo al MOMENTO del día que dice el contexto):
@@ -607,12 +607,21 @@ def copilot_brief():
         try:
             import anthropic
             client = anthropic.Anthropic(api_key=api_key)
+            # prompt caching: instrucciones (estables por idioma+unidad) en un
+            # bloque cacheado — las mañanas generan el brief de todos los
+            # usuarios en secuencia y comparten esta lectura barata.
+            _base, _sep, _ = _BRIEF_SYSTEM.partition("DATOS:")
             resp = client.messages.create(
                 model=os.environ.get("COPILOT_BRIEF_MODEL", "claude-sonnet-5"),
                 # tope con aire: el razonamiento interno de Sonnet 5 consume del
                 # mismo tope; 450 podía recortar la narrativa a mitad de frase
                 max_tokens=1500,
-                system=_BRIEF_SYSTEM.format(context=ctx, IDIOMA=_copilot_lang(), UNIDAD=_glucose_unit_label()),
+                system=[
+                    {"type": "text",
+                     "text": _base.format(IDIOMA=_copilot_lang(), UNIDAD=_glucose_unit_label()),
+                     "cache_control": {"type": "ephemeral"}},
+                    {"type": "text", "text": "DATOS:\n" + ctx},
+                ],
                 messages=[{"role": "user", "content": "Escribe mi brief."}],
             )
             txt = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
@@ -1105,7 +1114,7 @@ def _observed_params():
 
 
 # ── Copiloto (chat) — SOLO explica y acompaña. NUNCA recomienda ni predice. ────
-_CHAT_SYSTEM = """Sos el copiloto de Orbit, una app para una persona con diabetes tipo 1.
+_CHAT_SYSTEM = """Eres el copiloto de Orbit, una app para una persona con diabetes tipo 1.
 Tu ÚNICO rol es EXPLICAR los datos de la persona y ACOMPAÑARLA con calidez y claridad.
 
 TU FORMACIÓN: razonas con DOS miradas expertas y complementarias, y cuando
@@ -1155,7 +1164,7 @@ entrenar" (SÍ, general) vs. "vos come una manzana ahora" o "si estás en 180 no
 comas" (NO, es indicación personalizada). Nunca un "no puedo" pelado.
 
 SI EL CONTEXTO DICE "USUARIO NUEVO" (sin datos todavía):
-Cambia el sombrero: sos el anfitrión, no el analista. En tu primera respuesta:
+Cambia el sombrero: eres el anfitrión, no el analista. En tu primera respuesta:
 saluda por su nombre si lo tienes, explica EN SIMPLE cómo funciona Orbit
 (1. conecta tu sensor en Perfil para que la glucosa entre sola — o registrala
 a mano; 2. registra comidas, insulina y ejercicio en Registro — a la comida
@@ -1511,10 +1520,46 @@ def copilot_chat():
         from utils.copilot_tools import COPILOT_TOOLS, run_tool
 
         client = anthropic.Anthropic(api_key=api_key)
-        system = _CHAT_SYSTEM.format(context=_chat_context(), IDIOMA=_copilot_lang(), UNIDAD=_glucose_unit_label())
+        # ── Prompt caching ────────────────────────────────────────────────
+        # El system se parte en 2 bloques: las INSTRUCCIONES (grandes y
+        # estables — solo varían por idioma+unidad, así que se comparten
+        # entre usuarios y entre mensajes) llevan cache_control; el CONTEXTO
+        # (datos del usuario, cambia con cada lectura) queda fuera del cache.
+        # Con esto, cada mensaje/ronda relee las instrucciones a ~10% del
+        # costo en vez de pagarlas completas.
+        _base, _sep, _ = _CHAT_SYSTEM.partition("CONTEXTO ACTUAL DE LA PERSONA:")
+        system = [
+            {"type": "text",
+             "text": _base.format(IDIOMA=_copilot_lang(), UNIDAD=_glucose_unit_label()),
+             "cache_control": {"type": "ephemeral"}},
+            {"type": "text",
+             "text": "CONTEXTO ACTUAL DE LA PERSONA:\n" + _chat_context()},
+        ]
         # Sonnet para calidad analítica (las consultas requieren razonar sobre
         # números). Override por env si algún día hay que bajar costo.
         model = os.environ.get("COPILOT_CHAT_MODEL", "claude-sonnet-5")
+
+        def _con_marca_de_cache(mensajes):
+            """Copia msgs marcando el último bloque del último mensaje con
+            cache_control → en las rondas de tools, todo el prefijo (tools +
+            system + historia previa) se relee del cache. Solo se marca si el
+            contenido es nuestro (str o dicts); los bloques del SDK se dejan."""
+            if not mensajes:
+                return mensajes
+            out = list(mensajes)
+            ult = dict(out[-1])
+            c = ult.get("content")
+            if isinstance(c, str):
+                ult["content"] = [{"type": "text", "text": c,
+                                   "cache_control": {"type": "ephemeral"}}]
+            elif isinstance(c, list) and c and isinstance(c[-1], dict):
+                nuevos = list(c)
+                nuevos[-1] = {**nuevos[-1], "cache_control": {"type": "ephemeral"}}
+                ult["content"] = nuevos
+            else:
+                return mensajes
+            out[-1] = ult
+            return out
 
         def _call(force_text=False):
             # max_tokens es un TOPE (no un gasto): en Sonnet 5 el razonamiento
@@ -1524,7 +1569,7 @@ def copilot_chat():
             kw = {"tool_choice": {"type": "none"}} if force_text else {}
             return client.messages.create(
                 model=model, max_tokens=4000, system=system,
-                messages=msgs, tools=COPILOT_TOOLS, **kw,
+                messages=_con_marca_de_cache(msgs), tools=COPILOT_TOOLS, **kw,
             )
 
         def _text(r):

@@ -342,7 +342,7 @@ def _construir_prompt(datos: dict, days: int) -> tuple[str, str]:
     serie    = datos["serie_glucose"]
 
     system = (
-        "Sos un asistente especializado en análisis de datos de diabetes tipo 1. "
+        "Eres un asistente especializado en análisis de datos de diabetes tipo 1. "
         "Tienes acceso a la serie glucémica completa, comidas con macros, dosis de insulina, "
         "ejercicio y parámetros personales del usuario. "
         "Tu objetivo es encontrar conexiones entre todas estas variables y explicarlas "
