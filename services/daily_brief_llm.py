@@ -24,7 +24,9 @@ logger = logging.getLogger("daily_brief.llm")
 
 
 # ── Configuración ──────────────────────────────────────────────────────
-LLM_MODEL          = "claude-sonnet-4-20250514"
+# claude-sonnet-4-20250514 fue RETIRADO (EOL 2026-06-15): el job de las
+# 06:30 reventó con 404 el 2026-07-13 (primer issue cazado por Sentry).
+LLM_MODEL          = os.environ.get("DAILY_BRIEF_LLM_MODEL", "claude-sonnet-5")
 LLM_MAX_TOKENS     = 220           # ~60-100 palabras (más conciso)
 LLM_TEMPERATURE    = 0.5           # un poco más cálido / variado
 CONFIDENCE_MIN_LLM = 0.5           # bajo eso, usamos fallback rule-based
