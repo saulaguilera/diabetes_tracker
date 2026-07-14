@@ -127,6 +127,30 @@ export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleThe
         </button>
       </Card>
 
+      {/* perfil de vida — adapta la voz del copiloto */}
+      <Card theme={theme}>
+        <Eyebrow theme={theme} style={{ fontSize: 10, marginBottom: 4 }}>{t('perfil.vida')}</Eyebrow>
+        <div style={{ color: theme.inkFaint, fontSize: 12, lineHeight: 1.45, marginBottom: 12 }}>{t('perfil.vidaDesc')}</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {[
+            { id: 'estandar', label: `💙 ${t('onb.perfilStd')}` },
+            { id: 'deportista', label: `🏃 ${t('onb.perfilDep')}` },
+            { id: 'cuidador', label: `🤝 ${t('onb.perfilCui')}` },
+          ].map(p => (
+            <button key={p.id} onClick={() => {
+              apiPut('/profile', { perfil_vida: p.id }).then(() => setReloadKey(k => k + 1)).catch(() => {})
+            }} style={{
+              flex: 1, padding: '10px 4px', borderRadius: 12, cursor: 'pointer', fontFamily: SANS, fontSize: 12.5,
+              border: `0.5px solid ${(data.perfil_vida || 'estandar') === p.id ? theme.accent : theme.border}`,
+              background: (data.perfil_vida || 'estandar') === p.id ? `${theme.accent}22` : 'transparent',
+              color: (data.perfil_vida || 'estandar') === p.id ? theme.ink : theme.inkSoft,
+              fontWeight: (data.perfil_vida || 'estandar') === p.id ? 600 : 400 }}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </Card>
+
       {/* idioma */}
       <Card theme={theme}>
         <Eyebrow theme={theme} style={{ fontSize: 10, marginBottom: 12 }}>{t('perfil.language')}</Eyebrow>

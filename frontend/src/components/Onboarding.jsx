@@ -57,6 +57,7 @@ export default function Onboarding({ theme, onDone }) {
   const [story, setStory] = useState(0)   // 0..2 historia · 3 → formulario
   const [step, setStep] = useState(0)
   const [name, setName] = useState('')
+  const [perfil, setPerfil] = useState('estandar')   // deportista | cuidador | estandar
   const [objetivo, setObjetivo] = useState('100')
   const [basalTipo, setBasalTipo] = useState('')
   const [basalDose, setBasalDose] = useState('')
@@ -93,7 +94,7 @@ export default function Onboarding({ theme, onDone }) {
     setBusy(true); setErr(null)
     try {
       await apiPut('/profile', {
-        name: name.trim(), objetivo,
+        name: name.trim(), objetivo, perfil_vida: perfil,
         basal_tipo: basalTipo.trim(), basal_dose: basalDose || null,
         basal_hora: String(parseInt(basalHora.split(':')[0] || '22', 10)),
       })
@@ -197,6 +198,29 @@ export default function Onboarding({ theme, onDone }) {
             <div style={{ color: theme.inkSoft, fontSize: 14.5, lineHeight: 1.55, marginBottom: 24 }}>{t('onb.intro')}</div>
             <label style={label}>{t('onb.name')}</label>
             <input style={input} value={name} onChange={e => setName(e.target.value)} autoFocus/>
+
+            {/* perfil de vida: adapta la voz del copiloto */}
+            <label style={{ ...label, marginTop: 18 }}>{t('onb.perfil')}</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[
+                { id: 'estandar',   emoji: '💙', titulo: t('onb.perfilStd'),  desc: t('onb.perfilStdD') },
+                { id: 'deportista', emoji: '🏃', titulo: t('onb.perfilDep'),  desc: t('onb.perfilDepD') },
+                { id: 'cuidador',   emoji: '🤝', titulo: t('onb.perfilCui'),  desc: t('onb.perfilCuiD') },
+              ].map(p => (
+                <button key={p.id} onClick={() => setPerfil(p.id)} style={{
+                  display: 'flex', alignItems: 'center', gap: 11, textAlign: 'left',
+                  padding: '11px 13px', borderRadius: 14, cursor: 'pointer', fontFamily: SANS,
+                  border: `0.5px solid ${perfil === p.id ? theme.accent : theme.border}`,
+                  background: perfil === p.id ? `${theme.accent}18` : 'transparent' }}>
+                  <span style={{ fontSize: 20 }}>{p.emoji}</span>
+                  <span>
+                    <div style={{ color: theme.ink, fontSize: 14, fontWeight: perfil === p.id ? 600 : 400 }}>{p.titulo}</div>
+                    <div style={{ color: theme.inkFaint, fontSize: 11.5, marginTop: 1 }}>{p.desc}</div>
+                  </span>
+                </button>
+              ))}
+            </div>
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 22 }}>
               <button style={btn(true)} disabled={!name.trim()} onClick={() => setStep(1)}
                 onMouseDown={e => e.preventDefault()}>{t('onb.next')}</button>

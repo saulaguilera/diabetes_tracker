@@ -511,9 +511,51 @@ def _brief_fallback(s):
     return txt
 
 
+# ── Perfil de vida: adapta la voz del copiloto (deportista/cuidador/estándar).
+# El texto se inyecta en el bloque ESTÁTICO cacheado del prompt: hay una
+# variante de cache por (perfil × idioma × unidad), compartida entre mensajes
+# y usuarios del mismo combo — el costo marginal sigue siendo ~10%.
+_PERFILES_VIDA = {
+    "deportista": (
+        "PERFIL DE VIDA — DEPORTISTA: la persona entrena en serio y su prioridad "
+        "es entender la glucosa alrededor del ejercicio. Dale peso extra a: el "
+        "combustible antes/durante/después de las sesiones, la diferencia "
+        "aeróbico (tiende a bajar) vs fuerza/intensidad (puede subir por "
+        "adrenalina), las hipos tardías hasta 6+ horas post-entreno y nocturnas "
+        "tras días de carga, y comparar días de entrenamiento vs descanso. Usa "
+        "su vocabulario (sesión, carga, series, fondo) con naturalidad. Cuando "
+        "un movimiento de la curva coincida con ejercicio registrado, conéctalo "
+        "proactivamente."),
+    "cuidador": (
+        "PERFIL DE VIDA — CUIDADOR: quien te escribe NO es quien vive con "
+        "diabetes: cuida a alguien que la vive (su hijo/a, un familiar). Háblale "
+        "al cuidador: los datos son de la persona que cuida — di «su glucosa», "
+        "«la noche que tuvo», nunca «tu glucosa». Dale peso extra a: la "
+        "seguridad nocturna, las franjas donde no está presente (colegio, "
+        "trabajo) y qué patrones conviene comentar con el equipo médico o con "
+        "otros cuidadores. Tono: baja la culpa siempre — cuidar es difícil, los "
+        "números no son calificaciones; celebra lo que salió bien del cuidado."),
+    "estandar": "",
+}
+
+
+def _perfil_vida() -> str:
+    try:
+        from helpers import _get_setting as _gs
+        p = (_gs("perfil_vida") or "estandar").strip().lower()
+        return p if p in _PERFILES_VIDA else "estandar"
+    except Exception:
+        return "estandar"
+
+
+def _perfil_block() -> str:
+    return _PERFILES_VIDA.get(_perfil_vida(), "")
+
+
 _BRIEF_SYSTEM = """Eres el copiloto de Orbit: escribes el brief diario de una persona
 con diabetes tipo 1. Eres como un buen educador en diabetes / nutricionista amigo:
 cálido, humano, claro, y con criterio — no un robot que enumera métricas.
+{PERFIL}
 
 TU MIRADA (úsala para dar el PORQUÉ, no para indicar):
 Razonas desde la nutrición y la endocrinología. Si algo del día tiene una
@@ -618,7 +660,8 @@ def copilot_brief():
                 max_tokens=1500,
                 system=[
                     {"type": "text",
-                     "text": _base.format(IDIOMA=_copilot_lang(), UNIDAD=_glucose_unit_label()),
+                     "text": _base.format(IDIOMA=_copilot_lang(), UNIDAD=_glucose_unit_label(),
+                                          PERFIL=_perfil_block()),
                      "cache_control": {"type": "ephemeral"}},
                     {"type": "text", "text": "DATOS:\n" + ctx},
                 ],
@@ -1075,6 +1118,7 @@ def copilot_profile():
     return jsonify({
         "ok": True,
         "name": _get_setting("user_name") or None,
+        "perfil_vida": _perfil_vida(),
         # onboarding: usuarios nuevos completan nombre/objetivo/basal + sensor
         "onboarded": bool(_get_setting("onboarding_done")) or session.get("user_id") == 1,
         "sensor": {
@@ -1176,6 +1220,8 @@ inventes datos, y si pregunta algo general de diabetes/nutrición responde
 normalmente. Sugiere el primer paso concreto según el contexto: si el sensor
 NO está conectado, ese es el paso 1; si ya está, que registre su primera
 comida.
+
+{PERFIL}
 
 REGLAS DE ESTILO:
 - ARQUITECTURA DE LA RESPUESTA — sigue SIEMPRE este orden, sin excepción:
@@ -1581,7 +1627,8 @@ def copilot_chat():
         _base, _sep, _ = _CHAT_SYSTEM.partition("CONTEXTO ACTUAL DE LA PERSONA:")
         system = [
             {"type": "text",
-             "text": _base.format(IDIOMA=_copilot_lang(), UNIDAD=_glucose_unit_label()),
+             "text": _base.format(IDIOMA=_copilot_lang(), UNIDAD=_glucose_unit_label(),
+                                  PERFIL=_perfil_block()),
              "cache_control": {"type": "ephemeral"}},
             {"type": "text",
              "text": "CONTEXTO ACTUAL DE LA PERSONA:\n" + _chat_context()},
@@ -2177,6 +2224,11 @@ def copilot_profile_edit():
             u = (data.get("glucose_unit") or "").strip().lower()
             if u in ("mgdl", "mmol"):
                 _set_setting("glucose_unit", u)
+        # perfil de vida: adapta la voz del copiloto (deportista/cuidador/estándar)
+        if "perfil_vida" in data:
+            p = (data.get("perfil_vida") or "").strip().lower()
+            if p in ("deportista", "cuidador", "estandar"):
+                _set_setting("perfil_vida", p)
         # onboarding completado (lo marca la pantalla de bienvenida)
         if data.get("onboarded"):
             _set_setting("onboarding_done", "1")
