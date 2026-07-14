@@ -28,7 +28,6 @@ logger = logging.getLogger("daily_brief.llm")
 # 06:30 reventó con 404 el 2026-07-13 (primer issue cazado por Sentry).
 LLM_MODEL          = os.environ.get("DAILY_BRIEF_LLM_MODEL", "claude-sonnet-5")
 LLM_MAX_TOKENS     = 220           # ~60-100 palabras (más conciso)
-LLM_TEMPERATURE    = 0.5           # un poco más cálido / variado
 CONFIDENCE_MIN_LLM = 0.5           # bajo eso, usamos fallback rule-based
 
 # Nombre por defecto si no hay user_name en settings — el usuario puede
@@ -109,10 +108,11 @@ def generate_brief(
         t0 = time.time()
         from anthropic import Anthropic
         client = Anthropic(api_key=api_key)
+        # Sonnet 5 rechaza `temperature` (razonamiento adaptativo) — 400 el
+        # 2026-07-14 tras migrar de sonnet-4; el tono ya lo lleva el prompt.
         resp = client.messages.create(
             model=LLM_MODEL,
             max_tokens=LLM_MAX_TOKENS,
-            temperature=LLM_TEMPERATURE,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
         )
