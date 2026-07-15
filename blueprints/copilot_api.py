@@ -1148,7 +1148,8 @@ def _sync_error():
     """Error del último intento de sync del usuario actual, si lo hubo."""
     try:
         import json as _j
-        raw = _get_setting("sync_last")
+        from helpers import _get_setting as _gs_sync
+        raw = _gs_sync("sync_last")
         if raw:
             return (_j.loads(raw).get("error") or None)
     except Exception:
