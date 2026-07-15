@@ -306,16 +306,42 @@ def get_model_health(days: int = 7) -> dict:
     warnings:        list[str] = []
 
     # 1. Background predictor corriendo?
+    #    OJO con el diagnóstico: el predictor corre SOLO cuando entran
+    #    lecturas nuevas. Si el sensor lleva un rato sin datos (cambio de
+    #    sensor, teléfono lejos), la predicción vieja es CONSECUENCIA del
+    #    hueco de datos, no un pipeline caído — eso es un warning suave,
+    #    no un blocking que pagee (falsa alarma del 2026-07-14: 65 min de
+    #    hueco de sensor reportados como "predictor caído").
     age = coverage.get("age_last_pred_min")
+    edad_lectura = None
+    try:
+        from models import GlucoseReading
+        _ult = (GlucoseReading.query
+                .order_by(GlucoseReading.timestamp.desc()).first())
+        if _ult:
+            edad_lectura = (datetime.now() - _ult.timestamp).total_seconds() / 60
+    except Exception:
+        pass
+    hay_datos_frescos = edad_lectura is not None and edad_lectura <= 20
+
     if age is None:
         blocking_issues.append(
             "no hay predicciones del modelo activo en la DB todavía"
         )
     elif age > MAX_AGE_LAST_PREDICTION_MIN * 3:
-        blocking_issues.append(
-            f"última predicción hace {age:.0f}min — background predictor "
-            f"probablemente caído"
-        )
+        if hay_datos_frescos:
+            # datos fluyendo Y sin predicciones → pipeline roto de verdad
+            blocking_issues.append(
+                f"última predicción hace {age:.0f}min con lecturas frescas — "
+                f"background predictor probablemente caído"
+            )
+        else:
+            warnings.append(
+                f"última predicción hace {age:.0f}min por hueco de sensor "
+                f"(última lectura hace {edad_lectura:.0f}min) — se retoma solo "
+                f"cuando vuelvan los datos" if edad_lectura is not None else
+                f"última predicción hace {age:.0f}min — sin lecturas para predecir"
+            )
     elif age > MAX_AGE_LAST_PREDICTION_MIN:
         warnings.append(
             f"última predicción hace {age:.0f}min — esperado <{MAX_AGE_LAST_PREDICTION_MIN}min"
@@ -327,8 +353,8 @@ def get_model_health(days: int = 7) -> dict:
     #    se va a llenar con el tiempo. No es para alarmar.
     ratio = coverage.get("coverage_ratio", 0)
     predictor_alive = (age is not None and age <= MAX_AGE_LAST_PREDICTION_MIN * 3)
-    if ratio < COVERAGE_RATIO_WARNING and not predictor_alive:
-        # Bajo coverage Y predictor caído → pipeline roto de verdad
+    if ratio < COVERAGE_RATIO_WARNING and not predictor_alive and hay_datos_frescos:
+        # Bajo coverage Y predictor caído CON datos fluyendo → roto de verdad
         blocking_issues.append(
             f"coverage_ratio={ratio:.2f} y predictor inactivo — pipeline roto"
         )
