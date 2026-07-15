@@ -54,7 +54,13 @@ def healthz():
 def admin_estado():
     """Panel del operador. Gateado al usuario 1 (dueño de la instancia)."""
     if session.get("user_id") != 1:
-        return jsonify({"ok": False, "error": "Solo el operador"}), 403
+        return ("<div style='font-family:system-ui;background:#0B1324;color:#EAF2F8;"
+                "min-height:100vh;display:grid;place-items:center;text-align:center;padding:24px'>"
+                "<div><div style='font-size:34px;margin-bottom:12px'>🔒</div>"
+                "<div style='font-size:17px;margin-bottom:6px'>Este panel es solo del operador</div>"
+                "<div style='font-size:14px;opacity:.6'>Estás con la sesión de otra cuenta. "
+                "<a href='/logout' style='color:#22D3EE'>Cierra sesión</a> y entra con tu "
+                "usuario principal.</div></div></div>"), 403
 
     from helpers import set_user_context, reset_user_context, _get_setting
 
