@@ -71,8 +71,16 @@ def validate(provider, cred1, cred2) -> str | None:
             if not isinstance(r, list):
                 return "El sitio respondió algo inesperado (¿URL correcta?)"
             return None
-        from utils.libre_linkup import login as libre_login
-        libre_login(cred1, cred2)
+        from utils.libre_linkup import login as libre_login, get_connections
+        token, base_url, account_id = libre_login(cred1, cred2)
+        # login válido NO basta: sin invitación de seguidor aceptada no hay
+        # paciente del cual leer — la trampa clásica que deja al usuario
+        # "conectado" pero sin lecturas para siempre (caso marcolamp).
+        if not get_connections(token, base_url, account_id):
+            return ("Tu cuenta LibreLinkUp no tiene sensores vinculados. "
+                    "Primero invita a este correo desde LibreLink (Compartir → "
+                    "LibreLinkUp) y acepta la invitación en la app LibreLinkUp — "
+                    "los pasos están en el Centro de ayuda.")
         return None
     except Exception as exc:
         return str(exc)[:150]

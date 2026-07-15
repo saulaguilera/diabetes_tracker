@@ -108,7 +108,10 @@ export default function Onboarding({ theme, onDone }) {
     try {
       await apiPut('/libre', { provider, email: email.trim(), password: pass })
       await finish()
-    } catch { setErr(t('perfil.libre.badCreds')); setBusy(false) }
+    } catch (e) {
+      setErr(e && e.server ? e.message : t('perfil.libre.badCreds'))
+      setBusy(false)
+    }
   }
 
   const finish = async () => {

@@ -88,6 +88,13 @@ export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleThe
         <Row theme={theme} label={t('perfil.lastReading')} value={s.last_reading != null ? `${gVal(s.last_reading)} ${gUnit} · ${s.last_reading_ago}` : '—'}/>
         <Row theme={theme} label={t('perfil.sync')} value={s.last_sync_ago || '—'}/>
         <Row theme={theme} label={t('perfil.source')} value={s.source === 'cgm_libre' ? 'FreeStyle Libre' : (s.source || '—')}/>
+        {s.sync_error && (
+          <div style={{ color: '#E8A79B', fontSize: 12.5, lineHeight: 1.5, padding: '9px 11px',
+            background: 'rgba(224,122,106,0.10)', border: '0.5px solid rgba(224,122,106,0.35)',
+            borderRadius: 12, marginTop: 10 }}>
+            ⚠️ {s.sync_error}
+          </div>
+        )}
         <LibreConnect theme={theme}/>
       </Card>
 
@@ -374,7 +381,9 @@ function LibreConnect({ theme }) {
       setSt(r); setOpen(false); setEmail(''); setPass('')
       setMsg(t('perfil.libre.ok'))
     } catch (e) {
-      setMsg(t('perfil.libre.badCreds'))
+      // si el backend explicó el problema (p. ej. LibreLinkUp sin sensores
+      // vinculados), mostrar ESE mensaje — no el genérico
+      setMsg(e && e.server ? e.message : t('perfil.libre.badCreds'))
     } finally { setBusy(false) }
   }
 

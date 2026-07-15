@@ -1126,6 +1126,9 @@ def copilot_profile():
             "last_reading_ago": _hace(last.timestamp) if last else None,
             "source": last.source if last else None,
             "last_sync_ago": sync_ago,
+            # último error de sync (p. ej. LibreLinkUp sin sensores vinculados)
+            # para que el usuario se auto-diagnostique desde su Perfil
+            "sync_error": _sync_error(),
         },
         "config": {
             "isf": _num("isf_manual"),
@@ -1139,6 +1142,18 @@ def copilot_profile():
         # Solo referencia descriptiva — jamás se auto-aplica a la terapia.
         "observed": observed,
     })
+
+
+def _sync_error():
+    """Error del último intento de sync del usuario actual, si lo hubo."""
+    try:
+        import json as _j
+        raw = _get_setting("sync_last")
+        if raw:
+            return (_j.loads(raw).get("error") or None)
+    except Exception:
+        pass
+    return None
 
 
 def _observed_params():

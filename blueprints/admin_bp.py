@@ -85,11 +85,21 @@ def admin_estado():
                 except Exception:
                     return None
 
+            # conexión REAL del sensor: la columna de credenciales O el
+            # fallback de entorno del usuario 1 (su config histórica vive en
+            # Railway, no en la fila — el panel decía "no conectado" mintiendo)
+            try:
+                from blueprints.sync import _cgm_config_for_user
+                _prov, _email, _ = _cgm_config_for_user(u)
+                _conectado = bool(_email)
+            except Exception:
+                _prov = getattr(u, "cgm_provider", None) or "—"
+                _conectado = bool(getattr(u, "libre_email_enc", None))
             filas.append({
                 "usuario": u.username,
                 "registrado": u.created_at.strftime("%d/%m/%Y") if u.created_at else "—",
-                "provider": getattr(u, "cgm_provider", None) or "—",
-                "sensor": bool(getattr(u, "libre_email_enc", None)),
+                "provider": _prov or "—",
+                "sensor": _conectado,
                 "ultima_lectura": ult.timestamp.strftime("%d/%m %H:%M") if ult else None,
                 "lectura_hace_min": int((ahora - ult.timestamp).total_seconds() // 60) if ult else None,
                 "lecturas_24h": n24,

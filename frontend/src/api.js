@@ -16,7 +16,15 @@ async function request(path, opts = {}) {
     window.location.href = '/login?next=' + encodeURIComponent('/copilot')
     throw new Error('no-auth')
   }
-  if (!res.ok) throw new Error(`API ${path} → ${res.status}`)
+  if (!res.ok) {
+    // si el backend mandó un mensaje de error específico, propagarlo tal
+    // cual (p. ej. «Tu cuenta LibreLinkUp no tiene sensores vinculados…»)
+    let detalle = null
+    try { detalle = (await res.json()).error || null } catch {}
+    const e = new Error(detalle || `API ${path} → ${res.status}`)
+    e.server = !!detalle
+    throw e
+  }
   return res.json()
 }
 
