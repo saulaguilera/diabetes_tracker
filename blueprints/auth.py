@@ -89,6 +89,19 @@ def register():
                          display_name=username)
                 _db.session.add(u)
                 _db.session.commit()
+                # avisar al operador (usuario 1) que llegó alguien nuevo 🎉
+                # — el push se busca bajo SU contexto; jamás rompe el registro
+                try:
+                    from helpers import set_user_context, reset_user_context
+                    tok = set_user_context(1)
+                    try:
+                        from drive_mode.notify import push_alert
+                        push_alert("🎉 Nuevo usuario en Orbit",
+                                   f"Se registró «{u.username}» — míralo en /admin/estado")
+                    finally:
+                        reset_user_context(tok)
+                except Exception:
+                    pass
                 session.permanent = True
                 session["logged_in"] = True
                 session["username"] = u.username

@@ -81,6 +81,7 @@ def admin_estado():
 
             filas.append({
                 "usuario": u.username,
+                "registrado": u.created_at.strftime("%d/%m/%Y") if u.created_at else "—",
                 "provider": getattr(u, "cgm_provider", None) or "—",
                 "sensor": bool(getattr(u, "libre_email_enc", None)),
                 "ultima_lectura": ult.timestamp.strftime("%d/%m %H:%M") if ult else None,

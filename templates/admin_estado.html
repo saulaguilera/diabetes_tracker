@@ -49,12 +49,13 @@
     <div class="card">
       <table>
         <tr>
-          <th>Usuario</th><th>Sensor</th><th>Última lectura</th><th>24 h</th>
+          <th>Usuario</th><th>Registrado</th><th>Sensor</th><th>Última lectura</th><th>24 h</th>
           <th>Último sync</th><th>Push Drive</th><th>Push app</th>
         </tr>
         {% for f in filas %}
         <tr>
           <td><b>{{ f.usuario }}</b></td>
+          <td class="muted">{{ f.registrado }}</td>
           <td>{% if f.sensor %}{{ f.provider }}{% else %}<span class="muted">no conectado</span>{% endif %}</td>
           <td>
             {% if f.ultima_lectura %}
