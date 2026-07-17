@@ -45,8 +45,10 @@ public class OrbitDriveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func startDriveActivity(_ call: CAPPluginCall) {
         guard #available(iOS 16.2, *) else { call.resolve(["ok": false, "reason": "ios_too_old"]); return }
         guard let state = call.getObject("state") else { call.reject("Falta 'state'"); return }
-        let ok = OrbitDriveActivityManager.start(contentState(from: state))
-        call.resolve(["ok": ok])
+        // El manager encola la operación (cadena serial anti-duplicados);
+        // "ok" = las Live Activities están habilitadas en este dispositivo.
+        OrbitDriveActivityManager.start(contentState(from: state))
+        call.resolve(["ok": OrbitDriveActivityManager.isAvailable()])
     }
 
     @objc func updateDriveActivity(_ call: CAPPluginCall) {
