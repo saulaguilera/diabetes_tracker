@@ -77,7 +77,8 @@ def _protect_all():
     exempt = {"login", "logout", "static", "auth.login", "auth.logout",
               "register", "auth.register", "privacidad", "auth.privacidad",
               "healthz", "admin.healthz",   # latido público para UptimeRobot
-              "android", "auth.android", "android_apk", "auth.android_apk"}
+              "android", "auth.android", "android_apk", "auth.android_apk",
+              "descargar", "auth.descargar"}   # landing de descarga (bio)
     if request.endpoint in exempt or session.get("logged_in"):
         return
     # Permitir llamadas de cron/API autenticadas con SYNC_TOKEN

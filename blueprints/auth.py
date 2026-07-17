@@ -124,6 +124,15 @@ def privacidad():
 _APK_PATH = os.path.join(os.path.dirname(__file__), "..", "static", "descargas", "orbit.apk")
 
 
+@bp.route("/app", endpoint="descargar")
+def descargar():
+    """Landing de descarga para la bio (iPhone + Android en un solo link).
+    El botón de iPhone se activa seteando TESTFLIGHT_URL en el entorno
+    (el link público de TestFlight) — sin tocar código."""
+    return render_template("descargar.html",
+                           testflight_url=os.environ.get("TESTFLIGHT_URL", "").strip() or None)
+
+
 @bp.route("/android", endpoint="android")
 def android():
     disponible, tam_mb, fecha = False, None, None
