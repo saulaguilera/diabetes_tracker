@@ -47,6 +47,17 @@ def healthz():
     age = _sched_age_s()
     sched_ok = age is not None and age < _SCHED_FRESH_MIN * 60
     ok = db_ok and sched_ok
+    # constancia de que el monitor externo (UptimeRobot) realmente vigila:
+    # su robot se identifica en el User-Agent en cada chequeo (cada 5 min).
+    # El panel /admin/estado lo muestra ("Monitor externo: visto hace X min").
+    try:
+        from flask import request as _rq
+        if "uptimerobot" in (_rq.headers.get("User-Agent") or "").lower():
+            from helpers import _set_setting
+            from datetime import datetime as _dt
+            _set_setting("sched_monitor_last", _dt.now().isoformat(timespec="seconds"))
+    except Exception:
+        pass
     return jsonify({"ok": ok, "db": db_ok, "scheduler_age_s": age}), (200 if ok else 503)
 
 
@@ -112,9 +123,17 @@ def admin_estado():
             reset_user_context(tok)
 
     from helpers import _get_setting as _gs
+    monitor_age_s = None
+    try:
+        raw = _gs("sched_monitor_last")
+        if raw:
+            monitor_age_s = int((ahora - datetime.fromisoformat(raw)).total_seconds())
+    except Exception:
+        pass
     globales = {
         "sched_last_run": _gs("sched_last_run"),
         "sched_age_s": _sched_age_s(),
+        "monitor_age_s": monitor_age_s,
         "backup_last": _gs("backup_last"),
         "generado": ahora.strftime("%d/%m/%Y %H:%M:%S"),
     }

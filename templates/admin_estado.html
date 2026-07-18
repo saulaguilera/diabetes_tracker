@@ -42,6 +42,13 @@
           <b class="bad">atrasado {{ g.sched_age_s // 60 }} min</b>
         {% else %}<b class="warn">sin registro</b>{% endif %}
       </div>
+      <div class="pill">Monitor externo:
+        {% if g.monitor_age_s is not none and g.monitor_age_s < 900 %}
+          <b class="ok">vigilando</b> <span class="muted">(hace {{ g.monitor_age_s // 60 }} min)</span>
+        {% elif g.monitor_age_s is not none %}
+          <b class="warn">sin chequeo hace {{ g.monitor_age_s // 60 }} min</b>
+        {% else %}<b class="warn">no detectado</b>{% endif %}
+      </div>
       <div class="pill">Backup: {% if g.backup_last %}<b>{{ g.backup_last[:16].replace('T',' ') }}</b>{% else %}<b class="warn">nunca</b>{% endif %}</div>
       <div class="pill">Usuarios: <b>{{ filas|length }}</b></div>
     </div>
