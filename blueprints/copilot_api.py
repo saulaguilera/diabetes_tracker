@@ -2129,11 +2129,24 @@ def copilot_report_pdf():
         return t
 
     nombre = _get_setting("user_name") or ""
+    # fuente de datos real del usuario (antes decía LibreLinkUp fijo aunque
+    # usara Dexcom o Nightscout)
+    try:
+        from models import User as _User, db as _db
+        _u = _db.session.get(_User, session.get("user_id"))
+        fuente = {"libre": "FreeStyle Libre vía LibreLinkUp",
+                  "dexcom": "Dexcom Share",
+                  "nightscout": "Nightscout"}.get(
+            (getattr(_u, "cgm_provider", None) or "libre"), "CGM")
+        if not getattr(_u, "libre_email_enc", None) and session.get("user_id") != 1:
+            fuente = "registro manual"
+    except Exception:
+        fuente = "CGM"
     story = [
         Paragraph("Orbit — Reporte para el equipo médico", h1),
         Paragraph(f"{nombre + ' · ' if nombre else ''}Últimos {days} días · "
                   f"generado el {hoy.strftime('%d/%m/%Y %H:%M')} · "
-                  f"FreeStyle Libre vía LibreLinkUp", sub),
+                  f"{fuente}", sub),
     ]
 
     # ── AGP (Ambulatory Glucose Profile) — el formato estándar clínico ──
@@ -2190,6 +2203,8 @@ def copilot_report_pdf():
         "registros del paciente (CGM, comidas, insulina, actividad). No contiene "
         "recomendaciones de tratamiento. Confundidores no controlados: composición de "
         "comidas, ejercicio, estrés, calidad del registro manual.", small))
+    story.append(Spacer(1, 4))
+    story.append(Paragraph("Orbit Copilot AI · orbitcopilot.app", small))
 
     buf = io.BytesIO()
     SimpleDocTemplate(buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm,
