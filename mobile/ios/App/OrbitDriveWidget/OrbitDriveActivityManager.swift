@@ -13,7 +13,7 @@
 //      y matar lo recién creado, o dejar dos actividades vivas.
 //   2. ESPERA A ACTIVITYKIT: al relanzar la app, Activity.activities tarda
 //      unos cientos de ms en poblarse. Si UserDefaults dice que dejamos una
-//      actividad viva, start() espera (hasta ~1.5 s) a que aparezca antes de
+//      actividad viva, start() espera (hasta ~3.6 s) a que aparezca antes de
 //      decidir crear otra.
 //   3. DEDUP INLINE + BARRIDO: start() adopta la primera y termina el resto
 //      AHÍ MISMO; y 2 s después de crear, un barrido mata cualquier
@@ -58,12 +58,12 @@ enum OrbitDriveActivityManager {
         Activity<OrbitDriveActivityAttributes>.activities
     }
 
-    /// Espera (hasta ~1.5 s) a que ActivityKit surfa las actividades vivas
+    /// Espera (hasta ~3.6 s) a que ActivityKit surfa las actividades vivas
     /// tras un relanzamiento. Solo espera si el flag dice que dejamos una.
     private static func esperarActividades() async -> [Activity<OrbitDriveActivityAttributes>] {
         var all = actividades()
         if all.isEmpty && UserDefaults.standard.bool(forKey: flagKey) {
-            for _ in 0..<10 {
+            for _ in 0..<24 {
                 try? await Task.sleep(nanoseconds: 150_000_000)
                 all = actividades()
                 if !all.isEmpty { break }
@@ -121,9 +121,16 @@ enum OrbitDriveActivityManager {
     }
 
     private static func encolarBarrido() {
-        Task {
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            encolar { await terminarNoAdministradas() }
+        // Barridos REPETIDOS (2 s, 10 s, 45 s): en arranques lentos, iOS puede
+        // tardar más de lo esperado en reportar una actividad vieja — un solo
+        // barrido temprano la perdía y quedaba el "doble" en CarPlay. Si la
+        // app se suspende antes, la garantía remota del servidor (push
+        // event:end al token anterior) cubre el resto.
+        for segundos in [2.0, 10.0, 45.0] {
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(segundos * 1_000_000_000))
+                encolar { await terminarNoAdministradas() }
+            }
         }
     }
 
