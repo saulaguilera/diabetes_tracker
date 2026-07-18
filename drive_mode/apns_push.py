@@ -245,6 +245,39 @@ def _send(device_token: str, content_state: dict) -> dict:
     return {"ok": False, "reason": f"http_{r.status_code}: {reason}"}
 
 
+def push_drive_end(device_token: str) -> dict:
+    """Termina REMOTAMENTE la Live Activity asociada a un token (event: end).
+    Se usa al registrar un token nuevo: mata la actividad anterior aunque la
+    deduplicación del teléfono haya fallado — garantía anti-duplicados del
+    lado servidor, independiente del build instalado. Nunca levanta."""
+    if not _enabled():
+        return {"ok": False, "reason": "disabled"}
+    jwt_token = _get_jwt()
+    if not jwt_token:
+        return {"ok": False, "reason": "no_jwt"}
+    now = int(time.time())
+    body = {"aps": {"timestamp": now, "event": "end", "dismissal-date": now}}
+    headers = {
+        "authorization":   f"bearer {jwt_token}",
+        "apns-topic":      _topic(),
+        "apns-push-type":  "liveactivity",
+        "apns-priority":   "10",
+        "apns-expiration": str(now + 270),
+    }
+    try:
+        import httpx
+        with httpx.Client(http2=True, timeout=10) as client:
+            r = client.post(f"{_apns_host()}/3/device/{device_token}",
+                            json=body, headers=headers)
+    except Exception as exc:
+        log.warning("APNs end falló: %s", exc)
+        return {"ok": False, "reason": f"error: {exc}"}
+    if r.status_code == 200:
+        log.info("APNs end OK (actividad anterior terminada remotamente)")
+        return {"ok": True}
+    return {"ok": False, "reason": f"http_{r.status_code}"}
+
+
 # ─────────────── notificaciones normales (alert push) ───────────────
 # Mismo pipeline (clave/JWT/host) pero push-type "alert" y topic = bundle:
 # es lo que hace sonar el teléfono con la app cerrada (campanita 🧠, basal…).

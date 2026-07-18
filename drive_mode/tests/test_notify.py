@@ -86,5 +86,15 @@ class TestNotifyDispatch(unittest.TestCase):
         self.assertIn("error", r["apns"]["reason"])
 
 
+class TestPushDriveEnd(unittest.TestCase):
+    def test_sin_flag_es_noop(self):
+        from drive_mode import apns_push
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("DRIVE_APNS_ENABLED", None)
+            r = apns_push.push_drive_end("aabbcc")
+        self.assertFalse(r["ok"])
+        self.assertEqual(r["reason"], "disabled")
+
+
 if __name__ == "__main__":
     unittest.main()

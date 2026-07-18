@@ -623,7 +623,21 @@ def copilot_drive_push_token():
     token = (data.get("token") or "").strip().lower()
     if token and (len(token) > 200 or any(c not in "0123456789abcdef" for c in token)):
         return jsonify({"ok": False, "error": "Token inválido"}), 400
-    from helpers import _set_setting
+    from helpers import _set_setting, _get_setting
+    # GARANTÍA ANTI-DUPLICADOS DEL SERVIDOR: si llega un token nuevo y había
+    # otro registrado, la actividad vieja se termina REMOTAMENTE vía APNs
+    # (event: end). Así, aunque la dedup del teléfono falle (carrera del
+    # ciclo de vida, build viejo instalado), el duplicado muere en segundos
+    # — es lo que se veía en CarPlay como contenido doble en la tarjeta.
+    viejo = (_get_setting("drive_apns_token") or "").strip()
+    if token and viejo and viejo != token:
+        try:
+            from drive_mode.apns_push import push_drive_end
+            r_end = push_drive_end(viejo)
+            import logging as _log
+            _log.getLogger("drive.apns").info("fin remoto de actividad anterior: %s", r_end)
+        except Exception:
+            pass
     _set_setting("drive_apns_token", token)
     _set_setting("drive_apns_token_updated_at", datetime.now().isoformat())
     return jsonify({"ok": True, "registered": bool(token)})
