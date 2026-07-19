@@ -216,23 +216,6 @@ def _do_libre_sync(email: str, password: str, provider: str = "libre") -> dict:
         except Exception:
             pass
 
-        # ── Background predictor: corre el SSM y guarda predicción 30/60min
-        #    en CADA sync (cada ~5 min). Antes sólo se generaban predicciones
-        #    al entrar a /calcular → el bench tenía cobertura mínima y daba
-        #    HYPO_RECALL=0 sin que el modelo hubiera sido evaluado.
-        #    NO toca el SSM ni sus ecuaciones — sólo lo invoca más seguido.
-        try:
-            from services.background_predictor import run_and_save_ssm_prediction
-            _bg = run_and_save_ssm_prediction()
-            if _bg.get("saved"):
-                import logging as _log
-                _log.getLogger("background_predictor").info(
-                    "SSM pred guardada: g30=%s g60=%s",
-                    _bg.get("g_pred_30"), _bg.get("g_pred_60"),
-                )
-        except Exception:
-            pass
-
         # ── ORBIT Drive: push del nuevo estado a la Live Activity vía APNs.
         #    Flag DRIVE_APNS_ENABLED=0 por defecto → no-op total. Con flag ON
         #    y token registrado, actualiza la Live Activity en background
@@ -266,6 +249,25 @@ def _do_libre_sync(email: str, password: str, provider: str = "libre") -> dict:
                     _set_setting("dawn_last_estimated", datetime.now().isoformat())
         except Exception:
             pass
+
+    # ── Background predictor: corre el SSM en CADA sync (no solo cuando hay
+    #    insertadas — Libre entrega en tandas de ~10 min y eso limitaba la
+    #    cobertura del bench a ~0.48; auditoría 2026-07-18). Guardia de
+    #    frescura: sin lectura reciente (hueco de sensor) no se predice.
+    try:
+        _ult = (GlucoseReading.query
+                .order_by(GlucoseReading.timestamp.desc()).first())
+        if _ult and (datetime.now() - _ult.timestamp) <= timedelta(minutes=12):
+            from services.background_predictor import run_and_save_ssm_prediction
+            _bg = run_and_save_ssm_prediction()
+            if _bg.get("saved"):
+                import logging as _log
+                _log.getLogger("background_predictor").info(
+                    "SSM pred guardada: g30=%s g60=%s",
+                    _bg.get("g_pred_30"), _bg.get("g_pred_60"),
+                )
+    except Exception:
+        pass
 
     # Guardar timestamp de última sync exitosa
     _set_setting("libre_last_sync", datetime.now().isoformat())
