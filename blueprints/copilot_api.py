@@ -651,6 +651,8 @@ def copilot_drive_push_token():
             _log.getLogger("drive.apns").info("fin remoto de actividad anterior: %s", r_end)
         except Exception:
             pass
+    if token != viejo:
+        _set_setting("drive_apns_env", "")   # el canal se redescubre por push
     _set_setting("drive_apns_token", token)
     _set_setting("drive_apns_token_updated_at", datetime.now().isoformat())
     return jsonify({"ok": True, "registered": bool(token)})

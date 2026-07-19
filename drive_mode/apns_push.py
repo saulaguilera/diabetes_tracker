@@ -189,6 +189,38 @@ def _marcar_ultimo_push(res: dict, content=None) -> None:
         pass
 
 
+_HOST_PROD = "https://api.push.apple.com"
+_HOST_SAND = "https://api.sandbox.push.apple.com"
+
+
+def _canales_en_orden() -> list:
+    """Canales APNs a intentar, en orden: el que funcionó la última vez para
+    el token actual (setting drive_apns_env) o el default del entorno, y
+    después el otro. Un build corrido desde Xcode genera tokens SANDBOX
+    aunque el servidor esté en producción — antes eso era BadDeviceToken →
+    token borrado → Live Activity congelada (caso 2026-07-19)."""
+    try:
+        from helpers import _get_setting
+        pref = (_get_setting("drive_apns_env") or "").strip()
+    except Exception:
+        pref = ""
+    if pref not in ("production", "sandbox"):
+        pref = "production" if _apns_host() == _HOST_PROD else "sandbox"
+    otro = "sandbox" if pref == "production" else "production"
+    host = {"production": _HOST_PROD, "sandbox": _HOST_SAND}
+    return [(pref, host[pref]), (otro, host[otro])]
+
+
+def _recordar_canal(canal: str) -> None:
+    try:
+        from helpers import _get_setting, _set_setting
+        if (_get_setting("drive_apns_env") or "") != canal:
+            _set_setting("drive_apns_env", canal)
+            log.info("APNs: canal de Live Activity → %s", canal)
+    except Exception:
+        pass
+
+
 def _send(device_token: str, content_state: dict) -> dict:
     jwt_token = _get_jwt()
     if not jwt_token:
@@ -220,29 +252,34 @@ def _send(device_token: str, content_state: dict) -> dict:
     }
 
     import httpx   # lazy: HTTP/2 (APNs es HTTP/2-only)
-    url = f"{_apns_host()}/3/device/{device_token}"
+    ultimo_reason = ""
     with httpx.Client(http2=True, timeout=10) as client:
-        r = client.post(url, json=body, headers=headers)
+        for canal, host in _canales_en_orden():
+            r = client.post(f"{host}/3/device/{device_token}",
+                            json=body, headers=headers)
+            if r.status_code == 200:
+                _recordar_canal(canal)
+                log.info("APNs push OK [%s] (%s %s)", canal,
+                         content_state.get("glucoseValueMgdl"),
+                         content_state.get("status"))
+                return {"ok": True, "canal": canal}
+            reason = ""
+            try:
+                reason = r.json().get("reason", "")
+            except Exception:
+                pass
+            if r.status_code in (400, 410) and reason in (
+                    "BadDeviceToken", "Unregistered", "ExpiredToken"):
+                ultimo_reason = reason
+                continue   # probar el otro canal antes de rendirse
+            log.warning("APNs push HTTP %s: %s", r.status_code, r.text[:200])
+            return {"ok": False, "reason": f"http_{r.status_code}: {reason}"}
 
-    if r.status_code == 200:
-        log.info("APNs push OK (%s %s)", content_state.get("glucoseValueMgdl"),
-                 content_state.get("status"))
-        return {"ok": True}
-
-    # Token muerto (actividad terminada / build distinta) → limpiar registro
-    reason = ""
-    try:
-        reason = r.json().get("reason", "")
-    except Exception:
-        pass
-    if r.status_code in (400, 410) and reason in ("BadDeviceToken", "Unregistered",
-                                                  "ExpiredToken"):
-        _clear_registered_token()
-        log.info("APNs token inválido (%s) — registro limpiado", reason)
-        return {"ok": False, "reason": f"token_cleared: {reason}"}
-
-    log.warning("APNs push HTTP %s: %s", r.status_code, r.text[:200])
-    return {"ok": False, "reason": f"http_{r.status_code}: {reason}"}
+    # rechazado en AMBOS canales → el token está muerto de verdad
+    _clear_registered_token()
+    log.info("APNs token inválido en ambos canales (%s) — registro limpiado",
+             ultimo_reason)
+    return {"ok": False, "reason": f"token_cleared: {ultimo_reason}"}
 
 
 def push_drive_end(device_token: str) -> dict:
@@ -267,14 +304,15 @@ def push_drive_end(device_token: str) -> dict:
     try:
         import httpx
         with httpx.Client(http2=True, timeout=10) as client:
-            r = client.post(f"{_apns_host()}/3/device/{device_token}",
-                            json=body, headers=headers)
+            for canal, host in _canales_en_orden():
+                r = client.post(f"{host}/3/device/{device_token}",
+                                json=body, headers=headers)
+                if r.status_code == 200:
+                    log.info("APNs end OK [%s] (actividad anterior terminada)", canal)
+                    return {"ok": True, "canal": canal}
     except Exception as exc:
         log.warning("APNs end falló: %s", exc)
         return {"ok": False, "reason": f"error: {exc}"}
-    if r.status_code == 200:
-        log.info("APNs end OK (actividad anterior terminada remotamente)")
-        return {"ok": True}
     return {"ok": False, "reason": f"http_{r.status_code}"}
 
 
