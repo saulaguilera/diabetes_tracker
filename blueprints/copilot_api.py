@@ -11,9 +11,22 @@ nada. Reusa los cálculos que ya existen (get_kinetics_snapshot).
                             actividad reciente.
 """
 from datetime import datetime, timedelta
-from flask import Blueprint, jsonify, session, request
+from flask import Blueprint, jsonify, session, request, g
 
 bp = Blueprint("copilot_api", __name__)
+
+
+@bp.teardown_request
+def _reset_pdf_token_ctx(exc=None):
+    """Restaura el contexto de usuario si el PDF lo fijó vía token firmado."""
+    tok = getattr(g, "_pdf_token_ctx", None)
+    if tok is not None:
+        try:
+            from helpers import reset_user_context
+            reset_user_context(tok)
+        except Exception:
+            pass
+        g._pdf_token_ctx = None
 
 LOW, HIGH = 70, 180
 
@@ -2076,13 +2089,40 @@ def copilot_entry_delete(cat, entry_id):
         return jsonify({"ok": False, "error": "No se pudo eliminar"}), 400
 
 
-@bp.route("/api/copilot/report.pdf", endpoint="copilot_report_pdf")
-def copilot_report_pdf():
-    """Reporte PDF para el equipo médico — 100% DESCRIPTIVO (datos, no
-    recomendaciones). Reusa los mismos análisis del copiloto analista."""
+@bp.route("/api/copilot/report-token", methods=["POST"],
+          endpoint="copilot_report_token")
+def copilot_report_token():
+    """Token firmado de corta vida para descargar el PDF sin cookies.
+    window.open en los WebView nativos (sobre todo Android) abre un visor
+    SIN la sesión → 401. El botón pide este token y lo pega a la URL."""
     err = _require_login()
     if err:
         return err
+    from itsdangerous import URLSafeTimedSerializer
+    from flask import current_app
+    ser = URLSafeTimedSerializer(current_app.secret_key, salt="orbit-report-pdf")
+    return jsonify({"ok": True, "t": ser.dumps({"u": session.get("user_id")})})
+
+
+@bp.route("/api/copilot/report.pdf", endpoint="copilot_report_pdf")
+def copilot_report_pdf():
+    """Reporte PDF para el equipo médico — 100% DESCRIPTIVO (datos, no
+    recomendaciones). Reusa los mismos análisis del copiloto analista.
+    Auth: sesión O token firmado ?t= (emitido por /report-token) — los
+    visores externos de los WebView nativos no llevan cookies."""
+    uid = session.get("user_id") if session.get("logged_in") else None
+    if not uid:
+        try:
+            from itsdangerous import URLSafeTimedSerializer
+            from flask import current_app
+            ser = URLSafeTimedSerializer(current_app.secret_key, salt="orbit-report-pdf")
+            uid = (ser.loads(request.args.get("t", ""), max_age=300) or {}).get("u")
+        except Exception:
+            uid = None
+        if not uid:
+            return jsonify({"ok": False, "error": "No autorizado"}), 401
+        from helpers import set_user_context
+        g._pdf_token_ctx = set_user_context(uid)
 
     import io
     from flask import send_file
@@ -2133,12 +2173,12 @@ def copilot_report_pdf():
     # usara Dexcom o Nightscout)
     try:
         from models import User as _User, db as _db
-        _u = _db.session.get(_User, session.get("user_id"))
+        _u = _db.session.get(_User, uid)
         fuente = {"libre": "FreeStyle Libre vía LibreLinkUp",
                   "dexcom": "Dexcom Share",
                   "nightscout": "Nightscout"}.get(
             (getattr(_u, "cgm_provider", None) or "libre"), "CGM")
-        if not getattr(_u, "libre_email_enc", None) and session.get("user_id") != 1:
+        if not getattr(_u, "libre_email_enc", None) and uid != 1:
             fuente = "registro manual"
     except Exception:
         fuente = "CGM"

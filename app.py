@@ -78,7 +78,9 @@ def _protect_all():
               "register", "auth.register", "privacidad", "auth.privacidad",
               "healthz", "admin.healthz",   # latido público para UptimeRobot
               "android", "auth.android", "android_apk", "auth.android_apk",
-              "descargar", "auth.descargar"}   # landing de descarga (bio)
+              "descargar", "auth.descargar",   # landing de descarga (bio)
+              # el PDF valida sesión O token firmado adentro (visores sin cookies)
+              "copilot_report_pdf", "copilot_api.copilot_report_pdf"}
     if request.endpoint in exempt or session.get("logged_in"):
         return
     # Permitir llamadas de cron/API autenticadas con SYNC_TOKEN

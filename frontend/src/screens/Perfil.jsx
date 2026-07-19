@@ -1,7 +1,7 @@
 // Perfil.jsx — datos del usuario, sensor, terapia (editable), médico y tema.
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { apiGet, apiPut, apiDelete } from '../api.js'
+import { apiGet, apiPost, apiPut, apiDelete } from '../api.js'
 import { PAL, SANS } from '../theme.js'
 import { Card, Eyebrow, Stepper, Field, Loading, useSheetClose, backdropAnim, sheetAnim } from '../components/ui.jsx'
 import { useLang, LANGS } from '../i18n.jsx'
@@ -126,7 +126,15 @@ export default function Perfil({ theme, refreshKey = 0, dark = true, onToggleThe
         <div style={{ color: theme.inkSoft, fontSize: 13, lineHeight: 1.5, marginBottom: 14 }}>
           {t('perfil.reportDesc')}
         </div>
-        <button onClick={() => window.open('/api/copilot/report.pdf?days=30', '_blank')} style={{
+        <button onClick={async () => {
+          // los visores nativos abren sin cookies → token firmado en la URL
+          try {
+            const r = await apiPost('/report-token', {})
+            window.open(`/api/copilot/report.pdf?days=30&t=${encodeURIComponent(r.t)}`, '_blank')
+          } catch {
+            window.open('/api/copilot/report.pdf?days=30', '_blank')
+          }
+        }} style={{
           width: '100%', padding: '12px', borderRadius: 14, border: 'none',
           background: PAL.glucosa.key, color: '#0A0C1E', fontSize: 14, fontWeight: 600,
           fontFamily: SANS, cursor: 'pointer' }}>
