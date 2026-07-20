@@ -133,6 +133,13 @@ def descargar():
                            testflight_url=os.environ.get("TESTFLIGHT_URL", "").strip() or None)
 
 
+@bp.route("/iphone", endpoint="iphone")
+def iphone():
+    """Página de descarga iPhone (espejo de /android): pasos + TestFlight."""
+    return render_template("iphone.html",
+                           testflight_url=os.environ.get("TESTFLIGHT_URL", "").strip() or None)
+
+
 @bp.route("/android", endpoint="android")
 def android():
     disponible, tam_mb, fecha = False, None, None

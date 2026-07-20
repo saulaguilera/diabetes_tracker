@@ -79,6 +79,7 @@ def _protect_all():
               "healthz", "admin.healthz",   # latido público para UptimeRobot
               "android", "auth.android", "android_apk", "auth.android_apk",
               "descargar", "auth.descargar",   # landing de descarga (bio)
+              "iphone", "auth.iphone",
               # el PDF valida sesión O token firmado adentro (visores sin cookies)
               "copilot_report_pdf", "copilot_api.copilot_report_pdf"}
     if request.endpoint in exempt or session.get("logged_in"):
