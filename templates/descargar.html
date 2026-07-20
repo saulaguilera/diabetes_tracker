@@ -107,6 +107,23 @@
       <a class="btn android {{ 'principal' if not testflight_url else 'secundario' }}" href="/android">🤖 Descargar para Android</a>
     </div>
 
+    {% if testflight_url %}
+    <div class="pasos ios-pasos" style="text-align:left; margin-top:26px; display:flex; flex-direction:column; gap:13px;">
+      <div style="display:flex; gap:12px; align-items:flex-start;">
+        <div style="flex-shrink:0; width:24px; height:24px; border-radius:50%; margin-top:1px; background:rgba(34,211,238,0.14); color:#22D3EE; font-weight:700; font-size:13px; display:grid; place-items:center;">1</div>
+        <div style="color:rgba(234,242,248,0.72); font-size:13.5px; line-height:1.55;">Instala <b style="color:#EAF2F8;">TestFlight</b> desde el App Store — es la app oficial de Apple para probar betas.</div>
+      </div>
+      <div style="display:flex; gap:12px; align-items:flex-start;">
+        <div style="flex-shrink:0; width:24px; height:24px; border-radius:50%; margin-top:1px; background:rgba(34,211,238,0.14); color:#22D3EE; font-weight:700; font-size:13px; display:grid; place-items:center;">2</div>
+        <div style="color:rgba(234,242,248,0.72); font-size:13.5px; line-height:1.55;">Vuelve aquí, toca <b style="color:#EAF2F8;">Descargar para iPhone</b> y en TestFlight toca <b style="color:#EAF2F8;">Aceptar → Instalar</b>.</div>
+      </div>
+      <div style="display:flex; gap:12px; align-items:flex-start;">
+        <div style="flex-shrink:0; width:24px; height:24px; border-radius:50%; margin-top:1px; background:rgba(34,211,238,0.14); color:#22D3EE; font-weight:700; font-size:13px; display:grid; place-items:center;">3</div>
+        <div style="color:rgba(234,242,248,0.72); font-size:13.5px; line-height:1.55;">Abre Orbit, toca <b style="color:#EAF2F8;">Crea tu cuenta</b> y usa tu <b style="color:#EAF2F8;">código de invitación</b>. Ahí mismo conectas tu sensor (Libre, Dexcom o Nightscout).</div>
+      </div>
+    </div>
+    {% endif %}
+
     <div class="foot">
       Beta por invitación · Tus datos, cifrados y solo tuyos ·
       <a href="/privacidad">Política de privacidad</a>
@@ -126,6 +143,7 @@
       if (esAndroid) {
         android.classList.add('principal'); android.classList.remove('secundario');
         ios.classList.remove('principal'); if (!ios.classList.contains('pronto')) ios.classList.add('secundario');
+        var ip = document.querySelector('.ios-pasos'); if (ip) ip.style.display = 'none';
       } else if (esIphone && !ios.classList.contains('pronto')) {
         ios.classList.add('principal'); ios.classList.remove('secundario');
         android.classList.remove('principal'); android.classList.add('secundario');
