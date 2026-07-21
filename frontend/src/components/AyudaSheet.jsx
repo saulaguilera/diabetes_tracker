@@ -70,7 +70,7 @@ const CONTENT = {
         blocks: [
           { steps: [
             'En la pestaña Registro, toca lo que quieras anotar: comida, insulina, ejercicio o contexto (estrés, enfermedad, dormir mal…).',
-            'A las comidas puedes sacarles una foto: el copiloto estima los carbohidratos por ti. Igual puedes ajustar el número.',
+            'A las comidas puedes sacarles una foto: el copiloto identifica los ingredientes y estima carbohidratos, fibra y macros por ti (igual puedes ajustar los números). Además le pone una puntuación de 1 a 10 según qué tan amigable es el plato para tu glucosa.',
             'Las etiquetas de contexto valen oro: le explican al copiloto por qué un día se comportó distinto.',
           ] },
           { note: 'Ninguna cantidad tiene que ser perfecta. Un registro aproximado siempre es mejor que ninguno.' },
@@ -166,7 +166,7 @@ const CONTENT = {
         blocks: [
           { steps: [
             'In the Log tab, tap whatever you want to record: meal, insulin, exercise or context (stress, illness, bad sleep…).',
-            'You can snap a photo of meals: the copilot estimates the carbs for you. You can always adjust the number.',
+            'You can snap a photo of meals: the copilot identifies the ingredients and estimates carbs, fiber and macros for you (you can always adjust the numbers). It also gives each meal a 1-10 score for how glucose-friendly it is.',
             'Context tags are gold: they tell the copilot why a day behaved differently.',
           ] },
           { note: 'No amount has to be perfect. A rough log always beats no log.' },

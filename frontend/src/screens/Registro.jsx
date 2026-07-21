@@ -8,8 +8,9 @@ import { Card, Eyebrow, Stepper, Segmented, Chips, Field } from '../components/u
 import Historial from '../components/Historial.jsx'
 
 // Redimensiona la foto en el cliente antes de enviarla (evita subir MB).
-// 1024px: suficiente detalle para identificar componentes sin subir demasiado.
-function fileToDataURL(file, max = 1024, quality = 0.8) {
+// 1280px: el modelo de visión aprovecha hasta ~1568px por lado; con 1024 se
+// perdían detalles finos (granos, salsas) que cambian la estimación de porción.
+function fileToDataURL(file, max = 1280, quality = 0.8) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onerror = reject
@@ -107,6 +108,8 @@ export default function Registro({ theme, onDone }) {
 
   const [breakdown, setBreakdown] = useState([])   // componentes estimados
   const [confidence, setConfidence] = useState(null)
+  const [score, setScore] = useState(null)         // 1-10 amigabilidad T1D
+  const [scoreReason, setScoreReason] = useState('')
   const lastPhotoRef = useRef(null)                // para re-estimar con pista
 
   const estimate = async (dataUrl, hint) => {
@@ -121,6 +124,7 @@ export default function Registro({ theme, onDone }) {
       setProtein(r.protein || 0); setFat(r.fat || 0)
       setBreakdown(r.breakdown || [])
       setConfidence(r.confidence || null)
+      setScore(r.score || null); setScoreReason(r.score_reason || '')
       setScanned(true)
     } catch (e2) {
       setErr('No pude estimar la foto. Cargá los datos a mano.')
@@ -148,7 +152,8 @@ export default function Registro({ theme, onDone }) {
 
   const payload = () => {
     if (cat === 'comida') {
-      const p = { cat, name: name || 'Comida', carbs, protein, fat }
+      const p = { cat, name: name || 'Comida', carbs, protein, fat, fiber }
+      if (score) { p.score = score }
       // ingredientes del desglose de la foto → se guardan como componentes
       if (scanned && breakdown.length > 0) p.components = breakdown
       return p
@@ -185,29 +190,23 @@ export default function Registro({ theme, onDone }) {
           {/* escanear con cámara → protagonista del flujo (grande, arriba) */}
           <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onPickPhoto} style={{ display: 'none' }}/>
           {!photo ? (
-            <button onClick={() => fileRef.current && fileRef.current.click()} disabled={scanning} style={{
+            scanning ? <Analyzing theme={theme} color={color}/> : (
+            <button onClick={() => fileRef.current && fileRef.current.click()} style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10,
               padding: '26px 14px', borderRadius: 18,
-              cursor: scanning ? 'default' : 'pointer', fontFamily: SANS, fontSize: 15,
+              cursor: 'pointer', fontFamily: SANS, fontSize: 15,
               background: theme.surface, border: `1.5px dashed ${theme.borderStrong}`, color: theme.inkSoft }}>
-              {scanning ? (
-                <><span className="ai-orbit" style={{ width: 22, height: 22, borderRadius: '50%', border: `2.5px solid ${color}44`, borderTopColor: color }}/> {t('reg.estimating')}</>
-              ) : (
-                <>
-                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                  <span>{t('reg.scan')}</span>
-                  <span style={{ fontSize: 12, color: theme.inkFaint }}>{t('reg.scanHint')}</span>
-                </>
-              )}
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              <span>{t('reg.scan')}</span>
+              <span style={{ fontSize: 12, color: theme.inkFaint }}>{t('reg.scanHint')}</span>
             </button>
+            )
           ) : (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <img src={photo} alt="" style={{ width: 56, height: 56, borderRadius: 12, objectFit: 'cover', flexShrink: 0 }}/>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12.5, color: theme.inkSoft }}>
-                    {scanning ? t('reg.analyzing') : t('reg.estimatedBy')}
-                  </div>
+                  {!scanning && <div style={{ fontSize: 12.5, color: theme.inkSoft }}>{t('reg.estimatedBy')}</div>}
                   <div style={{ display: 'flex', gap: 14, marginTop: 4 }}>
                     <button onClick={() => fileRef.current && fileRef.current.click()} style={{ background: 'none', border: 'none', color, fontSize: 12.5, cursor: 'pointer', fontFamily: SANS, padding: 0 }}>{t('reg.changePhoto')}</button>
                     {/* corregiste el nombre → re-estima usándolo como pista */}
@@ -217,6 +216,7 @@ export default function Registro({ theme, onDone }) {
                   </div>
                 </div>
               </div>
+              {scanning && <div style={{ marginTop: 10 }}><Analyzing theme={theme} color={color}/></div>}
               {/* desglose por componente — transparencia de dónde salió cada gramo */}
               {scanned && breakdown.length > 0 && (
                 <div className="rise-in" style={{ marginTop: 10, padding: '10px 12px', borderRadius: 12,
@@ -233,6 +233,21 @@ export default function Registro({ theme, onDone }) {
                       </span>
                     </div>
                   ))}
+                  {/* puntuación T1D del plato: número + porqué en una frase */}
+                  {score != null && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8,
+                      paddingTop: 8, borderTop: `0.5px solid ${theme.border}` }}>
+                      <span style={{ flexShrink: 0, minWidth: 44, textAlign: 'center', padding: '3px 8px',
+                        borderRadius: 100, fontSize: 12.5, fontWeight: 700,
+                        color: scoreColor(score), background: `${scoreColor(score)}1E`,
+                        border: `0.5px solid ${scoreColor(score)}55` }}>
+                        {score}/10
+                      </span>
+                      <span style={{ fontSize: 12, color: theme.inkSoft, lineHeight: 1.4 }}>
+                        {scoreReason || t('reg.scoreLabel')}
+                      </span>
+                    </div>
+                  )}
                   {confidence === 'baja' && (
                     <div style={{ marginTop: 6, fontSize: 12, color: '#E0B057' }}>
                       {t('reg.lowConfidence')}
@@ -268,6 +283,10 @@ export default function Registro({ theme, onDone }) {
           <Row theme={theme} label={t('reg.carbs')}><Stepper theme={theme} value={carbs} setValue={setCarbs} step={5} max={300} unit="g" color={color}/></Row>
           <Row theme={theme} label={t('reg.protein')}><Stepper theme={theme} value={protein} setValue={setProtein} step={5} max={200} unit="g" color={theme.ink}/></Row>
           <Row theme={theme} label={t('reg.fat')}><Stepper theme={theme} value={fat} setValue={setFat} step={5} max={200} unit="g" color={theme.ink}/></Row>
+          {/* fibra: informativa — los carbos de arriba ya son netos (fibra descontada) */}
+          <Row theme={theme} label={<span>{t('reg.fiber')} <span style={{ color: theme.inkFaint, fontSize: 11.5 }}>· {t('reg.fiberHint')}</span></span>}>
+            <Stepper theme={theme} value={fiber} setValue={setFiber} step={1} max={60} unit="g" color="#5FC6A8"/>
+          </Row>
         </Card>
       )}
 
@@ -323,6 +342,31 @@ export default function Registro({ theme, onDone }) {
     </div>
   )
 }
+
+// Estado de análisis visible: spinner + mensajes que rotan mientras la IA
+// trabaja (identificando → porciones → macros). Nadie se queda mirando
+// una pantalla muda preguntándose si la foto llegó.
+function Analyzing({ theme, color }) {
+  const { t } = useLang()
+  const msgs = [t('reg.analyzing1'), t('reg.analyzing2'), t('reg.analyzing3')]
+  const [i, setI] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setI(v => (v + 1) % msgs.length), 1800)
+    return () => clearInterval(id)
+  }, [])
+  return (
+    <div className="rise-in" style={{ display: 'flex', alignItems: 'center', gap: 10,
+      padding: '12px 14px', borderRadius: 12, background: `${color}14`,
+      border: `0.5px solid ${color}44` }}>
+      <span className="ai-orbit" style={{ width: 18, height: 18, borderRadius: '50%',
+        border: `2.5px solid ${color}44`, borderTopColor: color, flexShrink: 0 }}/>
+      <span style={{ fontSize: 13.5, fontWeight: 600, color: theme.ink }}>{msgs[i]}</span>
+    </div>
+  )
+}
+
+// color de la puntuación 1-10: verde ≥7, ámbar 4-6, coral ≤3
+const scoreColor = (s) => s >= 7 ? '#5FC6A8' : s >= 4 ? '#E0B057' : '#D98A6A'
 
 function Row({ theme, label, children }) {
   return (

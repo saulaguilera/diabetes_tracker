@@ -83,9 +83,11 @@ class Meal(TenantScoped, db.Model):
     carbs_g = db.Column(db.Float, nullable=False, default=0)
     fat_g = db.Column(db.Float, default=0)
     protein_g = db.Column(db.Float, default=0)
+    fiber_g = db.Column(db.Float, default=0)          # ya descontada de carbs_g (netos)
     calories = db.Column(db.Float, default=0)
     notes = db.Column(db.Text)
     categoria = db.Column(db.String(50))
+    health_score = db.Column(db.Integer)              # 1-10 amigabilidad T1D (foto)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     components = db.relationship(

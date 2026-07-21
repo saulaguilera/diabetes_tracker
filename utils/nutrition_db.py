@@ -141,6 +141,17 @@ PORCIONES_ESTANDAR = {
     "kiwi":              (80,   "kiwi"),
     "pizza":             (100,  "porción"),
     "hamburguesa":       (200,  "hamburguesa"),
+    "marraqueta":        (100,  "marraqueta"),
+    "hallulla":          (80,   "hallulla"),
+    "pan amasado":       (80,   "pan"),
+    "sopaipilla":        (50,   "sopaipilla"),
+    "completo":          (280,  "completo"),
+    "humita":            (200,  "humita"),
+    "sushi":             (30,   "pieza"),
+    "berlín":            (90,   "berlín"),
+    "berlin":            (90,   "berlín"),
+    "milanesa":          (180,  "milanesa"),
+    "calzones rotos":    (35,   "unidad"),
 }
 
 # Clave: texto en minúsculas (búsqueda por substring)
@@ -525,6 +536,34 @@ NUTRITION_DB = {
     "batido proteico":    ( 8.0, 1.0, 25.0,  3.0, 160),
     "smoothie":           (14.0, 1.5,  2.0,  0.5,  68),
     "bowl de açaí":       (28.0, 4.5,  3.5,  6.0, 175),
+
+    # ── Platos y panes chilenos / latinos ─────────────────────────────────
+    # (los usuarios reales comen esto a diario; sin estas entradas la foto
+    #  caía en el fallback de la IA, menos preciso que la base)
+    "marraqueta":         (57.0, 2.3,  9.1,  1.6, 281),
+    "hallulla":           (55.0, 2.1,  8.5,  6.0, 310),
+    "pan amasado":        (54.0, 2.2,  8.8,  4.5, 290),
+    "sopaipilla":         (42.0, 2.5,  5.5, 15.0, 330),
+    "completo":           (22.0, 1.5,  8.0, 14.0, 250),
+    "pastel de choclo":   (18.0, 2.0,  8.0,  8.0, 180),
+    "cazuela":            ( 8.0, 1.2,  6.5,  3.5,  90),
+    "porotos granados":   (17.0, 4.5,  6.0,  2.5, 115),
+    "charquicán":         (12.0, 2.5,  6.0,  4.0, 110),
+    "mote con huesillo":  (24.0, 1.0,  1.5,  0.3, 105),
+    "humita":             (22.0, 2.8,  4.5,  6.5, 165),
+    "milanesa":           (14.0, 0.8, 18.0, 12.0, 240),
+    "sushi":              (30.0, 0.9,  7.0,  3.0, 175),
+    "ceviche":            ( 4.0, 0.5, 16.0,  2.0, 100),
+    "chorrillana":        (18.0, 1.5, 12.0, 16.0, 270),
+    "churrasco":          (25.0, 1.2, 14.0, 10.0, 250),
+    "barros luco":        (24.0, 1.2, 16.0, 12.0, 270),
+    "lasaña":             (14.0, 1.2,  8.0,  6.0, 145),
+    "leche asada":        (20.0, 0.0,  6.5,  5.0, 150),
+    "calzones rotos":     (52.0, 1.5,  7.0, 14.0, 360),
+    "berlín":             (45.0, 1.5,  6.5, 12.0, 320),
+    "berlin":             (45.0, 1.5,  6.5, 12.0, 320),
+    "kuchen":             (35.0, 1.2,  5.0, 12.0, 270),
+    "pebre":              ( 6.0, 1.8,  1.5,  3.0,  60),
 }
 
 
@@ -1001,6 +1040,14 @@ GI_DB = {
     "hamburguesa":     66,
     "sándwich":        56,
     "empanada":        55,
+    # Chilenos (estimados desde equivalentes de Atkinson 2008: pan blanco/frito)
+    "marraqueta":      70,
+    "hallulla":        69,
+    "pan amasado":     70,
+    "sopaipilla":      65,
+    "mote con huesillo": 60,
+    "sushi":           55,
+    "humita":          52,
 }
 
 

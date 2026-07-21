@@ -41,10 +41,19 @@ Trabaja PASO A PASO antes de responder (piensa primero, responde al final):
    ven.
 4. Calcula los macros de cada componente (tabla por 100 g × peso estimado).
    "carbs" son carbohidratos TOTALES (la fibra va incluida y además aparte).
+5. Puntúa el plato para una persona con diabetes tipo 1 ("score", entero 1-10).
+   Pesa sobre todo la carga glucémica total del plato; suman fibra, proteína y
+   alimentos enteros; restan azúcar libre, harinas refinadas, frituras y
+   ultraprocesados. Guía: 9-10 verduras/proteína/legumbres/integrales;
+   7-8 balanceado con CH moderados; 5-6 CH refinados moderados; 3-4 alto en
+   refinados o frito; 1-2 azúcar líquida o dulces como plato principal.
+   "score_reason": UNA frase corta (máx. 12 palabras) explicando el porqué,
+   en tono amable, sin regañar.
 {hint_block}
 Responde SOLO con este JSON, sin texto extra:
 {{"name": "nombre corto del plato",
  "confidence": "alta" | "media" | "baja",
+ "score": <int 1-10>, "score_reason": "frase corta",
  "components": [{{"name": "componente", "grams": <int>, "carbs": <int>,
                  "fiber": <int>, "protein": <int>, "fat": <int>,
                  "calories": <int>}}]}}
@@ -112,6 +121,35 @@ def ground_components(components: list) -> list[dict]:
                 })
         out.append(item)
     return out
+
+
+def meal_score(parsed: dict, tot: dict) -> tuple[int | None, str]:
+    """
+    Puntuación 1-10 del plato para T1D. Preferimos la del modelo (vio el plato:
+    distingue frito de plancha, integral de refinado). Si no vino o es inválida,
+    fallback determinístico desde los macros. Sin componentes no hay plato → None.
+    """
+    if not tot or not any(tot.get(k) for k in ("carbs", "protein", "fat", "calories")):
+        return None, ""
+    reason = str(parsed.get("score_reason") or "").strip()[:140]
+    try:
+        s = int(parsed.get("score"))
+        if 1 <= s <= 10:
+            return s, reason
+    except (TypeError, ValueError):
+        pass
+    # Fallback: carga de CH netos manda; fibra y proteína recuperan puntos.
+    net = max(0, tot.get("carbs", 0) - tot.get("fiber", 0))
+    s = 9
+    for umbral, castigo in ((70, 5), (50, 4), (35, 3), (20, 2), (10, 1)):
+        if net >= umbral:
+            s = 9 - castigo
+            break
+    if tot.get("fiber", 0) >= 8:
+        s += 1
+    if tot.get("protein", 0) >= 20:
+        s += 1
+    return max(1, min(10, s)), reason
 
 
 def totals(components: list[dict]) -> dict:

@@ -735,10 +735,18 @@ def copilot_log():
 
     try:
         if cat == "comida":
+            score = None
+            try:
+                s = int(data.get("score"))
+                if 1 <= s <= 10:
+                    score = s
+            except (TypeError, ValueError):
+                pass
             row = Meal(
                 timestamp=now,
                 name=(data.get("name") or "Comida").strip()[:200],
                 carbs_g=_f("carbs"), fat_g=_f("fat"), protein_g=_f("protein"),
+                fiber_g=_f("fiber"), health_score=score,
                 calories=_f("calories"), notes=(data.get("notes") or None),
             )
             # ingredientes (del desglose de la foto) → MealComponent, con ÍG
@@ -1374,7 +1382,9 @@ sauvlogs@gmail.com.
   AndroidAPS, Omnipod DIY) automáticamente.
 - Registrar: pestaña Registro → comida, insulina, ejercicio o contexto
   (estrés, enfermedad, dormir mal…). A las comidas se les puede sacar foto
-  y Orbit estima los carbohidratos (ajustables). Todo editable.
+  y Orbit identifica ingredientes y estima carbohidratos, fibra y macros
+  (ajustables), y les pone una puntuación 1-10 de qué tan amigable es el
+  plato para la glucosa. Todo editable.
 - Patrones y avisos: Orbit busca patrones solo y avisa con la campanita 🔔;
   la pestaña Patrones tiene el detalle. El brief matutino llega como
   notificación si están habilitadas (en iPhone: Ajustes → Orbit).
@@ -1797,7 +1807,7 @@ def copilot_estimate():
     import os, re
     from utils.photo_estimate import (
         DEFAULT_VISION_MODEL, build_prompt, parse_response,
-        ground_components, totals, remember_estimate,
+        ground_components, totals, remember_estimate, meal_score,
     )
 
     data = request.get_json(silent=True) or {}
@@ -1834,11 +1844,13 @@ def copilot_estimate():
         tot = totals(comps)
         name = (parsed.get("name") or "").strip()[:200]
         remember_estimate(name, tot["carbs"], tot["fiber"])
+        score, score_reason = meal_score(parsed, tot)
 
         return jsonify({
             "ok": True,
             "name": name,
             "confidence": parsed.get("confidence") or "media",
+            "score": score, "score_reason": score_reason,
             "carbs": tot["carbs"], "fiber": tot["fiber"],
             "protein": tot["protein"], "fat": tot["fat"], "calories": tot["calories"],
             # desglose completo: la UI lo muestra y lo manda a /log para que la

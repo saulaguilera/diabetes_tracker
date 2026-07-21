@@ -153,6 +153,12 @@ with app.app_context():
         if "categoria" not in cols:
             conn.execute(text("ALTER TABLE meals ADD COLUMN categoria VARCHAR(50)"))
             conn.commit()
+        if "fiber_g" not in cols:
+            conn.execute(text("ALTER TABLE meals ADD COLUMN fiber_g REAL DEFAULT 0"))
+            conn.commit()
+        if "health_score" not in cols:
+            conn.execute(text("ALTER TABLE meals ADD COLUMN health_score INTEGER"))
+            conn.commit()
         # Migración: tabla meal_components (multi-ingrediente)
         existing_tables = inspector.get_table_names()
         if "meal_components" not in existing_tables:
