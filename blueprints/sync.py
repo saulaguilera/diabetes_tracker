@@ -933,13 +933,16 @@ def sync_all_users(is_manual: bool = False) -> dict:
                 _maybe_morning_brief()   # buenos días 🌅 (una vez al día, 7-10h)
             except Exception:
                 pass
-            try:
-                _maybe_pattern_scan()    # 🧠 patrones nuevos → push nativo
-            except Exception:
-                pass
         except Exception as exc:
             resultados[u.username] = {"error": str(exc)[:200]}
         finally:
+            # 🧠 patrones nuevos → push nativo. En el finally a propósito:
+            # los patrones salen del histórico, así que el escaneo corre
+            # aunque el sync de HOY haya fallado (ej. credenciales caídas).
+            try:
+                _maybe_pattern_scan()
+            except Exception:
+                pass
             # bitácora por usuario (clave u{id}::sync_last) para el panel admin
             try:
                 res_u = resultados.get(u.username) or {}

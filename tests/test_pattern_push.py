@@ -82,6 +82,38 @@ class TestDisparoDesdeElCron(unittest.TestCase):
             # el escaneo corrió para el usuario y BAJO su contexto de tenant
             self.assertEqual(contextos, [1])
 
+    def test_sync_roto_no_frena_el_escaneo(self):
+        """El caso marcolamp: credenciales CGM caídas → _sync_one_user explota.
+        Los patrones salen del histórico, así que el escaneo debe correr igual."""
+        import flask
+        from models import db, User
+        from helpers import current_user_id
+
+        app = flask.Flask(__name__)
+        app.config.update(SQLALCHEMY_DATABASE_URI="sqlite:///:memory:",
+                          SQLALCHEMY_TRACK_MODIFICATIONS=False, TESTING=True,
+                          SECRET_KEY="test")
+        db.init_app(app)
+        with app.app_context():
+            db.create_all()
+            db.session.add(User(username="marco", password_hash="x",
+                                display_name="marco"))
+            db.session.commit()
+
+            contextos = []
+
+            import blueprints.sync as sync_mod
+            with mock.patch.object(sync_mod, "_cgm_config_for_user",
+                                   return_value=("libre", "a@b.c", "pw")), \
+                 mock.patch.object(sync_mod, "_sync_one_user",
+                                   side_effect=RuntimeError("sin paciente")), \
+                 mock.patch.object(sync_mod, "_maybe_pattern_scan",
+                                   side_effect=lambda: contextos.append(current_user_id())):
+                res = sync_mod.sync_all_users()
+
+            self.assertEqual(contextos, [1])
+            self.assertIn("error", res["usuarios"]["marco"])
+
 
 if __name__ == "__main__":
     unittest.main()
