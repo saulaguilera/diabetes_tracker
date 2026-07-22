@@ -1385,8 +1385,10 @@ sauvlogs@gmail.com.
   y Orbit identifica ingredientes y estima carbohidratos, fibra y macros
   (ajustables), y les pone una puntuación 1-10 de qué tan amigable es el
   plato para la glucosa. Todo editable.
-- Patrones y avisos: Orbit busca patrones solo y avisa con la campanita 🔔;
-  la pestaña Patrones tiene el detalle. El brief matutino llega como
+- Patrones y avisos: Orbit busca patrones solo y cuando encuentra algo nuevo
+  manda una notificación al teléfono («🧠 Orbit encontró algo») sin que se
+  abra la app; también queda en la campanita 🔔 y la pestaña Patrones tiene
+  el detalle. El brief matutino llega como
   notificación si están habilitadas (en iPhone: Ajustes → Orbit).
 - Orbit Drive: botón arriba a la derecha; muestra la glucosa en la pantalla
   de bloqueo/Dynamic Island. iOS lo apaga a las ~8 horas: reabrir Drive lo

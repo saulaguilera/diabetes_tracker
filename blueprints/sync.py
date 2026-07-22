@@ -933,6 +933,10 @@ def sync_all_users(is_manual: bool = False) -> dict:
                 _maybe_morning_brief()   # buenos días 🌅 (una vez al día, 7-10h)
             except Exception:
                 pass
+            try:
+                _maybe_pattern_scan()    # 🧠 patrones nuevos → push nativo
+            except Exception:
+                pass
         except Exception as exc:
             resultados[u.username] = {"error": str(exc)[:200]}
         finally:
@@ -961,6 +965,20 @@ def sync_all_users(is_manual: bool = False) -> dict:
             "backup": backup_res, "error": None}
 
 
+def _maybe_pattern_scan(now=None):
+    """Escaneo de patrones del usuario del contexto → notificación NATIVA.
+    La lógica vive en copilot_api._check_new_patterns (throttle 6h, dedup 30
+    días por tipo de patrón, campanita + push APNs/FCM). Antes solo corría al
+    abrir la app — el push llegaba cuando ya estabas adentro. Desde el cron,
+    «🧠 Orbit encontró algo» llega solo, aunque no abras la app.
+    Ventana 9:00-21:30: un patrón no es una urgencia de madrugada."""
+    now = now or datetime.now()
+    if not (9 <= now.hour < 21 or (now.hour == 21 and now.minute <= 30)):
+        return None
+    from blueprints.copilot_api import _check_new_patterns
+    _check_new_patterns()
+
+
 def _maybe_morning_brief(now=None):
     """Push matinal del usuario del contexto: cómo estuvo la noche, en una
     línea. Una vez al día, entre 7 y 10 AM, solo si hay token de push y datos
@@ -971,7 +989,9 @@ def _maybe_morning_brief(now=None):
     hoy = now.strftime("%Y-%m-%d")
     if _get_setting("brief_push_last") == hoy:
         return None
-    if not (_get_setting("app_apns_token") or "").strip():
+    # token de push de CUALQUIER plataforma (iOS o Android)
+    if not ((_get_setting("app_apns_token") or "").strip()
+            or (_get_setting("app_fcm_token") or "").strip()):
         return None
     _set_setting("brief_push_last", hoy)   # antes de enviar: sin martilleo
 

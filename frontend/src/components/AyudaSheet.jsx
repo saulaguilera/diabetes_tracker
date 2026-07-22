@@ -26,7 +26,7 @@ const CONTENT = {
           { steps: [
             'Conecta tu sensor (aquí abajo te explicamos cómo) para que la glucosa llegue sola.',
             'Registra tus comidas, insulina y ejercicio en la pestaña Registro. Mientras más registres, mejor te conoce Orbit.',
-            'En unos días, el copiloto empieza a encontrar patrones y te avisa con la campanita 🔔.',
+            'En unos días, el copiloto empieza a encontrar patrones y te avisa solo: te llega una notificación «🧠 Orbit encontró algo» al teléfono (y queda en la campanita 🔔).',
           ] },
           { note: 'Orbit describe y acompaña: nunca calcula dosis ni reemplaza a tu equipo médico.' },
         ],
@@ -81,7 +81,7 @@ const CONTENT = {
         blocks: [
           { steps: [
             'En la pestaña Copiloto puedes conversar: pídele el resumen del día, pregúntale por una comida o por qué amaneciste alto.',
-            'Orbit busca patrones solo — fenómeno del alba, hipos después del ejercicio, franjas horarias difíciles — y te avisa con la campanita 🔔.',
+            'Orbit busca patrones solo — fenómeno del alba, hipos después del ejercicio, franjas horarias difíciles — y cuando encuentra algo nuevo te llega una notificación al teléfono, sin que abras la app. También queda en la campanita 🔔.',
             'En la pestaña Patrones ves todo lo que ha encontrado, con la explicación y qué comentar con tu médico.',
           ] },
           { note: 'También puedes descargar un reporte PDF en Perfil para llevar a tu consulta.' },
@@ -122,7 +122,7 @@ const CONTENT = {
           { steps: [
             'Connect your sensor (explained below) so glucose flows in on its own.',
             'Log your meals, insulin and exercise in the Log tab. The more you log, the better Orbit knows you.',
-            'Within a few days, the copilot starts finding patterns and pings you with the bell 🔔.',
+            'Within a few days, the copilot starts finding patterns and tells you on its own: a «🧠 Orbit found something» notification arrives on your phone (and stays in the bell 🔔).',
           ] },
           { note: 'Orbit describes and accompanies: it never calculates doses and never replaces your medical team.' },
         ],
@@ -177,7 +177,7 @@ const CONTENT = {
         blocks: [
           { steps: [
             'In the Copilot tab you can chat: ask for today\'s summary, about a meal, or why you woke up high.',
-            'Orbit hunts for patterns on its own — dawn phenomenon, post-exercise lows, tricky time windows — and pings you with the bell 🔔.',
+            'Orbit hunts for patterns on its own — dawn phenomenon, post-exercise lows, tricky time windows — and when it finds something new, a notification arrives on your phone without opening the app. It also stays in the bell 🔔.',
             'The Patterns tab shows everything it has found, with the explanation and what to discuss with your doctor.',
           ] },
           { note: 'You can also download a PDF report in Profile to bring to your appointment.' },
