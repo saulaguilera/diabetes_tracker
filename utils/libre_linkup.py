@@ -177,19 +177,33 @@ def get_readings(token: str, base_url: str, patient_id: str, account_id: str = "
 
 def _parse_reading(raw: dict) -> dict:
     """Convierte una lectura raw de la API al formato interno."""
-    # Usamos Timestamp (hora local del usuario en LibreLink) para que el valor
-    # guardado en DB coincida con la zona horaria local del usuario.
-    ts_raw = raw.get("Timestamp") or raw.get("timestamp") or ""
-
-    # Formato Abbott: "1/15/2026 10:30:00 AM" (UTC si viene de FactoryTimestamp)
-    try:
-        ts = datetime.strptime(ts_raw, "%m/%d/%Y %I:%M:%S %p")
-    except ValueError:
+    # FactoryTimestamp viene en UTC del sensor y NO depende de la zona horaria
+    # del teléfono; lo convertimos a la hora local del servidor (TZ del
+    # producto). "Timestamp" es la hora local del TELÉFONO: si el usuario
+    # viaja, desfasa todas las lecturas (bug real: viaje con +2h de desfase →
+    # la app veía el sensor "121 min offline" para siempre y el brief salía
+    # degradado). Timestamp queda solo como fallback.
+    ts = None
+    ft_raw = raw.get("FactoryTimestamp") or raw.get("factoryTimestamp") or ""
+    if ft_raw:
         try:
-            ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
-            ts = ts.replace(tzinfo=None)
+            ts_utc = datetime.strptime(ft_raw, "%m/%d/%Y %I:%M:%S %p")
+            ts = datetime.fromtimestamp(
+                ts_utc.replace(tzinfo=timezone.utc).timestamp())
         except ValueError:
-            ts = datetime.now()  # fallback: hora local del servidor
+            ts = None
+
+    if ts is None:
+        ts_raw = raw.get("Timestamp") or raw.get("timestamp") or ""
+        # Formato Abbott: "1/15/2026 10:30:00 AM"
+        try:
+            ts = datetime.strptime(ts_raw, "%m/%d/%Y %I:%M:%S %p")
+        except ValueError:
+            try:
+                ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+                ts = ts.replace(tzinfo=None)
+            except ValueError:
+                ts = datetime.now()  # fallback: hora local del servidor
 
     value = float(raw.get("ValueInMgPerDl") or raw.get("value") or 0)
 
