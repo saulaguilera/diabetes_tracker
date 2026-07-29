@@ -468,7 +468,123 @@ def impacto_de_contexto(tag: str | None = None, days: int = 90) -> dict:
 
 # ─────────────────────── schemas Anthropic + dispatcher ───────────────────────
 
+# ─────────────────── herramientas de REGISTRO (escritura) ───────────────────
+# El copiloto puede registrar comida/insulina/ejercicio cuando la persona se lo
+# pide explícitamente ("anótame 40g de carbos"). Mismas tablas que /log; la
+# tenancy la aplica el contexto del request. Validación dura en cada campo:
+# el modelo confirma exactamente lo que quedó guardado.
+
+def _ts_hace(minutos) -> datetime:
+    try:
+        m = min(max(int(minutos or 0), 0), 1440)   # máx 24h hacia atrás
+    except (TypeError, ValueError):
+        m = 0
+    return datetime.now() - timedelta(minutes=m)
+
+
+def _num(v, lo, hi) -> float:
+    try:
+        return min(max(float(v or 0), lo), hi)
+    except (TypeError, ValueError):
+        return lo
+
+
+def registrar_comida(nombre, carbs, protein=0, fat=0, fiber=0, hace_minutos=0) -> dict:
+    from models import db, Meal
+    nombre = (str(nombre or "").strip() or "Comida")[:200]
+    carbs = round(_num(carbs, 0, 500), 1)
+    if carbs <= 0:
+        return {"error": "faltan los gramos de carbohidratos (pregunta a la persona)"}
+    ts = _ts_hace(hace_minutos)
+    row = Meal(timestamp=ts, name=nombre, carbs_g=carbs,
+               protein_g=round(_num(protein, 0, 300), 1),
+               fat_g=round(_num(fat, 0, 300), 1),
+               fiber_g=round(_num(fiber, 0, 100), 1))
+    db.session.add(row)
+    db.session.commit()
+    return {"ok": True, "registrado": {
+        "tipo": "comida", "nombre": row.name, "carbs_g": row.carbs_g,
+        "protein_g": row.protein_g, "fat_g": row.fat_g, "fiber_g": row.fiber_g,
+        "hora": ts.strftime("%H:%M")}}
+
+
+def registrar_insulina(unidades, tipo="bolus", hace_minutos=0) -> dict:
+    from models import db, InsulinDose
+    u = round(_num(unidades, 0, 60), 1)
+    if u <= 0:
+        return {"error": "faltan las unidades (pregunta a la persona)"}
+    tipo = tipo if tipo in ("bolus", "basal") else "bolus"
+    ts = _ts_hace(hace_minutos)
+    row = InsulinDose(timestamp=ts, type=tipo, units=u)
+    db.session.add(row)
+    db.session.commit()
+    return {"ok": True, "registrado": {
+        "tipo": f"insulina {tipo}", "unidades": u, "hora": ts.strftime("%H:%M")}}
+
+
+def registrar_ejercicio(actividad, duracion_min, intensidad="media", hace_minutos=0) -> dict:
+    from models import db, Activity
+    dur = int(_num(duracion_min, 0, 600))
+    if dur <= 0:
+        return {"error": "falta la duración en minutos (pregunta a la persona)"}
+    intensidad = intensidad if intensidad in ("baja", "media", "alta") else "media"
+    ts = _ts_hace(hace_minutos)
+    row = Activity(timestamp=ts,
+                   activity_type=(str(actividad or "").strip() or "Ejercicio")[:100],
+                   duration_min=dur, intensity=intensidad)
+    db.session.add(row)
+    db.session.commit()
+    return {"ok": True, "registrado": {
+        "tipo": "ejercicio", "actividad": row.activity_type,
+        "duracion_min": dur, "intensidad": intensidad,
+        "hora": ts.strftime("%H:%M")}}
+
+
+_AVISO_REGISTRO = ("SOLO cuando la persona pide EXPLÍCITAMENTE anotar/registrar. "
+                   "Si falta un dato esencial, pregunta antes de llamar. "
+                   "Tras registrar, confirma exactamente lo guardado.")
+
 COPILOT_TOOLS = [
+    {
+        "name": "registrar_comida",
+        "description": ("REGISTRA una comida en el historial de la persona. "
+                        + _AVISO_REGISTRO + " Los carbohidratos son NETOS "
+                        "(si la persona da totales y fibra, réstalos tú)."),
+        "input_schema": {"type": "object", "properties": {
+            "nombre": {"type": "string", "description": "Qué comió (ej. 'Pan con palta')"},
+            "carbs": {"type": "number", "description": "Gramos de carbohidratos (netos)"},
+            "protein": {"type": "number", "description": "Gramos de proteína (opcional)"},
+            "fat": {"type": "number", "description": "Gramos de grasa (opcional)"},
+            "fiber": {"type": "number", "description": "Gramos de fibra (opcional)"},
+            "hace_minutos": {"type": "integer", "description":
+                "Hace cuántos minutos comió (0 = ahora, máx 1440)"}},
+            "required": ["nombre", "carbs"]},
+    },
+    {
+        "name": "registrar_insulina",
+        "description": ("REGISTRA una dosis de insulina que la persona YA se puso "
+                        "y te dicta. " + _AVISO_REGISTRO + " PROHIBIDO usarla para "
+                        "sugerir o calcular dosis: solo transcribes lo que la "
+                        "persona ya decidió y se aplicó."),
+        "input_schema": {"type": "object", "properties": {
+            "unidades": {"type": "number", "description": "Unidades que se puso"},
+            "tipo": {"type": "string", "enum": ["bolus", "basal"],
+                     "description": "bolus (rápida) o basal (default bolus)"},
+            "hace_minutos": {"type": "integer", "description":
+                "Hace cuántos minutos se la puso (0 = ahora, máx 1440)"}},
+            "required": ["unidades"]},
+    },
+    {
+        "name": "registrar_ejercicio",
+        "description": "REGISTRA una sesión de ejercicio. " + _AVISO_REGISTRO,
+        "input_schema": {"type": "object", "properties": {
+            "actividad": {"type": "string", "description": "Caminar, Correr, Bici, Fuerza…"},
+            "duracion_min": {"type": "integer", "description": "Duración en minutos"},
+            "intensidad": {"type": "string", "enum": ["baja", "media", "alta"]},
+            "hace_minutos": {"type": "integer", "description":
+                "Hace cuántos minutos terminó (0 = ahora, máx 1440)"}},
+            "required": ["actividad", "duracion_min"]},
+    },
     {
         "name": "respuesta_al_ejercicio",
         "description": ("Qué pasó con la glucosa DESPUÉS de las sesiones de ejercicio "
@@ -542,6 +658,14 @@ COPILOT_TOOLS = [
 ]
 
 _DISPATCH = {
+    "registrar_comida":       lambda a: registrar_comida(
+        a.get("nombre"), a.get("carbs"), a.get("protein", 0), a.get("fat", 0),
+        a.get("fiber", 0), a.get("hace_minutos", 0)),
+    "registrar_insulina":     lambda a: registrar_insulina(
+        a.get("unidades"), a.get("tipo", "bolus"), a.get("hace_minutos", 0)),
+    "registrar_ejercicio":    lambda a: registrar_ejercicio(
+        a.get("actividad"), a.get("duracion_min"), a.get("intensidad", "media"),
+        a.get("hace_minutos", 0)),
     "respuesta_al_ejercicio": lambda a: respuesta_al_ejercicio(a.get("days", 90)),
     "hipos_recientes":        lambda a: hipos_recientes(a.get("days", 30)),
     "estadisticas_periodo":   lambda a: estadisticas_periodo(
@@ -562,4 +686,9 @@ def run_tool(name: str, args: dict) -> dict:
     try:
         return fn(args or {})
     except Exception as exc:
+        try:
+            from models import db
+            db.session.rollback()   # un registro a medias no puede quedar colgado
+        except Exception:
+            pass
         return {"error": f"la consulta falló: {exc}"}

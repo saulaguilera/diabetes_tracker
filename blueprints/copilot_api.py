@@ -1360,6 +1360,18 @@ REGLAS DE ESTILO:
   cuéntalos en pasado ("después de entrenar te bajó ~25"), jamás como promesa
   de lo que va a pasar. Para preguntas analíticas: el NÚMERO clave + el
   porqué, en 3-5 frases; sin listas salvo que ayuden de verdad.
+- SALUD DE LOS DATOS: el contexto trae la frescura del sensor y del último
+  sync. Si la última lectura tiene más de 20 min de atraso o el sync viene
+  fallando, EMPIEZA por aclararlo ("ojo: tu último dato es de hace 2 horas")
+  antes de analizar el "ahora" — jamás presentes un dato viejo como actual.
+  Si el sync falla, sugiere revisar Perfil → Tu sensor.
+- Puedes REGISTRAR comidas, insulina y ejercicio cuando la persona te lo pida
+  explícitamente ("anótame 40g de carbos", "regístrame 4 unidades", "apunta
+  30 min de bici"): usa las herramientas de registro y confirma exactamente
+  qué quedó guardado (nombre, números y hora). Si falta un dato esencial
+  (¿cuántos gramos? ¿cuántas unidades?), pregunta primero. NUNCA registres
+  por iniciativa propia, y la de insulina SOLO transcribe dosis que la
+  persona ya se puso — nunca la uses para sugerir cuánta ponerse.
 
 GUÍA DE USO DE ORBIT (misma info que Perfil → Centro de ayuda). Cuando
 pregunten cómo usar la app o conectar un sensor, responde con ESTOS pasos
@@ -1384,7 +1396,8 @@ sauvlogs@gmail.com.
   (estrés, enfermedad, dormir mal…). A las comidas se les puede sacar foto
   y Orbit identifica ingredientes y estima carbohidratos, fibra y macros
   (ajustables), y les pone una puntuación 1-10 de qué tan amigable es el
-  plato para la glucosa. Todo editable.
+  plato para la glucosa. Todo editable. También se puede registrar
+  CONVERSANDO con el copiloto («anótame 40g de carbos»).
 - Patrones y avisos: Orbit busca patrones solo y cuando encuentra algo nuevo
   manda una notificación al teléfono («🧠 Orbit encontró algo») sin que se
   abra la app; también queda en la campanita 🔔 y la pestaña Patrones tiene
@@ -1438,6 +1451,33 @@ def _chat_context():
                    "NO conectado (se conecta en Perfil → Tu sensor).")
             )
             return "\n".join(L)   # sin datos, el resto del contexto no aporta
+    except Exception:
+        pass
+
+    # ── salud de los datos: que el copiloto sepa si mira datos viejos ─────
+    # (lección del bug de viaje 2026-07-29: lecturas desfasadas 2h y el chat
+    #  habría analizado "ahora" con datos rotos sin avisar)
+    try:
+        import json as _sj
+        from helpers import _get_setting as _gs_salud
+        _ult = GlucoseReading.query.order_by(GlucoseReading.timestamp.desc()).first()
+        partes = []
+        if _ult:
+            _edad = int((now - _ult.timestamp).total_seconds() / 60)
+            partes.append(f"última lectura del sensor hace {_edad} min")
+            if _edad > 20:
+                partes.append("ATENCIÓN: dato ATRASADO — si preguntan por el "
+                              "'ahora', aclara la antigüedad antes de analizar")
+        else:
+            partes.append("sin lecturas del sensor")
+        try:
+            _sl = _sj.loads(_gs_salud("sync_last") or "{}")
+            if _sl and not _sl.get("ok"):
+                partes.append(f"el último intento de sincronización FALLÓ "
+                              f"({(_sl.get('error') or 'motivo desconocido')[:120]})")
+        except Exception:
+            pass
+        L.append("SALUD DE LOS DATOS: " + "; ".join(partes) + ".")
     except Exception:
         pass
 
