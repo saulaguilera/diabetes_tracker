@@ -11,12 +11,28 @@ const TZ = (() => {
   try { return Intl.DateTimeFormat().resolvedOptions().timeZone || '' } catch { return '' }
 })()
 
+// auto-recarga tras un deploy: el backend manda el bundle vivo en cada
+// respuesta; si esta página corre uno más viejo (quedó abierta días en el
+// WebView), se recarga UNA vez para tomar la versión nueva
+function checarVersion(res) {
+  try {
+    const vivo = res.headers.get('X-Orbit-Bundle')
+    if (!vivo) return
+    const mio = [...document.scripts].map(s => s.src).find(s => s.includes('/assets/index-'))
+    if (mio && !mio.includes(vivo) && sessionStorage.getItem('orbit_recarga') !== vivo) {
+      sessionStorage.setItem('orbit_recarga', vivo)   // evita loop si algo falla
+      window.location.reload()
+    }
+  } catch {}
+}
+
 async function request(path, opts = {}) {
   const res = await fetch(`${BASE}${path}`, {
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', 'X-Orbit-TZ': TZ, ...(opts.headers || {}) },
     ...opts,
   })
+  checarVersion(res)
   if (res.status === 401) {
     // sesión no iniciada → login de Flask, volviendo a /copilot al terminar
     window.location.href = '/login?next=' + encodeURIComponent('/copilot')

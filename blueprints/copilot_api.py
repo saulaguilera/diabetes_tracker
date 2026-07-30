@@ -172,17 +172,25 @@ def _capturar_tz():
     _set_setting("tz", name)
 
 
+@bp.before_request
+def _tz_en_cada_request():
+    """La zona del teléfono viaja en cada request: capturarla donde aparezca
+    (no solo en /home — una página vieja del SPA puede pegarle a cualquier
+    endpoint primero)."""
+    try:
+        from flask import session as _s
+        if _s.get("user_id"):
+            _capturar_tz()
+    except Exception:
+        pass
+
+
 @bp.route("/api/copilot/home", endpoint="copilot_home")
 def copilot_home():
     """Datos de la pantalla Hoy. Estado presente, sin predicciones."""
     err = _require_login()
     if err:
         return err
-
-    try:
-        _capturar_tz()      # la zona del teléfono manda (clave al viajar)
-    except Exception:
-        pass
 
     # datos viejos → dispara sync en background (la próxima carga los ve frescos)
     try:

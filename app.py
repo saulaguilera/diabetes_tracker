@@ -660,6 +660,26 @@ csrf.exempt(copilot_api_bp)
 
 
 # ── Orbit Copilot (frontend React) ─────────────────────────────────────────────
+# Versión del frontend vivo: el hash del bundle del index. Viaja como header
+# en las respuestas de la API; si el SPA en el teléfono es más viejo, se
+# recarga solo (una página abierta por días sobrevivía a los deploys).
+_APP_BUNDLE = ""
+try:
+    import re as _re
+    with open(os.path.join(app.static_folder, "copilot", "index.html")) as _f:
+        _m = _re.search(r"assets/(index-[A-Za-z0-9_-]+\.js)", _f.read())
+        _APP_BUNDLE = _m.group(1) if _m else ""
+except Exception:
+    pass
+
+
+@app.after_request
+def _marca_version_spa(resp):
+    if _APP_BUNDLE and request.path.startswith("/api/copilot/"):
+        resp.headers["X-Orbit-Bundle"] = _APP_BUNDLE
+    return resp
+
+
 # Sirve el build de Vite (static/copilot/) como SPA bajo /copilot.
 # Protegido por login (vía _protect_all). El build se genera con `npm run build`
 # en frontend/ (gitignored). Si no existe todavía, devuelve un aviso.
