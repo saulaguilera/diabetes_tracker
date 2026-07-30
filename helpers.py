@@ -141,6 +141,33 @@ def _set_setting(key, value):
     db.session.commit()
 
 
+def tz_usuario():
+    """ZoneInfo del usuario del contexto (setting 'tz', auto-capturada desde la
+    app vía header X-Orbit-TZ) o None = usar la hora del servidor. El nombre se
+    valida al guardarse, así que aquí un fallo solo significa 'sin zona'."""
+    try:
+        from zoneinfo import ZoneInfo
+        name = (_get_setting("tz") or "").strip()
+        if name:
+            return ZoneInfo(name)
+    except Exception:
+        pass
+    return None
+
+
+def ahora_usuario():
+    """datetime.now() en la zona horaria DEL USUARIO (naive, como toda la DB).
+    El server vive en America/Santiago; sin esto, a un usuario de viaje todas
+    las horas (lecturas, registros, brief, '¿cómo vengo ahora?') le aparecían
+    corridas. La invariante: los timestamps del usuario Y su 'ahora' van en la
+    MISMA zona → las edades y ventanas dan bien, y la hora coincide con su
+    reloj esté donde esté."""
+    tz = tz_usuario()
+    if tz is None:
+        return datetime.now()
+    return datetime.now(tz).replace(tzinfo=None)
+
+
 def _auto_categorizar(nombre: str):
     """Detecta la categoría de una comida por su nombre."""
     nombre_lower = nombre.lower()

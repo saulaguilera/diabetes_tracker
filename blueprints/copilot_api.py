@@ -158,11 +158,31 @@ def _hace(ts):
 
 
 @bp.route("/api/copilot/home", endpoint="copilot_home")
+def _capturar_tz():
+    """Auto-captura la zona horaria del dispositivo (header X-Orbit-TZ de la
+    app). Si cambió (viaje), se guarda validada — desde ahí TODO el backend
+    calcula las horas de este usuario en su zona real."""
+    name = (request.headers.get("X-Orbit-TZ") or "").strip()[:64]
+    if not name:
+        return
+    from helpers import _get_setting, _set_setting
+    if name == (_get_setting("tz") or ""):
+        return
+    from zoneinfo import ZoneInfo
+    ZoneInfo(name)          # nombre inválido → excepción → no se guarda
+    _set_setting("tz", name)
+
+
 def copilot_home():
     """Datos de la pantalla Hoy. Estado presente, sin predicciones."""
     err = _require_login()
     if err:
         return err
+
+    try:
+        _capturar_tz()      # la zona del teléfono manda (clave al viajar)
+    except Exception:
+        pass
 
     # datos viejos → dispara sync en background (la próxima carga los ve frescos)
     try:
@@ -704,7 +724,7 @@ def copilot_brief():
 
     return jsonify({
         "ok": True,
-        "greeting": _greeting(datetime.now().hour),
+        "greeting": _greeting(__import__("helpers").ahora_usuario().hour),
         "date": datetime.now().strftime("%Y-%m-%d"),
         "narrative": narrative,
         "stats": s,
@@ -722,10 +742,11 @@ def copilot_log():
         return err
 
     from models import db, Meal, MealComponent, InsulinDose, Activity, ContextTag
+    from helpers import ahora_usuario
 
     data = request.get_json(silent=True) or {}
     cat = data.get("cat")
-    now = datetime.now()
+    now = ahora_usuario()   # hora del reloj del usuario, esté donde esté
 
     def _f(key, default=0.0):
         try:
@@ -1422,7 +1443,8 @@ def _chat_context():
     """Contexto real y con HISTORIAL para el copiloto (solo lectura): estado
     actual + glucosa 24h + comidas/insulina/actividad recientes + patrones."""
     from models import GlucoseReading, Meal, InsulinDose, Activity
-    now = datetime.now()
+    from helpers import ahora_usuario
+    now = ahora_usuario()   # el "ahora" del USUARIO (clave al viajar)
     L = []
 
     # ── quién es (nombre del perfil) ──────────────────────────────────────

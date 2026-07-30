@@ -5,10 +5,16 @@
 
 const BASE = '/api/copilot'
 
+// zona horaria del dispositivo: viaja en cada request para que el backend
+// calcule TODAS las horas en la zona real del usuario (clave al viajar)
+const TZ = (() => {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || '' } catch { return '' }
+})()
+
 async function request(path, opts = {}) {
   const res = await fetch(`${BASE}${path}`, {
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    headers: { 'Content-Type': 'application/json', 'X-Orbit-TZ': TZ, ...(opts.headers || {}) },
     ...opts,
   })
   if (res.status === 401) {

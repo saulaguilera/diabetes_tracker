@@ -319,7 +319,8 @@ def get_model_health(days: int = 7) -> dict:
         _ult = (GlucoseReading.query
                 .order_by(GlucoseReading.timestamp.desc()).first())
         if _ult:
-            edad_lectura = (datetime.now() - _ult.timestamp).total_seconds() / 60
+            from helpers import ahora_usuario as _ahora_u
+            edad_lectura = (_ahora_u() - _ult.timestamp).total_seconds() / 60
     except Exception:
         pass
     hay_datos_frescos = edad_lectura is not None and edad_lectura <= 20

@@ -187,9 +187,17 @@ def _parse_reading(raw: dict) -> dict:
     ft_raw = raw.get("FactoryTimestamp") or raw.get("factoryTimestamp") or ""
     if ft_raw:
         try:
-            ts_utc = datetime.strptime(ft_raw, "%m/%d/%Y %I:%M:%S %p")
-            ts = datetime.fromtimestamp(
-                ts_utc.replace(tzinfo=timezone.utc).timestamp())
+            aware = datetime.strptime(ft_raw, "%m/%d/%Y %I:%M:%S %p")\
+                .replace(tzinfo=timezone.utc)
+            # a la zona DEL USUARIO (auto-capturada de su teléfono); sin zona
+            # guardada, a la hora local del servidor
+            try:
+                from helpers import tz_usuario
+                _tz = tz_usuario()
+            except Exception:
+                _tz = None
+            ts = (aware.astimezone(_tz).replace(tzinfo=None) if _tz
+                  else datetime.fromtimestamp(aware.timestamp()))
         except ValueError:
             ts = None
 

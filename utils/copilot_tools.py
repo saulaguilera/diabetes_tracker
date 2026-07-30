@@ -479,7 +479,8 @@ def _ts_hace(minutos) -> datetime:
         m = min(max(int(minutos or 0), 0), 1440)   # máx 24h hacia atrás
     except (TypeError, ValueError):
         m = 0
-    return datetime.now() - timedelta(minutes=m)
+    from helpers import ahora_usuario
+    return ahora_usuario() - timedelta(minutes=m)
 
 
 def _num(v, lo, hi) -> float:

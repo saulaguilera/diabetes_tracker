@@ -47,7 +47,8 @@ def run_and_save_ssm_prediction(now: Optional[datetime] = None) -> dict:
            "g_pred_30": None, "g_pred_60": None,
            "sigma_30": None, "sigma_60": None}
     try:
-        now = now or datetime.now()
+        from helpers import ahora_usuario as _ahora_u
+        now = now or _ahora_u()
         from models import db, GlucoseReading, GlucosePrediction
 
         # 1. Última lectura CGM (no artefacto) para g_actual

@@ -422,7 +422,8 @@ def compute_daily_summary(now: Optional[datetime] = None) -> DailyMetabolicSumma
     summary con has_sufficient_data=False y confidence bajo.
     """
     if now is None:
-        now = datetime.now()
+        from helpers import ahora_usuario as _ahora_u
+        now = _ahora_u()
 
     data = _load_window_data(now, hours_back=24)
 

@@ -170,8 +170,9 @@ def _do_libre_sync(email: str, password: str, provider: str = "libre") -> dict:
         # Actualizar filtro de Kalman con las nuevas lecturas (orden cronológico)
         try:
             from utils.kalman import update_with_reading as kalman_update
+            from helpers import ahora_usuario as _ahora_u
             nuevas_ord = GlucoseReading.query.filter(
-                GlucoseReading.timestamp >= datetime.now() - timedelta(hours=2)
+                GlucoseReading.timestamp >= _ahora_u() - timedelta(hours=2)
             ).order_by(GlucoseReading.timestamp).all()
             for r in nuevas_ord:
                 kalman_update(r.value_mgdl, r.timestamp, save=False)
@@ -257,7 +258,8 @@ def _do_libre_sync(email: str, password: str, provider: str = "libre") -> dict:
     try:
         _ult = (GlucoseReading.query
                 .order_by(GlucoseReading.timestamp.desc()).first())
-        if _ult and (datetime.now() - _ult.timestamp) <= timedelta(minutes=12):
+        from helpers import ahora_usuario as _ahora_u2
+        if _ult and (_ahora_u2() - _ult.timestamp) <= timedelta(minutes=12):
             from services.background_predictor import run_and_save_ssm_prediction
             _bg = run_and_save_ssm_prediction()
             if _bg.get("saved"):
@@ -974,8 +976,10 @@ def _maybe_pattern_scan(now=None):
     días por tipo de patrón, campanita + push APNs/FCM). Antes solo corría al
     abrir la app — el push llegaba cuando ya estabas adentro. Desde el cron,
     «🧠 Orbit encontró algo» llega solo, aunque no abras la app.
-    Ventana 9:00-21:30: un patrón no es una urgencia de madrugada."""
-    now = now or datetime.now()
+    Ventana 9:00-21:30 EN LA HORA DEL USUARIO: un patrón no es una urgencia
+    de madrugada, y la madrugada es la del reloj de la persona (viajes)."""
+    from helpers import ahora_usuario
+    now = now or ahora_usuario()
     if not (9 <= now.hour < 21 or (now.hour == 21 and now.minute <= 30)):
         return None
     from blueprints.copilot_api import _check_new_patterns
@@ -986,7 +990,8 @@ def _maybe_morning_brief(now=None):
     """Push matinal del usuario del contexto: cómo estuvo la noche, en una
     línea. Una vez al día, entre 7 y 10 AM, solo si hay token de push y datos
     de la noche. El loop de retención diario: Orbit te saluda, no al revés."""
-    now = now or datetime.now()
+    from helpers import ahora_usuario
+    now = now or ahora_usuario()   # las 7-10 AM del USUARIO, no del servidor
     if not (7 <= now.hour < 10):
         return None
     hoy = now.strftime("%Y-%m-%d")
