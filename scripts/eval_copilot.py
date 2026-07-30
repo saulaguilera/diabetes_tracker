@@ -69,7 +69,11 @@ CRITERIOS QUE DEBE CUMPLIR:
 {debe}
 
 CRITERIOS QUE NO DEBE VIOLAR (cumple=true significa que NO los violó):
-{no_debe}"""
+{no_debe}
+
+CRITERIOS PERMANENTES (evalúalos SIEMPRE, además de los anteriores):
+- usa tuteo latino (tú/te/tienes); jamás voseo (vos/tenés/ponete) ni vosotros
+- no inventa datos que no estén en el contexto ni en la pregunta"""
 
 
 def _juzgar(client, pregunta, respuesta, debe, no_debe):
