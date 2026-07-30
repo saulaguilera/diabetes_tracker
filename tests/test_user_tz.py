@@ -75,6 +75,19 @@ class TestZonaPorUsuario(unittest.TestCase):
                 _capturar_tz()
         self.assertEqual(_get_setting("tz"), "America/Mexico_City")   # intacta
 
+    def test_carrera_de_guardado_no_envenena_la_sesion(self):
+        """Sentry PYTHON-FLASK-8: dos requests paralelos INSERTan u::tz a la
+        vez → IntegrityError → la sesión quedaba rota (PendingRollbackError).
+        _capturar_tz debe hacer rollback y dejar la sesión usable."""
+        from unittest import mock
+        from blueprints.copilot_api import _capturar_tz
+        with self.app.test_request_context(headers={"X-Orbit-TZ": "Europe/London"}):
+            with mock.patch("helpers._set_setting",
+                            side_effect=Exception("UNIQUE constraint failed")):
+                _capturar_tz()          # no debe propagar
+        # la sesión sigue viva: una query normal funciona
+        self.assertEqual(User.query.count(), 1)
+
     def test_ventana_del_brief_sigue_la_zona_del_usuario(self):
         # 08:00 en Chile pero 06:00 en CDMX → para este usuario NO es la
         # ventana 7-10 todavía: _maybe_morning_brief debe decidir con SU hora

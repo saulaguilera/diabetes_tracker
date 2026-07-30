@@ -169,7 +169,16 @@ def _capturar_tz():
         return
     from zoneinfo import ZoneInfo
     ZoneInfo(name)          # nombre inválido → excepción → no se guarda
-    _set_setting("tz", name)
+    try:
+        _set_setting("tz", name)
+    except Exception:
+        # carrera del arranque: la app dispara varios requests en paralelo y
+        # dos pueden intentar INSERTar u{id}::tz a la vez — el perdedor choca
+        # con el UNIQUE. El ganador ya la guardó; limpiar la sesión y seguir
+        # (sin esto, la sesión quedaba envenenada y el request moría con
+        # PendingRollbackError — Sentry PYTHON-FLASK-8).
+        from models import db
+        db.session.rollback()
 
 
 @bp.before_request
@@ -182,7 +191,12 @@ def _tz_en_cada_request():
         if _s.get("user_id"):
             _capturar_tz()
     except Exception:
-        pass
+        # pase lo que pase aquí, el request debe seguir con la sesión LIMPIA
+        try:
+            from models import db
+            db.session.rollback()
+        except Exception:
+            pass
 
 
 @bp.route("/api/copilot/home", endpoint="copilot_home")
