@@ -157,7 +157,6 @@ def _hace(ts):
     return f"{horas // 24}d"
 
 
-@bp.route("/api/copilot/home", endpoint="copilot_home")
 def _capturar_tz():
     """Auto-captura la zona horaria del dispositivo (header X-Orbit-TZ de la
     app). Si cambió (viaje), se guarda validada — desde ahí TODO el backend
@@ -173,6 +172,7 @@ def _capturar_tz():
     _set_setting("tz", name)
 
 
+@bp.route("/api/copilot/home", endpoint="copilot_home")
 def copilot_home():
     """Datos de la pantalla Hoy. Estado presente, sin predicciones."""
     err = _require_login()
