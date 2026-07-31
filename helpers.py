@@ -156,7 +156,7 @@ def tz_usuario():
 
 
 def ahora_usuario():
-    """datetime.now() en la zona horaria DEL USUARIO (naive, como toda la DB).
+    """ahora_usuario() en la zona horaria DEL USUARIO (naive, como toda la DB).
     El server vive en America/Santiago; sin esto, a un usuario de viaje todas
     las horas (lecturas, registros, brief, '¿cómo vengo ahora?') le aparecían
     corridas. La invariante: los timestamps del usuario Y su 'ahora' van en la
@@ -183,12 +183,12 @@ def parse_datetime(date_str, time_str):
     try:
         return datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
     except ValueError:
-        return datetime.now()
+        return ahora_usuario()
 
 
 def stats_resumen():
     """Estadísticas rápidas para el dashboard."""
-    now = datetime.now()
+    now = ahora_usuario()
     hace_24h = now - timedelta(hours=24)
     hace_7d = now - timedelta(days=7)
 
@@ -240,7 +240,7 @@ def _detectar_patrones(days=30):
     from collections import defaultdict, Counter
 
     alertas = []
-    now = datetime.now()
+    now = ahora_usuario()
     desde = now - timedelta(days=days)
 
     lecturas = (GlucoseReading.query
@@ -564,7 +564,7 @@ def _calcular_isf_personal(days=60):
     Prioridad 2: bolus sin comida cercana en ±30 min (inferidos).
     Retorna (isf_promedio, n_muestras).
     """
-    desde = datetime.now() - timedelta(days=days)
+    desde = ahora_usuario() - timedelta(days=days)
     bolus_list = InsulinDose.query.filter(
         InsulinDose.type == "bolus",
         InsulinDose.timestamp >= desde,
@@ -644,7 +644,7 @@ def _calcular_isf_circadiano(days=90):
           20: {...},
         }
     """
-    desde = datetime.now() - timedelta(days=days)
+    desde = ahora_usuario() - timedelta(days=days)
 
     # Batch load: todas las correcciones candidatas
     bolus_list = InsulinDose.query.filter(
@@ -738,7 +738,7 @@ def _calcular_icr_personal(days=90):
     Estima el ratio Insulina:Carbohidratos (ICR) personal.
     Retorna (icr_promedio, n_muestras).
     """
-    desde = datetime.now() - timedelta(days=days)
+    desde = ahora_usuario() - timedelta(days=days)
     isf_personal, _ = _calcular_isf_personal(days=days)
 
     comidas = Meal.query.filter(
@@ -814,7 +814,7 @@ def _calcular_icr_circadiano(days=90):
           20: {...},
         }
     """
-    desde = datetime.now() - timedelta(days=days)
+    desde = ahora_usuario() - timedelta(days=days)
     isf_personal, _ = _calcular_isf_personal(days=days)
     objetivo = float(_get_setting("objetivo", 100))
     isf = isf_personal or 40
@@ -918,7 +918,7 @@ def _dashboard_insights():
       - isf / icr: valores personales calculados
     Todas las queries están agrupadas aquí para minimizar round-trips.
     """
-    now = datetime.now()
+    now = ahora_usuario()
 
     # ── TIR 7d y tendencia ───────────────────────────────────────────────────
     hace_7d  = now - timedelta(days=7)

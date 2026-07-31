@@ -45,6 +45,17 @@ import math
 from datetime import datetime, timedelta
 from typing import Optional
 
+
+def _ahora_local():
+    """now() en la zona del usuario del contexto (fallback: server)."""
+    try:
+        from helpers import ahora_usuario
+        return ahora_usuario()
+    except Exception:
+        from datetime import datetime as _d
+        return _d.now()
+
+
 # ── Default pharmacokinetic parameters (NovoRapid / aspart) ──────────────────
 _DEFAULT_PEAK_MIN: int = 75    # minutes to peak activity
 _DEFAULT_DIA_MIN:  int = 240   # duration of insulin action (4 h)
@@ -178,7 +189,7 @@ def exercise_sensitivity_factor(
     Mixed exercise: average of both profiles.
     """
     if at_time is None:
-        at_time = datetime.now()
+        at_time = _ahora_local()
 
     total_delta = 0.0
 
@@ -427,7 +438,7 @@ def current_iob(
     float — total IOB in Units (≥ 0)
     """
     if at_time is None:
-        at_time = datetime.now()
+        at_time = _ahora_local()
     peak = peak_min or _DEFAULT_PEAK_MIN
     dia  = dia_min  or _DEFAULT_DIA_MIN
 
@@ -481,7 +492,7 @@ def current_basal_iob(at_time: Optional[datetime] = None) -> float:
     from helpers import _get_setting
 
     if at_time is None:
-        at_time = datetime.now()
+        at_time = _ahora_local()
 
     tipo = (_get_setting("basal_tipo") or "glargina").lower().strip()
     dia  = _BASAL_DIA_MIN.get(tipo, _BASAL_DIA_DEFAULT)
@@ -744,7 +755,7 @@ def current_cob_detailed(
         meals_detail  : list   — per-meal breakdown
     """
     if at_time is None:
-        at_time = datetime.now()
+        at_time = _ahora_local()
 
     total_carbs = 0.0
     total_fat   = 0.0
@@ -838,7 +849,7 @@ def _basal_inyeccion_reciente(at_time: Optional[datetime] = None,
       del sensor → no sumar (sería doble conteo).
     """
     if at_time is None:
-        at_time = datetime.now()
+        at_time = _ahora_local()
     try:
         from models import InsulinDose
         cutoff = at_time - timedelta(hours=umbral_h)
@@ -869,7 +880,7 @@ def dawn_roc_mgdl_min(at_time: datetime | None = None) -> float:
     References: Bolli et al. (1984) NEJM; Perriello et al. (1997) Diabetes.
     """
     if at_time is None:
-        at_time = datetime.now()
+        at_time = _ahora_local()
 
     hour = at_time.hour + at_time.minute / 60.0
     if hour < _DAWN_H_START or hour > _DAWN_H_END:
@@ -906,7 +917,7 @@ def estimate_dawn_magnitude(days: int = 45) -> dict:
     from models import GlucoseReading
     from helpers import _set_setting
 
-    cutoff   = datetime.now() - timedelta(days=days)
+    cutoff   = _ahora_local() - timedelta(days=days)
     readings = (
         GlucoseReading.query
         .filter(GlucoseReading.timestamp >= cutoff,
@@ -953,7 +964,7 @@ def estimate_dawn_magnitude(days: int = 45) -> dict:
         "n_dawn":          len(roc_dawn),
         "n_baseline":      len(roc_baseline),
         "days_used":       days,
-        "estimated_at":    datetime.now().isoformat(),
+        "estimated_at":    _ahora_local().isoformat(),
     }
 
 
@@ -976,7 +987,7 @@ def glucose_roc(readings, window_min: int = 20) -> Optional[float]:
     if not readings:
         return None
 
-    now = datetime.now()
+    now = _ahora_local()
     cutoff = now - timedelta(minutes=window_min)
     recent = [r for r in readings if r.timestamp >= cutoff]
 
@@ -1051,7 +1062,7 @@ def estimate_dia_from_data(days: int = 90, peak_min: int = _DEFAULT_PEAK_MIN) ->
     """
     from models import InsulinDose, Meal, GlucoseReading
 
-    cutoff = datetime.now() - timedelta(days=days)
+    cutoff = _ahora_local() - timedelta(days=days)
     boluses = InsulinDose.query.filter(
         InsulinDose.type == "bolus",
         InsulinDose.timestamp >= cutoff,
@@ -1187,7 +1198,7 @@ def get_kinetics_snapshot(
     from models import InsulinDose, Meal, GlucoseReading, Activity
     from helpers import _get_setting
 
-    now = datetime.now()
+    now = _ahora_local()
     cutoff = now - timedelta(hours=hours_lookback)
 
     # Resolve DIA from settings or default

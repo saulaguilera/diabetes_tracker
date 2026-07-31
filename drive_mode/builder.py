@@ -14,6 +14,17 @@ from typing import Optional
 from drive_mode.state import DriveModeState, TrendDirection
 from drive_mode.status_logic import classify_trend, classify_status
 
+
+def _ahora_local():
+    """now() en la zona del usuario del contexto (fallback: server)."""
+    try:
+        from helpers import ahora_usuario
+        return ahora_usuario()
+    except Exception:
+        from datetime import datetime as _d
+        return _d.now()
+
+
 # Ventana para estimar la tasa de tendencia (mg/dL/min) desde la serie reciente.
 _RATE_WINDOW_MIN = 20
 
@@ -34,7 +45,7 @@ def build_drive_mode_state(now: Optional[datetime] = None) -> DriveModeState:
     Resiliente: si no hay datos o falla la DB, devuelve un estado
     'disconnected' seguro (nunca afirma que la glucosa está bien).
     """
-    now = now or datetime.now()
+    now = now or _ahora_local()
     sensor = _sensor_name()
 
     def _disconnected(msg_age=None):

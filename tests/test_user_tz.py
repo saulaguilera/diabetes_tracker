@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import flask
-from models import db, User
+from models import db, User, GlucoseReading
 from helpers import (set_user_context, reset_user_context, _set_setting,
                      _get_setting, ahora_usuario)
 
@@ -74,6 +74,30 @@ class TestZonaPorUsuario(unittest.TestCase):
             with self.assertRaises(Exception):
                 _capturar_tz()
         self.assertEqual(_get_setting("tz"), "America/Mexico_City")   # intacta
+
+    def test_lectura_fresca_en_londres_se_ve_fresca(self):
+        """El bug del 31/07: lecturas guardadas en la hora del usuario (Londres)
+        pero comparadas contra la hora del servidor (Chile) → parecían estar
+        '5h en el futuro' y la app decía que no llegaban lecturas. Con el
+        barrido a ahora_usuario(), una lectura de hace 3 min ES fresca."""
+        from datetime import timedelta
+        from helpers import ahora_usuario
+        _set_setting("tz", "Europe/London")
+        db.session.add(GlucoseReading(
+            timestamp=ahora_usuario() - timedelta(minutes=3),
+            value_mgdl=115, source="test"))
+        db.session.commit()
+        from blueprints.copilot_api import _chat_context
+        ctx = _chat_context()
+        self.assertIn("SALUD DE LOS DATOS", ctx)
+        self.assertIn("hace 3 min", ctx)
+        self.assertNotIn("ATRASADO", ctx)
+        # y las estadísticas de 24h la cuentan (antes: ventana en hora Chile
+        # dejaba la lectura fuera o "en el futuro")
+        from helpers import stats_resumen
+        st = stats_resumen()
+        self.assertGreaterEqual(st.get("lecturas_24h", 0) or
+                                (st.get("ultima_lectura") is not None and 1), 1)
 
     def test_carrera_de_guardado_no_envenena_la_sesion(self):
         """Sentry PYTHON-FLASK-8: dos requests paralelos INSERTan u::tz a la

@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, request, redirect, url_for, flash, session, g
 from models import db, GlucoseReading, MealComponent
-from helpers import _get_setting, _set_setting, set_user_context, reset_user_context
+from helpers import _get_setting, _set_setting, set_user_context, reset_user_context, ahora_usuario
 from utils.libre_linkup import sync_all as libre_sync_all
 from pmm.ssm.version import MODEL_VERSION
 
@@ -142,7 +142,7 @@ def _do_libre_sync(email: str, password: str, provider: str = "libre") -> dict:
                     existe.original_value_mgdl = existe.value_mgdl
                 old_val = existe.value_mgdl
                 existe.value_mgdl   = r["value_mgdl"]
-                existe.corrected_at = datetime.now()
+                existe.corrected_at = ahora_usuario()
                 # Si era una hipo falsa que ya no lo es, agregar nota
                 if existe.original_value_mgdl < 70 and r["value_mgdl"] >= 80:
                     existe.notes = (existe.notes or "") + " [hipo-falsa-corregida]"
@@ -241,13 +241,13 @@ def _do_libre_sync(email: str, password: str, provider: str = "libre") -> dict:
             dawn_last = _get_setting("dawn_last_estimated")
             needs_dawn = True
             if dawn_last:
-                hours_since = (datetime.now() - datetime.fromisoformat(dawn_last)).total_seconds() / 3600
+                hours_since = (ahora_usuario() - datetime.fromisoformat(dawn_last)).total_seconds() / 3600
                 needs_dawn  = hours_since >= 24
             if needs_dawn:
                 from utils.kinetics import estimate_dawn_magnitude
                 result = estimate_dawn_magnitude(days=45)
                 if result.get("ok"):
-                    _set_setting("dawn_last_estimated", datetime.now().isoformat())
+                    _set_setting("dawn_last_estimated", ahora_usuario().isoformat())
         except Exception:
             pass
 
@@ -272,7 +272,7 @@ def _do_libre_sync(email: str, password: str, provider: str = "libre") -> dict:
         pass
 
     # Guardar timestamp de última sync exitosa
-    _set_setting("libre_last_sync", datetime.now().isoformat())
+    _set_setting("libre_last_sync", ahora_usuario().isoformat())
     _set_setting("libre_last_sync_ok", "1")
 
     return {
@@ -293,7 +293,7 @@ def maybe_kick_background_sync(max_age_min: float = 6.0) -> bool:
     """
     if not _LIBRE_EMAIL or not _LIBRE_PASSWORD:
         return False
-    now = datetime.now()
+    now = ahora_usuario()
     try:
         rl = _get_setting("libre_rate_limited_at")
         if rl and (now - datetime.fromisoformat(rl)).total_seconds() < 600:
@@ -350,7 +350,7 @@ def api_resumen_dia():
     from datetime import datetime, timedelta
     from models import GlucoseReading, InsulinDose, Meal
 
-    now   = datetime.now()
+    now   = ahora_usuario()
     hoy   = now.replace(hour=0, minute=0, second=0, microsecond=0)
     ayer  = hoy - timedelta(days=1)
 
@@ -496,7 +496,7 @@ def api_sync_libre_recheck():
                 if existe.original_value_mgdl is None:
                     existe.original_value_mgdl = existe.value_mgdl
                 existe.value_mgdl   = r["value_mgdl"]
-                existe.corrected_at = datetime.now()
+                existe.corrected_at = ahora_usuario()
                 if existe.original_value_mgdl < 70 and r["value_mgdl"] >= 80:
                     existe.notes = (existe.notes or "") + " [hipo-falsa-corregida]"
                 correcciones.append({
@@ -547,7 +547,7 @@ def api_sync_status():
 
     from models import GlucoseReading
 
-    now           = datetime.now()
+    now           = ahora_usuario()
     last_sync_str = _get_setting("libre_last_sync")
     rl_at_str     = _get_setting("libre_rate_limited_at")
     token         = _get_setting("libre_token")
@@ -739,7 +739,7 @@ def api_sync_libre_verbose():
             "mensaje": "No hay token cacheado. Aprieta ↺ para hacer login.",
         })
 
-    now = datetime.now()
+    now = ahora_usuario()
 
     try:
         # Re-computar account_id desde el JWT (igual que sync_all)
@@ -1043,7 +1043,7 @@ def _sync_one_user(email: str, password: str, is_manual: bool, provider: str = "
     _COOLDOWN_MIN  = 4    # mínimo entre syncs automáticas
     _RATELIMIT_MIN = 10   # espera tras un 429 de Abbott (10 min)
 
-    now = datetime.now()
+    now = ahora_usuario()
 
     # Rate-limit de Abbott: se respeta incluso en sync manual
     rl_at_str = _get_setting("libre_rate_limited_at")
@@ -1154,8 +1154,8 @@ def api_kinetics():
         # Debug: replicamos exactamente lo que current_basal_iob() computa
         tipo = (_get_setting("basal_tipo") or "glargina").lower().strip()
         dia  = _BASAL_DIA_MIN.get(tipo, _BASAL_DIA_DEFAULT)
-        # Usar datetime.now() igual que current_basal_iob — NO utcnow()
-        now_local = datetime.now()
+        # Usar ahora_usuario() igual que current_basal_iob — NO utcnow()
+        now_local = ahora_usuario()
         now_utc   = datetime.utcnow()
         cutoff = now_local - timedelta(minutes=dia)
         dosis_db = (InsulinDose.query
@@ -1334,7 +1334,7 @@ def api_predict_glucose():
             _DEFAULT_PEAK_MIN, _DEFAULT_DIA_MIN,
         )
 
-        now  = datetime.now()
+        now  = ahora_usuario()
         hora = now.hour
 
         # ── Parámetros del modelo ─────────────────────────────────────────
@@ -1969,7 +1969,7 @@ def api_diagnostico():
             _classify_exercise, current_cob_detailed,
         )
 
-        now   = datetime.now()
+        now   = ahora_usuario()
         hora  = now.hour
 
         # ── 1. IOB: desglose por bolus (solo bolus se deduce de corrección) ──

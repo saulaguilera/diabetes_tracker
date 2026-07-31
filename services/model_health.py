@@ -18,7 +18,7 @@ API pública
 Principios
 ----------
 - Sólo lectura: jamás muta DB.
-- TZ-aware: usa `datetime.now()` (TZ local del servidor, configurada como
+- TZ-aware: usa `_ahora_mh()` (TZ local del servidor, configurada como
   America/Santiago en app.py) — coincide con la TZ de las timestamps en DB.
 - Resiliente: cualquier excepción se contiene; nunca rompe un sync ni una
   ruta. Los problemas se reportan como warnings, no como tracebacks.
@@ -28,6 +28,16 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
+
+
+def _ahora_mh():
+    try:
+        from helpers import ahora_usuario
+        return ahora_usuario()
+    except Exception:
+        from datetime import datetime as _d
+        return _d.now()
+
 
 logger = logging.getLogger("model_health")
 
@@ -82,7 +92,7 @@ def _coverage_check(days: int) -> dict:
     """
     from models import db, GlucosePrediction
 
-    now    = datetime.now()
+    now    = _ahora_mh()
     cutoff = now - timedelta(days=days)
 
     base_q = (db.session.query(GlucosePrediction)
@@ -161,7 +171,7 @@ def _audit_check(days: int) -> dict:
     """
     from models import db, PredictionAudit, SSMInnovation, HypoRiskAudit
 
-    now    = datetime.now()
+    now    = _ahora_mh()
     cutoff = now - timedelta(days=days)
 
     n_pred_audit = _safe_count(
@@ -238,8 +248,8 @@ def _timezone_check() -> dict:
 
     Chequeos:
     - TZ env var configurada
-    - datetime.now() vs datetime.utcnow() — diferencia esperada según TZ
-    - Última GlucoseReading.timestamp coherente con datetime.now() (gap < 30min
+    - _ahora_mh() vs datetime.utcnow() — diferencia esperada según TZ
+    - Última GlucoseReading.timestamp coherente con _ahora_mh() (gap < 30min
       durante operación normal)
     """
     import os
@@ -252,7 +262,7 @@ def _timezone_check() -> dict:
 
     issues: list[str] = []
 
-    # Si no hay TZ configurada, datetime.now() y utcnow() son iguales — fine
+    # Si no hay TZ configurada, _ahora_mh() y utcnow() son iguales — fine
     # pero el sistema asume hora local. Reportar pero no flag crítico.
     if tz_env == "(unset)":
         issues.append("variable de entorno TZ no configurada — sistema asume UTC")
@@ -421,7 +431,7 @@ def get_model_health(days: int = 7) -> dict:
     return {
         "status":            status,
         "model_version":     ACTIVE_MODEL_VERSION,
-        "computed_at":       datetime.now().isoformat(timespec="seconds"),
+        "computed_at":       _ahora_mh().isoformat(timespec="seconds"),
         "window_days":       days,
         "coverage":          coverage,
         "audits":            audits,

@@ -36,6 +36,17 @@ from typing import Optional
 
 from models import db, GlucoseReading, Meal, InsulinDose
 
+
+def _ahora_local():
+    """now() en la zona del usuario del contexto (fallback: server)."""
+    try:
+        from helpers import ahora_usuario
+        return ahora_usuario()
+    except Exception:
+        from datetime import datetime as _d
+        return _d.now()
+
+
 # Intentar importar Activity (puede no existir en todas las instancias)
 try:
     from models import Activity
@@ -128,7 +139,7 @@ def _detectar_fenomeno_alba(lecturas, days) -> Optional[dict]:
     Fenómeno del alba: glucosa sube > 40 mg/dL entre 03:00 y 09:00
     sin comida ni insulina bolus en esa ventana.
     """
-    desde = datetime.now() - timedelta(days=days)
+    desde = _ahora_local() - timedelta(days=days)
     bolus_periodo = InsulinDose.query.filter(
         InsulinDose.type == "bolus",
         InsulinDose.timestamp >= desde,
@@ -212,7 +223,7 @@ def _detectar_hipo_post_ejercicio(lecturas, days) -> Optional[dict]:
     if not _ACTIVITY_OK:
         return None
 
-    desde = datetime.now() - timedelta(days=days)
+    desde = _ahora_local() - timedelta(days=days)
     actividades = Activity.query.filter(Activity.timestamp >= desde).all()
     if not actividades:
         return None
@@ -668,7 +679,7 @@ def _detectar_basal_sin_registrar(lecturas, days) -> Optional[dict]:
     período no quedó registrada. No es un patrón fisiológico sino de datos,
     pero limita todo el análisis nocturno — mejor decirlo con honestidad.
     """
-    desde = datetime.now() - timedelta(days=days)
+    desde = _ahora_local() - timedelta(days=days)
     basales = InsulinDose.query.filter(
         InsulinDose.type == "basal", InsulinDose.timestamp >= desde).all()
     if not basales:
@@ -729,7 +740,7 @@ def _serie_compacta(lecturas, meals_periodo, days) -> list[dict]:
         })
 
     # Anotar con comidas e insulina
-    desde = datetime.now() - timedelta(days=days)
+    desde = _ahora_local() - timedelta(days=days)
     insulinas = InsulinDose.query.filter(
         InsulinDose.timestamp >= desde
     ).all()
@@ -770,7 +781,7 @@ def analizar_patrones(days: int = 30) -> dict:
         serie_glucose  — serie compacta para Capa 3 (Claude API)
         generado_en    — timestamp ISO
     """
-    desde = datetime.now() - timedelta(days=days)
+    desde = _ahora_local() - timedelta(days=days)
 
     lecturas = (
         GlucoseReading.query
@@ -829,6 +840,6 @@ def analizar_patrones(days: int = 30) -> dict:
         "patrones":      patrones_detectados,
         "resumen":       resumen,
         "serie_glucose": serie,
-        "generado_en":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "generado_en":   _ahora_local().strftime("%Y-%m-%dT%H:%M:%S"),
         "days":          days,
     }

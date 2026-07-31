@@ -13,6 +13,8 @@ nada. Reusa los cálculos que ya existen (get_kinetics_snapshot).
 from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, session, request, g
 
+from helpers import ahora_usuario
+
 bp = Blueprint("copilot_api", __name__)
 
 
@@ -146,7 +148,7 @@ def _hace(ts):
     """'ahora' / '12m' / '3h' / '2d' — hora local (datetime.now)."""
     if not ts:
         return ""
-    mins = int((datetime.now() - ts).total_seconds() / 60)
+    mins = int((ahora_usuario() - ts).total_seconds() / 60)
     if mins < 1:
         return "ahora"
     if mins < 60:
@@ -239,7 +241,7 @@ def copilot_home():
             "arrow": arrow,
             "source": last.source,
             "at": last.timestamp.isoformat(),
-            "age_min": int((datetime.now() - last.timestamp).total_seconds() / 60),
+            "age_min": int((ahora_usuario() - last.timestamp).total_seconds() / 60),
         }
 
     trend = "Subiendo" if roc > 1 else "Bajando" if roc < -1 else "Estable"
@@ -252,7 +254,7 @@ def copilot_home():
         from helpers import _get_setting
         last_basal = (InsulinDose.query.filter(InsulinDose.type == "basal")
                       .order_by(InsulinDose.timestamp.desc()).first())
-        hoy0 = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        hoy0 = ahora_usuario().replace(hour=0, minute=0, second=0, microsecond=0)
         expected = _get_setting("basal_dose_u")
         hora_raw = _get_setting("basal_hora")
         try:
@@ -271,7 +273,7 @@ def copilot_home():
         basal = None
 
     # ── tiempo en rango — últimas 24h ─────────────────────────────────────
-    since = datetime.now() - timedelta(hours=24)
+    since = ahora_usuario() - timedelta(hours=24)
     reads = (GlucoseReading.query
              .filter(GlucoseReading.timestamp >= since)
              .all())
@@ -319,7 +321,7 @@ def copilot_home():
         "tir_today": tir,
         "series": series,
         "recent": recent,
-        "updated_at": datetime.now().isoformat(),
+        "updated_at": ahora_usuario().isoformat(),
     })
 
 
@@ -368,7 +370,7 @@ def _overnight_stats(now):
 def _today_stats():
     """Métricas de HOY (desde la medianoche local) calculadas, no predichas."""
     from models import GlucoseReading, Meal, InsulinDose, Activity, ContextTag
-    now = datetime.now()
+    now = ahora_usuario()
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     reads = (GlucoseReading.query
@@ -747,10 +749,10 @@ def copilot_brief():
     return jsonify({
         "ok": True,
         "greeting": _greeting(__import__("helpers").ahora_usuario().hour),
-        "date": datetime.now().strftime("%Y-%m-%d"),
+        "date": ahora_usuario().strftime("%Y-%m-%d"),
         "narrative": narrative,
         "stats": s,
-        "updated_at": datetime.now().isoformat(),
+        "updated_at": ahora_usuario().isoformat(),
     })
 
 
@@ -890,7 +892,7 @@ def copilot_patterns():
     # TIR por día — últimos 7 días (iniciales localizadas)
     DOW = {"es": "LMMJVSD", "en": "MTWTFSS", "pt": "STQQSSD"}.get(_ui_lang(), "LMMJVSD")
     weekly = {"labels": [], "values": []}
-    now = datetime.now()
+    now = ahora_usuario()
     for i in range(6, -1, -1):
         d0 = (now - timedelta(days=i)).replace(hour=0, minute=0, second=0, microsecond=0)
         d1 = d0 + timedelta(days=1)
@@ -920,7 +922,7 @@ def copilot_patterns():
         },
         "weekly": weekly,
         "patterns": out_patterns,
-        "updated_at": datetime.now().isoformat(),
+        "updated_at": ahora_usuario().isoformat(),
     })
 
 
@@ -939,7 +941,7 @@ def _check_new_patterns():
     import json as _json
     from models import db, CopilotNotification
     from helpers import _get_setting, _set_setting
-    now = datetime.now()
+    now = ahora_usuario()
 
     last = _get_setting("notif_scan_last")
     if last:
@@ -1045,7 +1047,7 @@ def copilot_notifications_read():
     if err:
         return err
     from models import db, CopilotNotification
-    now = datetime.now()
+    now = ahora_usuario()
     (CopilotNotification.query
      .filter(CopilotNotification.read_at.is_(None))
      .update({CopilotNotification.read_at: now}))
@@ -1976,7 +1978,7 @@ def copilot_meals_quick():
         return err
     from models import Meal
     from utils.quick_meals import group_quick_meals
-    since = datetime.now() - timedelta(days=90)
+    since = ahora_usuario() - timedelta(days=90)
     rows = [{"name": m.name, "carbs": m.carbs_g, "protein": m.protein_g,
              "fat": m.fat_g, "ts": m.timestamp}
             for m in Meal.query.filter(Meal.timestamp >= since).all()]
@@ -2037,7 +2039,7 @@ def copilot_history():
 
     from models import Meal, InsulinDose, Activity, ContextTag
     days = min(int(request.args.get("days", 14)), 90)
-    since = datetime.now() - timedelta(days=days)
+    since = ahora_usuario() - timedelta(days=days)
     events = []
 
     for t in ContextTag.query.filter(ContextTag.timestamp >= since).order_by(ContextTag.timestamp.desc()).limit(100).all():
@@ -2114,7 +2116,7 @@ def copilot_meal_edit(meal_id):
                 t = (datetime.strptime(data["time"], "%H:%M").time()
                      if data.get("time") else base.time())
                 nuevo = datetime.combine(d, t)
-                now = datetime.now()
+                now = ahora_usuario()
                 if nuevo > now + timedelta(minutes=5):
                     return jsonify({"ok": False, "error": "La hora no puede ser futura"}), 400
                 if nuevo < now - timedelta(days=365):
@@ -2145,7 +2147,7 @@ def _combine_datetime(row, data):
         nuevo = datetime.combine(d, tm)
     except ValueError:
         return None, "Fecha u hora inválida"
-    now = datetime.now()
+    now = ahora_usuario()
     if nuevo > now + timedelta(minutes=5):
         return None, "La hora no puede ser futura"
     if nuevo < now - timedelta(days=365):
@@ -2254,7 +2256,7 @@ def copilot_report_pdf():
     from helpers import _get_setting
 
     days = min(int(request.args.get("days", 30)), 90)
-    hoy = datetime.now()
+    hoy = ahora_usuario()
 
     glob = estadisticas_periodo(days=days)
     noches = estadisticas_periodo(days=days, hora_desde=22, hora_hasta=6)
