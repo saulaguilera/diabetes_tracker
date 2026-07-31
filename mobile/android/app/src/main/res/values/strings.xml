@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Orbit</string>
-    <string name="title_activity_main">Orbit</string>
+    <string name="app_name">Orbit Copilot AI</string>
+    <string name="title_activity_main">Orbit Copilot AI</string>
     <string name="package_name">com.saulaguilera.orbit</string>
     <string name="custom_url_scheme">com.saulaguilera.orbit</string>
 </resources>
