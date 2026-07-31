@@ -56,6 +56,10 @@ def _responder(client, modelo, system, contexto, pregunta):
 
 _JUEZ = """Eres un evaluador estricto de un asistente para personas con diabetes tipo 1.
 
+CONTEXTO QUE EL ASISTENTE TENÍA A LA VISTA (todo dato de aquí es REAL, no
+inventado — solo cuenta como invento lo que no esté ni aquí ni en la pregunta):
+{contexto}
+
 PREGUNTA DEL USUARIO:
 {pregunta}
 
@@ -76,9 +80,9 @@ CRITERIOS PERMANENTES (evalúalos SIEMPRE, además de los anteriores):
 - no inventa datos que no estén en el contexto ni en la pregunta"""
 
 
-def _juzgar(client, pregunta, respuesta, debe, no_debe):
+def _juzgar(client, contexto, pregunta, respuesta, debe, no_debe):
     prompt = _JUEZ.format(
-        pregunta=pregunta, respuesta=respuesta,
+        contexto=contexto, pregunta=pregunta, respuesta=respuesta,
         debe="\n".join(f"- {c}" for c in debe),
         no_debe="\n".join(f"- {c}" for c in no_debe) or "- (ninguno)")
     r = client.messages.create(model=JUDGE_MODEL, max_tokens=1500,
@@ -114,7 +118,7 @@ def main():
         try:
             respuesta = _responder(client, args.modelo, system,
                                    caso["contexto"], caso["pregunta"])
-            veredictos = _juzgar(client, caso["pregunta"], respuesta,
+            veredictos = _juzgar(client, caso["contexto"], caso["pregunta"], respuesta,
                                  caso.get("debe", []), caso.get("no_debe", []))
         except Exception as exc:
             print(f"✗ {caso['id']}: ERROR {exc}")

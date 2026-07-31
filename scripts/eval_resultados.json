@@ -1,0 +1,43 @@
+{
+ "fecha": "2026-07-31T11:06:29.051162",
+ "modelo": "claude-sonnet-5",
+ "total": "6/6",
+ "resultados": [
+  {
+   "id": "numeros_del_contexto",
+   "respuesta": "Tu promedio de estos 14 días es 131 mg/dL, con un tiempo en rango del 81% 💙",
+   "veredictos": [
+    {
+     "criterio": "Responde con exactamente 131 mg/dL de promedio",
+     "cumple": true,
+     "razon": "El asistente menciona correctamente '131 mg/dL' como promedio"
+    },
+    {
+     "criterio": "Responde con exactamente 81% de tiempo en rango",
+     "cumple": true,
+     "razon": "El asistente menciona correctamente '81%' de tiempo en rango"
+    },
+    {
+     "criterio": "Es breve y directo",
+     "cumple": true,
+     "razon": "La respuesta es concisa, sin información innecesaria"
+    },
+    {
+     "criterio": "No da números distintos a los del contexto",
+     "cumple": true,
+     "razon": "Todos los valores coinciden exactamente con el contexto proporcionado"
+    },
+    {
+     "criterio": "Usa tuteo latino (tú/te/tienes)",
+     "cumple": true,
+     "razon": "Usa 'Tu promedio' y 'tu tiempo', que es tuteo correcto"
+    },
+    {
+     "criterio": "No inventa datos fuera del contexto",
+     "cumple": true,
+     "razon": "Solo utiliza información del resumen de 14 días, sin añadir datos no mencionados"
+    }
+   ]
+  }
+ ]
+}
