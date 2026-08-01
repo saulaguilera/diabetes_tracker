@@ -73,7 +73,7 @@ def admin_estado():
                 "<a href='/logout' style='color:#22D3EE'>Cierra sesión</a> y entra con tu "
                 "usuario principal.</div></div></div>"), 403
 
-    from helpers import set_user_context, reset_user_context, _get_setting
+    from helpers import set_user_context, reset_user_context, _get_setting, ahora_usuario
 
     ahora = datetime.now()
     usuarios = db.session.execute(
@@ -83,10 +83,14 @@ def admin_estado():
     for u in usuarios:
         tok = set_user_context(u.id)
         try:
+            # los datos de cada usuario viven en SU zona horaria → las edades
+            # y ventanas de SU fila se miden con SU reloj (bug: para un
+            # usuario de viaje daban minutos negativos)
+            ahora_u = ahora_usuario()
             ult = (GlucoseReading.query
                    .order_by(GlucoseReading.timestamp.desc()).first())
             n24 = (GlucoseReading.query
-                   .filter(GlucoseReading.timestamp >= ahora - timedelta(hours=24))
+                   .filter(GlucoseReading.timestamp >= ahora_u - timedelta(hours=24))
                    .count())
 
             def _j(key):
@@ -112,7 +116,8 @@ def admin_estado():
                 "provider": _prov or "—",
                 "sensor": _conectado,
                 "ultima_lectura": ult.timestamp.strftime("%d/%m %H:%M") if ult else None,
-                "lectura_hace_min": int((ahora - ult.timestamp).total_seconds() // 60) if ult else None,
+                "lectura_hace_min": max(0, int((ahora_u - ult.timestamp).total_seconds() // 60)) if ult else None,
+                "tz": (_get_setting("tz") or "").replace("America/", "").replace("Europe/", "") or None,
                 "lecturas_24h": n24,
                 "sync_last": _j("sync_last"),
                 "drive_push": _j("drive_push_last"),

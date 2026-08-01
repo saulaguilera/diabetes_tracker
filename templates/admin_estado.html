@@ -67,7 +67,7 @@
           <td>
             {% if f.ultima_lectura %}
               {{ f.ultima_lectura }}
-              {% if f.lectura_hace_min is not none %}
+              {% if f.tz %}<span class="muted" style="font-size:11px">🌍 {{ f.tz }}</span> {% endif %}{% if f.lectura_hace_min is not none %}
                 {% if f.lectura_hace_min <= 15 %}<span class="ok">· hace {{ f.lectura_hace_min }} min</span>
                 {% elif f.lectura_hace_min <= 120 %}<span class="warn">· hace {{ f.lectura_hace_min }} min</span>
                 {% else %}<span class="bad">· hace {{ (f.lectura_hace_min / 60) | round(1) }} h</span>{% endif %}
