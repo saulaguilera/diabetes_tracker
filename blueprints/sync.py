@@ -7,6 +7,24 @@ from helpers import _get_setting, _set_setting, set_user_context, reset_user_con
 from utils.libre_linkup import sync_all as libre_sync_all
 from pmm.ssm.version import MODEL_VERSION
 
+
+def _rate_limit_wait(raw, limit_min=10):
+    """Segundos restantes del cooldown por 429, desde un marcador en época
+    Unix. 0 = libre; -1 = marcador legacy (ISO de reloj de pared) o corrupto,
+    el caller debe limpiarlo. Época porque un cooldown es un TIMER: con hora
+    local, el reloj del server y el del usuario de viaje se cruzaban y 10 min
+    se convertían en horas (visto en el panel: «Espera 45m» siendo 10 el tope)."""
+    if not raw:
+        return 0
+    try:
+        epoch = float(raw)
+    except (TypeError, ValueError):
+        return -1
+    import time
+    return max(0, int(limit_min * 60 - (time.time() - epoch)))
+
+
+
 bp = Blueprint("sync", __name__)
 
 # ── Multi-usuario: contexto del cron ─────────────────────────────────────────
@@ -1046,20 +1064,15 @@ def _sync_one_user(email: str, password: str, is_manual: bool, provider: str = "
     now = ahora_usuario()
 
     # Rate-limit de Abbott: se respeta incluso en sync manual
-    rl_at_str = _get_setting("libre_rate_limited_at")
-    if rl_at_str:
-        try:
-            rl_at         = datetime.fromisoformat(rl_at_str)
-            secs_since_rl = (now - rl_at).total_seconds()
-            if secs_since_rl < _RATELIMIT_MIN * 60:
-                wait = int(_RATELIMIT_MIN * 60 - secs_since_rl)
-                return {
-                    "insertadas": 0, "total": 0,
-                    "error": f"Abbott limitó las requests (429). Espera {wait // 60}m {wait % 60}s más.",
-                    "rate_limited": True, "wait_seconds": wait,
-                }
-        except (ValueError, TypeError):
-            _set_setting("libre_rate_limited_at", "")   # timestamp corrupto → limpiar
+    wait = _rate_limit_wait(_get_setting("libre_rate_limited_at"), _RATELIMIT_MIN)
+    if wait < 0:
+        _set_setting("libre_rate_limited_at", "")   # legacy/corrupto → limpiar
+    elif wait > 0:
+        return {
+            "insertadas": 0, "total": 0,
+            "error": f"Abbott limitó las requests (429). Espera {wait // 60}m {wait % 60}s más.",
+            "rate_limited": True, "wait_seconds": wait,
+        }
 
     # Cooldown normal: solo para syncs automáticas (no manual)
     if not is_manual:

@@ -117,3 +117,26 @@ class TestDisparoDesdeElCron(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRateLimitEpoch(unittest.TestCase):
+    """El cooldown por 429 es un timer en época Unix — inmune a zonas
+    horarias (bug: marcador en reloj del server + lectura en reloj del
+    usuario de viaje inflaban 10 min a horas)."""
+
+    def test_epoch_fresco_bloquea(self):
+        import time
+        from blueprints.sync import _rate_limit_wait
+        w = _rate_limit_wait(str(int(time.time()) - 120), limit_min=10)
+        self.assertTrue(400 <= w <= 480)
+
+    def test_epoch_viejo_libera(self):
+        import time
+        from blueprints.sync import _rate_limit_wait
+        self.assertEqual(_rate_limit_wait(str(int(time.time()) - 700), 10), 0)
+
+    def test_legacy_iso_se_descarta(self):
+        from blueprints.sync import _rate_limit_wait
+        self.assertEqual(_rate_limit_wait("2026-08-01T14:33:00"), -1)
+        self.assertEqual(_rate_limit_wait(""), 0)
+        self.assertEqual(_rate_limit_wait(None), 0)

@@ -306,8 +306,11 @@ def sync_all(email: str, password: str, get_setting_fn=None, set_setting_fn=None
         # 429 Too Many Requests → Abbott está rate-limiting; guardar timestamp para cooldown
         if "429" in err:
             if set_setting_fn:
-                from datetime import datetime as _dt
-                set_setting_fn("libre_rate_limited_at", _dt.now().isoformat())
+                # época Unix: el cooldown es un TIMER, no una hora de pared —
+                # con ISO local, server (Chile) y usuario (viaje) mezclaban
+                # relojes y 10 min se inflaban a horas
+                import time as _time
+                set_setting_fn("libre_rate_limited_at", str(int(_time.time())))
             return {"readings": [], "error": "429: Abbott limitó las requests. Espera 5 minutos antes de sincronizar de nuevo."}
         # 401/403 con token cacheado → limpiar y reintentar sin caché
         if ("401" in err or "403" in err or "430" in err) and get_setting_fn:
