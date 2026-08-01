@@ -5,7 +5,7 @@ import { apiGet } from '../api.js'
 import { SANS } from '../theme.js'
 import { useLang } from '../i18n.jsx'
 import { Loading } from './ui.jsx'
-import EventSheet, { META, dayLabel } from './EventSheet.jsx'
+import EventSheet, { META, CatIcon, dayLabel } from './EventSheet.jsx'
 
 const FILTERS = [
   { id: 'todos', key: 'hist.all' },
@@ -67,7 +67,7 @@ export default function Historial({ theme }) {
               return (
                 <div key={i} onClick={() => setSel(e)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px',
                   borderRadius: 14, background: theme.surface, border: `0.5px solid ${theme.border}`, cursor: 'pointer' }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: m.color, boxShadow: `0 0 7px ${m.color}` }}/>
+                  <CatIcon cat={e.cat} color={m.color}/>
                   <span style={{ flex: 1, color: theme.ink, fontSize: 14.5 }}>{e.title}</span>
                   {e.badge && <span style={{ color: theme.inkSoft, fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>{e.badge}</span>}
                   <span style={{ color: theme.inkFaint, fontSize: 12, fontVariantNumeric: 'tabular-nums', minWidth: 38, textAlign: 'right' }}>{e.time}</span>

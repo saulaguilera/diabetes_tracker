@@ -6,7 +6,7 @@ import { PAL, SANS } from '../theme.js'
 import { useLang } from '../i18n.jsx'
 import NebulaGuide from '../components/NebulaGuide.jsx'
 import GlucoseWave from '../components/GlucoseWave.jsx'
-import EventSheet from '../components/EventSheet.jsx'
+import EventSheet, { CatIcon } from '../components/EventSheet.jsx'
 import BriefSheet from '../components/BriefSheet.jsx'
 import { Card, Eyebrow, Meter, Loading } from '../components/ui.jsx'
 
@@ -196,8 +196,7 @@ export default function Hoy({ theme, refreshKey = 0, onGoRegistro }) {
           <Eyebrow theme={theme} style={{ fontSize: 10, padding: '12px 0 4px' }}>{t('hoy.recent')}</Eyebrow>
           {data.recent.map((e, i) => (
             <div key={i} onClick={() => e.id && setSel(e)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderTop: `0.5px solid ${theme.border}`, cursor: e.id ? 'pointer' : 'default' }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-                background: CAT_COLOR[e.cat] || theme.accent, boxShadow: `0 0 8px ${CAT_COLOR[e.cat] || theme.accent}` }}/>
+              <CatIcon cat={e.cat} color={CAT_COLOR[e.cat] || theme.accent} size={24}/>
               <span style={{ flex: 1, color: theme.ink, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.title}</span>
               {e.badge && <span style={{ color: CAT_COLOR[e.cat] || theme.accent, fontSize: 13, fontWeight: 500 }}>{e.badge}</span>}
               <span style={{ color: theme.inkFaint, fontSize: 11, width: 42, textAlign: 'right' }}>{e.ago}</span>

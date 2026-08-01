@@ -21,6 +21,35 @@ export const META = {
   contexto:  { color: PAL.ritmo.key,       label: 'Contexto' },
 }
 
+// iconos por categoría (trazo estilo feather, como la cámara del Registro):
+// cubiertos / jeringa / pulso / etiqueta
+const ICON_PATHS = {
+  comida: ['M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2', 'M7 2v20',
+           'M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Z', 'M21 15v7'],
+  insulina: ['m18 2 4 4', 'm17 7 3-3',
+             'M19 9 8.7 19.3c-1 1-2.5 1-3.4 0l-.6-.6c-1-1-1-2.5 0-3.4L15 5',
+             'm9 11 4 4', 'm5 19-3 3', 'm14 4 6 6'],
+  ejercicio: ['M22 12h-2.5a2 2 0 0 0-1.9 1.5l-2.4 8.3a.25.25 0 0 1-.5 0L9.2 2.2a.25.25 0 0 0-.5 0L6.4 10.5A2 2 0 0 1 4.5 12H2'],
+  contexto: ['M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2c0 .5.2 1 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4Z',
+             'M7.5 7.5h.01'],
+}
+
+// Chip redondo con el icono de la categoría — reemplaza al punto de color
+// anónimo: de un vistazo se sabe QUÉ es cada evento, no solo "algo pasó".
+export function CatIcon({ cat, color, size = 26 }) {
+  const paths = ICON_PATHS[cat] || ICON_PATHS.contexto
+  return (
+    <span style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0,
+      display: 'grid', placeItems: 'center', background: `${color}1C`,
+      border: `0.5px solid ${color}44` }}>
+      <svg width={size * 0.54} height={size * 0.54} viewBox="0 0 24 24" fill="none"
+        stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        {paths.map((d, i) => <path key={i} d={d}/>)}
+      </svg>
+    </span>
+  )
+}
+
 export function dayLabel(dateStr, t, lang = 'es') {
   if (!dateStr) return ''
   const today = new Date(); today.setHours(0, 0, 0, 0)
@@ -86,7 +115,7 @@ export default function EventSheet({ theme, ev, onClose, onChanged }) {
         <div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border, margin: '0 auto 18px' }}/>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-          <span style={{ width: 9, height: 9, borderRadius: '50%', background: m.color, boxShadow: `0 0 8px ${m.color}` }}/>
+          <CatIcon cat={ev.cat} color={m.color} size={24}/>
           <span style={{ flex: 1, color: theme.ink, fontSize: 18, fontWeight: 500 }}>{isMeal ? t('ev.editMeal') : ev.title}</span>
           <span style={{ color: theme.inkFaint, fontSize: 13 }}>{[dayLabel(ev.date, t, lang), ev.time].filter(Boolean).join(' · ')}</span>
         </div>
