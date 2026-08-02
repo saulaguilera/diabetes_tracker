@@ -2,6 +2,13 @@
 // el fondo. Destello "ahora" animado + tooltip al arrastrar el dedo (valor/hora).
 import { useRef, useState } from 'react'
 import { PAL } from '../theme.js'
+import { CatIcon } from './EventSheet.jsx'
+
+// color por categoría para los marcadores sobre la onda
+const MARKER_COLOR = {
+  comida: PAL.metabolismo.key, insulina: PAL.insulina.key,
+  ejercicio: PAL.glucosa.key, contexto: PAL.ritmo.key,
+}
 
 function smoothPath(pts) {
   if (pts.length < 2) return ''
@@ -21,7 +28,7 @@ function hhmm(t) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-export default function GlucoseWave({ series, theme, low = 70, high = 180, w = 320, h = 150 }) {
+export default function GlucoseWave({ series, markers = [], theme, low = 70, high = 180, w = 320, h = 150 }) {
   const wrapRef = useRef(null)
   const [active, setActive] = useState(null)
 
@@ -49,6 +56,30 @@ export default function GlucoseWave({ series, theme, low = 70, high = 180, w = 3
   }
   const ap = active != null ? pts[active] : null
   const av = active != null ? series[active] : null
+
+  // marcadores de eventos: cada uno se ancla al punto de la serie más
+  // cercano en el tiempo → la comida queda SOBRE la curva a la hora que fue
+  const times = series.map(p => new Date(p.t).getTime())
+  const marks = markers.map(mk => {
+    const tm = new Date(mk.t).getTime()
+    if (isNaN(tm)) return null
+    // fuera del rango de la serie (ej. sensor offline y comida "ahora"):
+    // se ancla al extremo más cercano en vez de desaparecer en silencio
+    const tc = Math.max(times[0], Math.min(tm, times[times.length - 1]))
+    let best = 0, dist = Infinity
+    for (let i = 0; i < times.length; i++) {
+      const d = Math.abs(times[i] - tc)
+      if (d < dist) { dist = d; best = i }
+    }
+    return { cat: mk.cat, xPct: (best / (series.length - 1)) * 100, yPct: (pts[best][1] / h) * 100 }
+  }).filter(Boolean)
+  // pares pegados (comida + bolo a los 5 min = el caso más común) se apilan
+  // hacia arriba en vez de taparse
+  marks.sort((a, b) => a.xPct - b.xPct)
+  for (let i = 0; i < marks.length; i++) {
+    marks[i].lift = (i > 0 && marks[i].xPct - marks[i - 1].xPct < 6)
+      ? (marks[i - 1].lift + 1) : 0
+  }
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', touchAction: 'pan-y' }}
@@ -92,6 +123,14 @@ export default function GlucoseWave({ series, theme, low = 70, high = 180, w = 3
           </g>
         )}
       </svg>
+
+      {/* iconos de eventos sobre la curva (comida/insulina/ejercicio/contexto) */}
+      {marks.map((mk, i) => (
+        <span key={i} style={{ position: 'absolute', left: `${mk.xPct}%`, top: `${mk.yPct}%`,
+          transform: `translate(-50%, calc(-150% - ${mk.lift * 110}%))`, pointerEvents: 'none' }}>
+          <CatIcon cat={mk.cat} color={MARKER_COLOR[mk.cat] || PAL.glucosa.key} size={18}/>
+        </span>
+      ))}
 
       {/* tooltip HTML al arrastrar */}
       {av && (

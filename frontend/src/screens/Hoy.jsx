@@ -137,7 +137,7 @@ export default function Hoy({ theme, refreshKey = 0, onGoRegistro }) {
       {/* onda de glucosa — últimas 24h (solo lecturas) */}
       {data.series && data.series.length > 1 && (
         <div>
-          <GlucoseWave series={data.series} theme={theme}/>
+          <GlucoseWave series={data.series} markers={data.markers || []} theme={theme}/>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, padding: '0 2px' }}>
             {['00', '06', '12', '18', '24'].map(a => (
               <span key={a} style={{ fontSize: 10.5, letterSpacing: '0.1em', color: theme.inkFaint, fontVariantNumeric: 'tabular-nums' }}>{a}</span>

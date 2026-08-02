@@ -5,7 +5,7 @@ import { apiGet } from '../api.js'
 import { SANS } from '../theme.js'
 import { useLang } from '../i18n.jsx'
 import { Loading } from './ui.jsx'
-import EventSheet, { META, CatIcon, dayLabel } from './EventSheet.jsx'
+import EventSheet, { META, CatIcon, scoreColor, dayLabel } from './EventSheet.jsx'
 
 const FILTERS = [
   { id: 'todos', key: 'hist.all' },
@@ -69,6 +69,15 @@ export default function Historial({ theme }) {
                   borderRadius: 14, background: theme.surface, border: `0.5px solid ${theme.border}`, cursor: 'pointer' }}>
                   <CatIcon cat={e.cat} color={m.color}/>
                   <span style={{ flex: 1, color: theme.ink, fontSize: 14.5 }}>{e.title}</span>
+                  {/* puntuación T1D de la comida (si la foto la puntuó) */}
+                  {e.cat === 'comida' && e.data && e.data.score != null && (
+                    <span style={{ flexShrink: 0, padding: '2px 7px', borderRadius: 100,
+                      fontSize: 11.5, fontWeight: 700, color: scoreColor(e.data.score),
+                      background: `${scoreColor(e.data.score)}1E`,
+                      border: `0.5px solid ${scoreColor(e.data.score)}55` }}>
+                      {e.data.score}/10
+                    </span>
+                  )}
                   {e.badge && <span style={{ color: theme.inkSoft, fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>{e.badge}</span>}
                   <span style={{ color: theme.inkFaint, fontSize: 12, fontVariantNumeric: 'tabular-nums', minWidth: 38, textAlign: 'right' }}>{e.time}</span>
                 </div>

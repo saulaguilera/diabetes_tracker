@@ -314,12 +314,40 @@ def copilot_home():
                "date": e["ts"].strftime("%Y-%m-%d"), "time": e["ts"].strftime("%H:%M")}
               for e in events[:4]]
 
+    # ── marcadores sobre la onda: los eventos de las mismas 24h de la serie ──
+    # La curva cuenta la historia; los iconos le ponen los personajes
+    # (comí → subí, bolo → bajó). Solo cat + hora: la UI los posiciona.
+    markers = []
+    try:
+        from models import ContextTag as _CtxTag
+        for m in Meal.query.filter(Meal.timestamp >= since).all():
+            markers.append({"cat": "comida", "t": m.timestamp.isoformat()})
+        for d in InsulinDose.query.filter(InsulinDose.timestamp >= since).all():
+            markers.append({"cat": "insulina", "t": d.timestamp.isoformat()})
+        for a in Activity.query.filter(Activity.timestamp >= since).all():
+            markers.append({"cat": "ejercicio", "t": a.timestamp.isoformat()})
+        for t_ in _CtxTag.query.filter(_CtxTag.timestamp >= since).all():
+            markers.append({"cat": "contexto", "t": t_.timestamp.isoformat()})
+        markers.sort(key=lambda m: m["t"])
+        # acotar al rango de la serie ANTES del tope: eventos posteriores a la
+        # última lectura (sensor offline) no desplazan a los renderizables
+        if series:
+            fin = series[-1]["t"]
+            dentro = [m for m in markers if m["t"] <= fin]
+            fuera = [m for m in markers if m["t"] > fin][-2:]   # los 2 más recientes
+            markers = dentro[-12:] + fuera
+        else:
+            markers = markers[-14:]
+    except Exception:
+        markers = []
+
     return jsonify({
         "ok": True,
         "glucose": glucose,
         "context": {"iob": iob, "cob": cob, "trend": trend, "basal": basal},
         "tir_today": tir,
         "series": series,
+        "markers": markers,
         "recent": recent,
         "updated_at": ahora_usuario().isoformat(),
     })
@@ -2052,6 +2080,7 @@ def copilot_history():
                        "badge": f"{int(m.carbs_g)}g" if m.carbs_g else "", "ts": m.timestamp,
                        "data": {"name": m.name or "", "carbs": m.carbs_g or 0,
                                 "protein": m.protein_g or 0, "fat": m.fat_g or 0,
+                                "fiber": m.fiber_g or 0, "score": m.health_score,
                                 "calories": m.calories or 0, "notes": m.notes or "",
                                 "components": [{"name": cp.name, "grams": cp.grams,
                                                 "carbs": round(cp.carbs_g or 0)}

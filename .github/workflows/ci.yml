@@ -1,0 +1,47 @@
+# CI de Orbit: los tests corren en cada push/PR. Con "Wait for CI" activado
+# en Railway (Settings → Deploy), un push con tests rotos NO llega a
+# producción — el incidente del 30/07 (deploy directo sin tests) no se repite.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt pytest
+      - name: Tests (219+)
+        run: python -m pytest -q
+        env:
+          TZ: America/Santiago
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - name: Build del SPA (detecta errores de JSX/imports)
+        run: npm run build
+        working-directory: frontend
+      - name: El build commiteado debe estar al día
+        # exactamente el modo de falla del 02/08: backend nuevo + UI vieja.
+        # vite hashea por contenido → si el fuente cambió y nadie recompiló,
+        # static/copilot difiere y esto falla.
+        run: |
+          git add -N static/copilot
+          git diff --exit-code --stat -- static/copilot \
+            || (echo '::error::static/copilot desactualizado — corre `npm run build` en frontend/ y commitea el resultado' && exit 1)

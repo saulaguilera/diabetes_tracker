@@ -6,6 +6,7 @@ import { PAL, SANS } from '../theme.js'
 import { useLang } from '../i18n.jsx'
 import { Card, Eyebrow, Stepper, Segmented, Chips, Field } from '../components/ui.jsx'
 import Historial from '../components/Historial.jsx'
+import { scoreColor } from '../components/EventSheet.jsx'
 
 // Redimensiona la foto en el cliente antes de enviarla (evita subir MB).
 // 1280px: el modelo de visión aprovecha hasta ~1568px por lado; con 1024 se
@@ -364,9 +365,6 @@ function Analyzing({ theme, color }) {
     </div>
   )
 }
-
-// color de la puntuación 1-10: verde ≥7, ámbar 4-6, coral ≤3
-const scoreColor = (s) => s >= 7 ? '#5FC6A8' : s >= 4 ? '#E0B057' : '#D98A6A'
 
 function Row({ theme, label, children }) {
   return (

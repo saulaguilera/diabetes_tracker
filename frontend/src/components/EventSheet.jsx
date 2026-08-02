@@ -50,6 +50,9 @@ export function CatIcon({ cat, color, size = 26 }) {
   )
 }
 
+// color de la puntuación T1D 1-10: verde ≥7, ámbar 4-6, coral ≤3
+export const scoreColor = (s) => s >= 7 ? '#5FC6A8' : s >= 4 ? '#E0B057' : '#D98A6A'
+
 export function dayLabel(dateStr, t, lang = 'es') {
   if (!dateStr) return ''
   const today = new Date(); today.setHours(0, 0, 0, 0)
