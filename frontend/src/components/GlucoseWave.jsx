@@ -71,14 +71,14 @@ export default function GlucoseWave({ series, markers = [], theme, low = 70, hig
       const d = Math.abs(times[i] - tc)
       if (d < dist) { dist = d; best = i }
     }
-    return { cat: mk.cat, xPct: (best / (series.length - 1)) * 100, yPct: (pts[best][1] / h) * 100 }
+    return { cat: mk.cat, xPct: (best / (series.length - 1)) * 100 }
   }).filter(Boolean)
-  // pares pegados (comida + bolo a los 5 min = el caso más común) se apilan
-  // hacia arriba en vez de taparse
+  // pares pegados (comida + bolo a los 5 min = el caso más común): pequeño
+  // corrimiento horizontal en el carril para que ambos se vean
   marks.sort((a, b) => a.xPct - b.xPct)
   for (let i = 0; i < marks.length; i++) {
-    marks[i].lift = (i > 0 && marks[i].xPct - marks[i - 1].xPct < 6)
-      ? (marks[i - 1].lift + 1) : 0
+    marks[i].nudge = (i > 0 && marks[i].xPct - marks[i - 1].xPct < 4.5)
+      ? (marks[i - 1].nudge + 1) : 0
   }
 
   return (
@@ -105,6 +105,12 @@ export default function GlucoseWave({ series, markers = [], theme, low = 70, hig
         <path d={line} fill="none" stroke={c} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.35" filter="url(#gwGlow)"/>
         <path d={line} fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
 
+        {/* hora de cada evento: hairline sutil del color de su categoría */}
+        {marks.map((mk, i) => (
+          <line key={`mk${i}`} x1={(mk.xPct / 100) * w} y1="0" x2={(mk.xPct / 100) * w} y2={h}
+            stroke={MARKER_COLOR[mk.cat] || c} strokeWidth="0.7" opacity="0.22"/>
+        ))}
+
         {/* guía vertical + punto al arrastrar */}
         {ap && (
           <g>
@@ -124,15 +130,19 @@ export default function GlucoseWave({ series, markers = [], theme, low = 70, hig
         )}
       </svg>
 
-      {/* iconos de eventos sobre la curva (comida/insulina/ejercicio/contexto) */}
-      {marks.map((mk, i) => (
-        <span key={i} style={{ position: 'absolute', left: `${mk.xPct}%`, top: `${mk.yPct}%`,
-          transform: `translate(-50%, calc(-150% - ${mk.lift * 110}%))`, pointerEvents: 'none' }}>
-          <CatIcon cat={mk.cat} color={MARKER_COLOR[mk.cat] || PAL.glucosa.key} size={18}/>
-        </span>
-      ))}
-
       {/* tooltip HTML al arrastrar */}
+      {marks.length > 0 && (
+        <div style={{ position: 'relative', height: 22, marginTop: 6 }}>
+          {marks.map((mk, i) => (
+            <span key={i} style={{ position: 'absolute', top: 0,
+              left: `calc(${mk.xPct}% + ${mk.nudge * 15}px)`,
+              transform: 'translateX(-50%)', pointerEvents: 'none' }}>
+              <CatIcon cat={mk.cat} color={MARKER_COLOR[mk.cat] || PAL.glucosa.key} size={17}/>
+            </span>
+          ))}
+        </div>
+      )}
+
       {av && (
         <div style={{
           position: 'absolute', top: -4, left: `${(active / (series.length - 1)) * 100}%`,
