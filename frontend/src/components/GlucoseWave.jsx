@@ -60,26 +60,12 @@ export default function GlucoseWave({ series, markers = [], theme, low = 70, hig
   // marcadores de eventos: cada uno se ancla al punto de la serie más
   // cercano en el tiempo → la comida queda SOBRE la curva a la hora que fue
   const times = series.map(p => new Date(p.t).getTime())
-  const marks = markers.map(mk => {
-    const tm = new Date(mk.t).getTime()
-    if (isNaN(tm)) return null
-    // fuera del rango de la serie (ej. sensor offline y comida "ahora"):
-    // se ancla al extremo más cercano en vez de desaparecer en silencio
-    const tc = Math.max(times[0], Math.min(tm, times[times.length - 1]))
-    let best = 0, dist = Infinity
-    for (let i = 0; i < times.length; i++) {
-      const d = Math.abs(times[i] - tc)
-      if (d < dist) { dist = d; best = i }
-    }
-    return { cat: mk.cat, xPct: (best / (series.length - 1)) * 100 }
-  }).filter(Boolean)
-  // pares pegados (comida + bolo a los 5 min = el caso más común): pequeño
-  // corrimiento horizontal en el carril para que ambos se vean
-  marks.sort((a, b) => a.xPct - b.xPct)
-  for (let i = 0; i < marks.length; i++) {
-    marks[i].nudge = (i > 0 && marks[i].xPct - marks[i - 1].xPct < 4.5)
-      ? (marks[i - 1].nudge + 1) : 0
-  }
+  const marks = markers
+    .map(mk => ({ ...mk, tm: new Date(mk.t).getTime() }))
+    .filter(mk => !isNaN(mk.tm))
+  // eventos cerca del punto tocado (±25 min) — los muestra la lupa
+  const cercanos = av ? marks.filter(mk =>
+    Math.abs(mk.tm - new Date(av.t).getTime()) <= 25 * 60000) : []
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', touchAction: 'pan-y' }}
@@ -105,12 +91,6 @@ export default function GlucoseWave({ series, markers = [], theme, low = 70, hig
         <path d={line} fill="none" stroke={c} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.35" filter="url(#gwGlow)"/>
         <path d={line} fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
 
-        {/* hora de cada evento: hairline sutil del color de su categoría */}
-        {marks.map((mk, i) => (
-          <line key={`mk${i}`} x1={(mk.xPct / 100) * w} y1="0" x2={(mk.xPct / 100) * w} y2={h}
-            stroke={MARKER_COLOR[mk.cat] || c} strokeWidth="0.7" opacity="0.22"/>
-        ))}
-
         {/* guía vertical + punto al arrastrar */}
         {ap && (
           <g>
@@ -130,30 +110,49 @@ export default function GlucoseWave({ series, markers = [], theme, low = 70, hig
         )}
       </svg>
 
-      {/* tooltip HTML al arrastrar */}
-      {marks.length > 0 && (
-        <div style={{ position: 'relative', height: 22, marginTop: 6 }}>
-          {marks.map((mk, i) => (
-            <span key={i} style={{ position: 'absolute', top: 0,
-              left: `calc(${mk.xPct}% + ${mk.nudge * 15}px)`,
-              transform: 'translateX(-50%)', pointerEvents: 'none' }}>
-              <CatIcon cat={mk.cat} color={MARKER_COLOR[mk.cat] || PAL.glucosa.key} size={17}/>
-            </span>
-          ))}
-        </div>
-      )}
-
-      {av && (
+      {/* lupa al mantener el dedo: lente que amplía el tramo + qué pasó ahí */}
+      {av && ap && (
         <div style={{
-          position: 'absolute', top: -4, left: `${(active / (series.length - 1)) * 100}%`,
-          transform: 'translate(-50%, -100%)', pointerEvents: 'none', whiteSpace: 'nowrap',
-          background: theme.dark ? 'rgba(12,14,34,0.92)' : 'rgba(255,255,255,0.95)',
-          border: `0.5px solid ${theme.borderStrong}`, borderRadius: 12, padding: '6px 10px',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+          position: 'absolute', top: -10,
+          left: `${Math.min(86, Math.max(14, (active / (series.length - 1)) * 100))}%`,
+          transform: 'translate(-50%, -100%)', pointerEvents: 'none',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
         }}>
-          <span style={{ fontSize: 16, fontWeight: 500, color: theme.ink, fontVariantNumeric: 'tabular-nums' }}>{Math.round(av.v)}</span>
-          <span style={{ fontSize: 11, color: theme.inkSoft, marginLeft: 4 }}>mg/dL</span>
-          {hhmm(av.t) && <span style={{ fontSize: 11, color: theme.inkFaint, marginLeft: 8 }}>{hhmm(av.t)}</span>}
+          {/* lente circular: el mismo trazo, ampliado ~2.3x alrededor del punto */}
+          <div style={{ width: 92, height: 92, borderRadius: '50%', overflow: 'hidden',
+            background: theme.dark ? 'rgba(10,12,30,0.96)' : 'rgba(255,255,255,0.97)',
+            border: `1.5px solid ${theme.borderStrong}`,
+            boxShadow: '0 10px 30px rgba(0,0,0,0.5), inset 0 0 18px rgba(34,211,238,0.06)' }}>
+            <svg width="92" height="92"
+              viewBox={`${ap[0] - 20} ${ap[1] - 20} 40 40`} preserveAspectRatio="xMidYMid slice">
+              <line x1={ap[0]} y1={ap[1] - 20} x2={ap[0]} y2={ap[1] + 20}
+                stroke={c} strokeWidth="0.4" opacity="0.35"/>
+              <path d={line} fill="none" stroke={c} strokeWidth="1.1"
+                strokeLinecap="round" strokeLinejoin="round"/>
+              <circle cx={ap[0]} cy={ap[1]} r="2.6" fill="#FFFFFF"/>
+              <circle cx={ap[0]} cy={ap[1]} r="4.2" fill="none" stroke={c} strokeWidth="0.8"/>
+            </svg>
+          </div>
+          {/* valor + hora */}
+          <div style={{ whiteSpace: 'nowrap', textAlign: 'center',
+            background: theme.dark ? 'rgba(12,14,34,0.92)' : 'rgba(255,255,255,0.95)',
+            border: `0.5px solid ${theme.borderStrong}`, borderRadius: 12, padding: '5px 10px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
+            <span style={{ fontSize: 16, fontWeight: 500, color: theme.ink, fontVariantNumeric: 'tabular-nums' }}>{Math.round(av.v)}</span>
+            <span style={{ fontSize: 11, color: theme.inkSoft, marginLeft: 4 }}>mg/dL</span>
+            {hhmm(av.t) && <span style={{ fontSize: 11, color: theme.inkFaint, marginLeft: 8 }}>{hhmm(av.t)}</span>}
+            {/* qué pasó en ese momento (±25 min): comida, bolo, ejercicio… */}
+            {cercanos.slice(0, 3).map((mk, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5 }}>
+                <CatIcon cat={mk.cat} color={MARKER_COLOR[mk.cat] || c} size={16}/>
+                <span style={{ fontSize: 11.5, color: theme.ink, maxWidth: 130,
+                  overflow: 'hidden', textOverflow: 'ellipsis' }}>{mk.title || mk.cat}</span>
+                {mk.badge && <span style={{ fontSize: 11, fontWeight: 600,
+                  color: MARKER_COLOR[mk.cat] || c }}>{mk.badge}</span>}
+                <span style={{ fontSize: 10.5, color: theme.inkFaint }}>{hhmm(mk.t)}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

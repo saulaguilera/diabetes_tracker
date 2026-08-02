@@ -321,13 +321,19 @@ def copilot_home():
     try:
         from models import ContextTag as _CtxTag
         for m in Meal.query.filter(Meal.timestamp >= since).all():
-            markers.append({"cat": "comida", "t": m.timestamp.isoformat()})
+            markers.append({"cat": "comida", "t": m.timestamp.isoformat(),
+                            "title": (m.name or "Comida")[:40],
+                            "badge": f"{int(m.carbs_g)}g" if m.carbs_g else ""})
         for d in InsulinDose.query.filter(InsulinDose.timestamp >= since).all():
-            markers.append({"cat": "insulina", "t": d.timestamp.isoformat()})
+            markers.append({"cat": "insulina", "t": d.timestamp.isoformat(),
+                            "title": "Insulina", "badge": f"{d.units:g}U"})
         for a in Activity.query.filter(Activity.timestamp >= since).all():
-            markers.append({"cat": "ejercicio", "t": a.timestamp.isoformat()})
+            markers.append({"cat": "ejercicio", "t": a.timestamp.isoformat(),
+                            "title": (a.activity_type or "Ejercicio")[:40],
+                            "badge": f"{a.duration_min}m" if a.duration_min else ""})
         for t_ in _CtxTag.query.filter(_CtxTag.timestamp >= since).all():
-            markers.append({"cat": "contexto", "t": t_.timestamp.isoformat()})
+            markers.append({"cat": "contexto", "t": t_.timestamp.isoformat(),
+                            "title": TAG_LABELS.get(t_.tag, t_.tag)[:40], "badge": ""})
         markers.sort(key=lambda m: m["t"])
         # acotar al rango de la serie ANTES del tope: eventos posteriores a la
         # última lectura (sensor offline) no desplazan a los renderizables
