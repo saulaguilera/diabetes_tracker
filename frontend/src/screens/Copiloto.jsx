@@ -1,7 +1,7 @@
 // Copiloto.jsx — chat que SOLO explica y acompaña (nunca recomienda ni predice).
 // El candado real vive en el system prompt del backend (/api/copilot/chat).
 import { useState, useRef, useEffect } from 'react'
-import { apiPost } from '../api.js'
+import { apiPost, apiGet } from '../api.js'
 import { PAL, SANS } from '../theme.js'
 import { useLang } from '../i18n.jsx'
 import { Typewriter } from '../components/ui.jsx'
@@ -28,12 +28,33 @@ function loadChat() {
 export default function Copiloto({ theme }) {
   const { t } = useLang()
   const startedAtRef = useRef(0)
+  // saludo cálido con nombre: "Hola, Saúl 💙 …" — el nombre se cachea para
+  // que esté al instante; 3 variantes rotan en cada chat nuevo
+  const greetingFor = (name) => {
+    const n = 1 + Math.floor(Math.random() * 3)
+    return t(`cop.greet${n}`).replace('{name}', name ? `, ${name}` : '')
+  }
+  const cachedName = () => {
+    try { return localStorage.getItem('orbit_user_name') || '' } catch { return '' }
+  }
   const [messages, setMessages] = useState(() => {
     const saved = loadChat()
     if (saved) { startedAtRef.current = saved.startedAt; return saved.messages }
     startedAtRef.current = Date.now()
-    return [{ role: 'assistant', content: t('cop.greeting') }]
+    return [{ role: 'assistant', content: greetingFor(cachedName()) }]
   })
+  // primera visita sin nombre cacheado: al llegar el perfil, si el chat sigue
+  // siendo solo el saludo, se personaliza en el momento
+  useEffect(() => {
+    apiGet('/profile').then(p => {
+      const nombre = ((p && p.name) || '').trim().split(' ')[0]
+      if (!nombre) return
+      const habiaCache = !!cachedName()   // ANTES de guardar, o nunca personaliza
+      try { localStorage.setItem('orbit_user_name', nombre) } catch {}
+      setMessages(m => (m.length === 1 && m[0].role === 'assistant' && !habiaCache)
+        ? [{ role: 'assistant', content: greetingFor(nombre) }] : m)
+    }).catch(() => {})
+  }, [])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [kb, setKb] = useState(0)   // alto del teclado (visualViewport)
@@ -55,7 +76,7 @@ export default function Copiloto({ theme }) {
   const resetChat = () => {
     try { localStorage.removeItem(CHAT_KEY) } catch {}
     startedAtRef.current = Date.now()
-    setMessages([{ role: 'assistant', content: t('cop.greeting') }])
+    setMessages([{ role: 'assistant', content: greetingFor(cachedName()) }])
   }
 
   // Sube el input con el teclado en vez de empujar toda la pantalla.
