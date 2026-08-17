@@ -168,6 +168,44 @@ def ahora_usuario():
     return datetime.now(tz).replace(tzinfo=None)
 
 
+def contar_uso(tipo):
+    """Contador diario de USO por usuario (uso_YYYY-MM-DD → {"app": n, ...}).
+    Solo números — jamás contenido (es una app de salud). Nunca rompe el
+    request: si el guardado choca (requests paralelos del arranque), rollback
+    y seguir — lección del PendingRollbackError de agosto."""
+    try:
+        import json as _j
+        hoy = ahora_usuario().strftime("%Y-%m-%d")
+        key = f"uso_{hoy}"
+        d = _j.loads(_get_setting(key) or "{}")
+        d[tipo] = int(d.get(tipo, 0)) + 1
+        _set_setting(key, _j.dumps(d))
+    except Exception:
+        try:
+            from models import db
+            db.session.rollback()
+        except Exception:
+            pass
+
+
+def uso_7d():
+    """Suma de los contadores de los últimos 7 días del usuario del contexto."""
+    import json as _j
+    from datetime import timedelta as _td
+    tot = {}
+    hoy = ahora_usuario()
+    for i in range(7):
+        raw = _get_setting(f"uso_{(hoy - _td(days=i)).strftime('%Y-%m-%d')}")
+        if not raw:
+            continue
+        try:
+            for k, v in _j.loads(raw).items():
+                tot[k] = tot.get(k, 0) + int(v)
+        except Exception:
+            pass
+    return tot
+
+
 def _auto_categorizar(nombre: str):
     """Detecta la categoría de una comida por su nombre."""
     nombre_lower = nombre.lower()

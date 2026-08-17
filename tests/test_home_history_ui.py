@@ -88,3 +88,44 @@ class TestDatosDeUI(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestContadoresDeUso(unittest.TestCase):
+    """Métricas de uso: contadores diarios por usuario — números, no contenido."""
+
+    def setUp(self):
+        self.app = _make_app()
+        self.ctx = self.app.app_context()
+        self.ctx.push()
+        db.create_all()
+        db.session.add(User(username="ana", password_hash="x", display_name="ana"))
+        db.session.commit()
+        self.client = self.app.test_client()
+        with self.client.session_transaction() as s:
+            s["logged_in"] = True
+            s["user_id"] = 1
+            s["username"] = "ana"
+
+    def tearDown(self):
+        db.session.remove()
+        self.ctx.pop()
+
+    def test_abrir_app_y_registrar_cuentan(self):
+        from helpers import set_user_context, reset_user_context, uso_7d
+        self.client.get("/api/copilot/home")
+        self.client.get("/api/copilot/home")
+        self.client.post("/api/copilot/log", json={"cat": "comida",
+                                                   "name": "pan", "carbs": 20})
+        tok = set_user_context(1)
+        try:
+            u = uso_7d()
+        finally:
+            reset_user_context(tok)
+        self.assertEqual(u.get("app"), 2)
+        self.assertEqual(u.get("log"), 1)
+
+    def test_contador_roto_no_rompe_el_request(self):
+        from unittest import mock
+        with mock.patch("helpers._set_setting", side_effect=Exception("boom")):
+            r = self.client.get("/api/copilot/home")
+        self.assertEqual(r.status_code, 200)   # el conteo jamás tumba el endpoint

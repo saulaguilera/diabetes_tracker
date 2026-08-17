@@ -503,6 +503,11 @@ def registrar_comida(nombre, carbs, protein=0, fat=0, fiber=0, hace_minutos=0) -
                fiber_g=round(_num(fiber, 0, 100), 1))
     db.session.add(row)
     db.session.commit()
+    try:
+        from helpers import contar_uso
+        contar_uso("log")
+    except Exception:
+        pass
     return {"ok": True, "registrado": {
         "tipo": "comida", "nombre": row.name, "carbs_g": row.carbs_g,
         "protein_g": row.protein_g, "fat_g": row.fat_g, "fiber_g": row.fiber_g,
@@ -519,6 +524,11 @@ def registrar_insulina(unidades, tipo="bolus", hace_minutos=0) -> dict:
     row = InsulinDose(timestamp=ts, type=tipo, units=u)
     db.session.add(row)
     db.session.commit()
+    try:
+        from helpers import contar_uso
+        contar_uso("log")
+    except Exception:
+        pass
     return {"ok": True, "registrado": {
         "tipo": f"insulina {tipo}", "unidades": u, "hora": ts.strftime("%H:%M")}}
 
@@ -535,6 +545,11 @@ def registrar_ejercicio(actividad, duracion_min, intensidad="media", hace_minuto
                    duration_min=dur, intensity=intensidad)
     db.session.add(row)
     db.session.commit()
+    try:
+        from helpers import contar_uso
+        contar_uso("log")
+    except Exception:
+        pass
     return {"ok": True, "registrado": {
         "tipo": "ejercicio", "actividad": row.activity_type,
         "duracion_min": dur, "intensidad": intensidad,

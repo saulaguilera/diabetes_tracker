@@ -73,7 +73,7 @@ def admin_estado():
                 "<a href='/logout' style='color:#22D3EE'>Cierra sesión</a> y entra con tu "
                 "usuario principal.</div></div></div>"), 403
 
-    from helpers import set_user_context, reset_user_context, _get_setting, ahora_usuario
+    from helpers import set_user_context, reset_user_context, _get_setting, ahora_usuario, uso_7d
 
     ahora = datetime.now()
     usuarios = db.session.execute(
@@ -123,6 +123,7 @@ def admin_estado():
                 "drive_push": _j("drive_push_last"),
                 "token_apns": bool(_get_setting("app_apns_token")),
                 "token_fcm": bool(_get_setting("app_fcm_token")),
+                "uso": uso_7d(),
             })
         finally:
             reset_user_context(tok)

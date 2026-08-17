@@ -208,6 +208,9 @@ def copilot_home():
     if err:
         return err
 
+    from helpers import contar_uso
+    contar_uso("app")
+
     # datos viejos → dispara sync en background (la próxima carga los ve frescos)
     try:
         from blueprints.sync import maybe_kick_background_sync
@@ -798,6 +801,9 @@ def copilot_log():
     err = _require_login()
     if err:
         return err
+
+    from helpers import contar_uso
+    contar_uso("log")
 
     from models import db, Meal, MealComponent, InsulinDose, Activity, ContextTag
     from helpers import ahora_usuario
@@ -1774,6 +1780,9 @@ def copilot_chat():
     if err:
         return err
 
+    from helpers import contar_uso
+    contar_uso("chat")
+
     import os
     data = request.get_json(silent=True) or {}
     message = (data.get("message") or "").strip()
@@ -1941,6 +1950,9 @@ def copilot_estimate():
     err = _require_login()
     if err:
         return err
+
+    from helpers import contar_uso
+    contar_uso("foto")
 
     import os, re
     from utils.photo_estimate import (

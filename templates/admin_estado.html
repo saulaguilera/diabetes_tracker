@@ -57,7 +57,8 @@
       <table>
         <tr>
           <th>Usuario</th><th>Registrado</th><th>Sensor</th><th>Última lectura</th><th>24 h</th>
-          <th>Último sync</th><th>Push Drive</th><th>Push app</th>
+          <th>Último sync</th>
+          <th>Uso 7d</th><th>Push Drive</th><th>Push app</th>
         </tr>
         {% for f in filas %}
         <tr>
@@ -80,6 +81,15 @@
               {% if f.sync_last.ok %}<span class="ok">ok</span>{% else %}<span class="bad">error</span>{% endif %}
               <span class="muted">{{ f.sync_last.at[11:16] }}</span>
               {% if f.sync_last.error %}<div class="err">{{ f.sync_last.error }}</div>{% endif %}
+            {% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          <td style="white-space:nowrap; font-size:12px;">
+            {% set u = f.uso or {} %}
+            {% if u %}
+              <span title="aperturas de app">📱{{ u.get('app', 0) }}</span> ·
+              <span title="mensajes al copiloto">💬{{ u.get('chat', 0) }}</span> ·
+              <span title="fotos analizadas">📸{{ u.get('foto', 0) }}</span> ·
+              <span title="registros">✍️{{ u.get('log', 0) }}</span>
             {% else %}<span class="muted">—</span>{% endif %}
           </td>
           <td>
