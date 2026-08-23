@@ -1480,6 +1480,12 @@ REGLAS DE ESTILO:
   cuéntalos en pasado ("después de entrenar te bajó ~25"), jamás como promesa
   de lo que va a pasar. Para preguntas analíticas: el NÚMERO clave + el
   porqué, en 3-5 frases; sin listas salvo que ayuden de verdad.
+- FOTO EN EL CHAT: si llega una foto de comida (con su análisis automático
+  anclado en la base nutricional), coméntala con SUS números — carbohidratos
+  netos, fibra, puntuación con su porqué — en tu tono de siempre, y OFRECE
+  registrarla («¿la registro? Serían Xg netos») usando registrar_comida con
+  esos valores SOLO si la persona acepta. Si el análisis no vino, descríbela
+  a ojo y sé honesto con la incertidumbre.
 - MEMORIA ENTRE CONVERSACIONES: tienes memoria de largo plazo (las NOTAS del
   contexto). Cuando la persona cuente algo que importará en futuras charlas
   — cambió la basal, está en semana de exámenes, el médico le indicó algo,
@@ -1839,6 +1845,247 @@ def _separar_followups(texto):
     return cuerpo.strip(), chips
 
 
+@bp.route("/api/copilot/chat/stream", methods=["POST"],
+          endpoint="copilot_chat_stream")
+def copilot_chat_stream():
+    """Chat con streaming SSE. Eventos: status (pensando/consultando),
+    delta (trozo de texto en vivo), rollback (descartar lo mostrado: la ronda
+    resultó ser de consultas), done (respuesta final limpia + chips + meta),
+    error. El endpoint clásico queda como fallback para clientes sin stream."""
+    err = _require_login()
+    if err:
+        return err
+
+    from helpers import contar_uso
+    contar_uso("chat")
+
+    import os
+    data = request.get_json(silent=True) or {}
+    message = (data.get("message") or "").strip()
+    image = (data.get("image") or "").strip()
+    if not message and not image:
+        return jsonify({"ok": False, "error": "Mensaje vacío"}), 400
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return jsonify({"ok": False, "error": "El copiloto no está disponible."}), 503
+
+    msgs = []
+    for m in (data.get("history") or [])[-8:]:
+        role = m.get("role")
+        content = (m.get("content") or "").strip()
+        if role in ("user", "assistant") and content:
+            msgs.append({"role": role, "content": content})
+
+    texto_usuario = message or "¿Qué ves en esta foto?"
+    if image:
+        contar_uso("foto")
+        resumen, bloque_img = _analizar_imagen_para_chat(image, message)
+        if bloque_img:
+            pref = (f"[La persona adjuntó una FOTO de comida. Análisis automático "
+                    f"con macros anclados en la base nutricional: {resumen}]\n\n"
+                    if resumen else "[La persona adjuntó una FOTO de comida.]\n\n")
+            msgs.append({"role": "user",
+                         "content": [bloque_img,
+                                     {"type": "text", "text": pref + texto_usuario}]})
+        else:
+            msgs.append({"role": "user", "content": texto_usuario})
+    else:
+        msgs.append({"role": "user", "content": texto_usuario})
+
+    import anthropic
+    from utils.copilot_tools import COPILOT_TOOLS
+    from flask import Response, stream_with_context
+    client = anthropic.Anthropic(api_key=api_key)
+    system = _system_chat()
+    model = os.environ.get("COPILOT_CHAT_MODEL", "claude-sonnet-5")
+
+    @stream_with_context
+    def gen():
+        used = []
+        resp = None
+        try:
+            yield _sse({"type": "status", "fase": "pensando"})
+            kw = {}
+            for ronda in range(5):
+                hubo_tool = False
+                with client.messages.stream(model=model, max_tokens=4000,
+                                            system=system, tools=COPILOT_TOOLS,
+                                            messages=_marca_cache(msgs), **kw) as st:
+                    for ev in st:
+                        t = getattr(ev, "type", "")
+                        if (t == "content_block_start"
+                                and getattr(getattr(ev, "content_block", None), "type", "") == "tool_use"):
+                            if not hubo_tool:
+                                hubo_tool = True
+                                yield _sse({"type": "rollback"})
+                                yield _sse({"type": "status", "fase": "consultando"})
+                        elif (t == "content_block_delta" and not hubo_tool
+                                and getattr(getattr(ev, "delta", None), "type", "") == "text_delta"):
+                            yield _sse({"type": "delta", "t": ev.delta.text})
+                    resp = st.get_final_message()
+                if resp.stop_reason != "tool_use":
+                    break
+                _ejecutar_tools(resp, msgs, used)
+                # 4 rondas de consultas bastan; la 5ª escribe sí o sí
+                if ronda == 3:
+                    kw = {"tool_choice": {"type": "none"}}
+
+            reply = _texto_resp(resp) if resp is not None else ""
+
+            # red de max_tokens (como el clásico): nunca cortar a mitad de frase
+            if resp is not None and resp.stop_reason == "max_tokens" and reply:
+                try:
+                    msgs.append({"role": "assistant", "content": reply})
+                    msgs.append({"role": "user",
+                                 "content": "Tu respuesta quedó cortada. Continúa "
+                                            "EXACTAMENTE donde quedaste, sin repetir."})
+                    with client.messages.stream(model=model, max_tokens=4000,
+                                                system=system, tools=COPILOT_TOOLS,
+                                                tool_choice={"type": "none"},
+                                                messages=_marca_cache(msgs)) as st2:
+                        for ev in st2:
+                            if (getattr(ev, "type", "") == "content_block_delta"
+                                    and getattr(getattr(ev, "delta", None), "type", "") == "text_delta"):
+                                yield _sse({"type": "delta", "t": ev.delta.text})
+                        extra = _texto_resp(st2.get_final_message())
+                    if extra:
+                        reply = (reply.rstrip() + " " + extra).strip()
+                except Exception:
+                    pass
+            if not reply:
+                # reintento corto (sin stream): jamás entregar "…"
+                r2 = client.messages.create(
+                    model=model, max_tokens=3000, system=system,
+                    tools=COPILOT_TOOLS, tool_choice={"type": "none"},
+                    messages=_marca_cache(msgs + [{"role": "user",
+                        "content": "Responde ahora en 2-3 frases, con lo más importante."}]))
+                reply = _texto_resp(r2)
+                yield _sse({"type": "rollback"})
+            if not reply:
+                reply = ("Me quedé sin respuesta ahí — prueba preguntármelo de "
+                         "nuevo, quizás en dos preguntas más cortas.")
+
+            reply, followups = _separar_followups(reply)
+            yield _sse({"type": "done", "reply": reply, "followups": followups,
+                        "used_data": used})
+        except Exception:
+            try:
+                from models import db
+                db.session.rollback()
+            except Exception:
+                pass
+            yield _sse({"type": "error"})
+
+    return Response(gen(), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache",
+                             "X-Accel-Buffering": "no",
+                             "Connection": "keep-alive"})
+
+
+def _sse(d):
+    import json as _json
+    return f"data: {_json.dumps(d, ensure_ascii=False)}\n\n"
+
+
+def _marca_cache(mensajes):
+    """Marca el último bloque del último mensaje con cache_control (prefijo
+    entero cacheado en las rondas de tools). Igual que el endpoint clásico."""
+    if not mensajes:
+        return mensajes
+    out = list(mensajes)
+    ult = dict(out[-1])
+    c = ult.get("content")
+    if isinstance(c, str):
+        ult["content"] = [{"type": "text", "text": c,
+                           "cache_control": {"type": "ephemeral"}}]
+    elif isinstance(c, list) and c and isinstance(c[-1], dict):
+        nuevos = list(c)
+        nuevos[-1] = {**nuevos[-1], "cache_control": {"type": "ephemeral"}}
+        ult["content"] = nuevos
+    else:
+        return mensajes
+    out[-1] = ult
+    return out
+
+
+def _texto_resp(resp):
+    return "".join(b.text for b in resp.content
+                   if getattr(b, "type", None) == "text").strip()
+
+
+def _ejecutar_tools(resp, msgs, used):
+    import json as _json
+    from utils.copilot_tools import run_tool
+    msgs.append({"role": "assistant", "content": resp.content})
+    results = []
+    for b in resp.content:
+        if getattr(b, "type", None) == "tool_use":
+            used.append(b.name)
+            out = run_tool(b.name, dict(b.input or {}))
+            results.append({"type": "tool_result", "tool_use_id": b.id,
+                            "content": _json.dumps(out, ensure_ascii=False)})
+    msgs.append({"role": "user", "content": results})
+
+
+def _system_chat():
+    """Los dos bloques de system del chat (instrucciones cacheadas + contexto)."""
+    _base, _, _ = _CHAT_SYSTEM.partition("CONTEXTO ACTUAL DE LA PERSONA:")
+    return [
+        {"type": "text",
+         "text": _base.format(IDIOMA=_copilot_lang(), UNIDAD=_glucose_unit_label(),
+                              PERFIL=_perfil_block()),
+         "cache_control": {"type": "ephemeral"}},
+        {"type": "text",
+         "text": "CONTEXTO ACTUAL DE LA PERSONA:\n" + _chat_context()},
+    ]
+
+
+_MAX_IMG_DATAURL = 7_500_000   # ≈5MB binarios en base64
+
+
+def _analizar_imagen_para_chat(image, hint):
+    """Foto adjunta en el chat → (resumen JSON con macros anclados, bloque de
+    imagen para que el modelo la VEA). Si el análisis falla, la imagen igual
+    viaja — el modelo puede comentarla a ojo."""
+    import os, re as _re, json as _json
+    if len(image) > _MAX_IMG_DATAURL:
+        return None, None
+    m = _re.match(r"data:(image/[a-zA-Z0-9.+-]+);base64,(.*)$", image, _re.DOTALL)
+    if not m:
+        return None, None
+    bloque = {"type": "image", "source": {"type": "base64",
+              "media_type": m.group(1), "data": m.group(2)}}
+    try:
+        import anthropic
+        from utils.photo_estimate import (DEFAULT_VISION_MODEL, build_prompt,
+                                          parse_response, ground_components,
+                                          totals, meal_score)
+        client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        r = client.messages.create(
+            model=os.environ.get("COPILOT_VISION_MODEL", DEFAULT_VISION_MODEL),
+            max_tokens=2500,
+            messages=[{"role": "user", "content": [
+                bloque, {"type": "text", "text": build_prompt(hint or "")}]}])
+        txt = "".join(b.text for b in r.content if getattr(b, "type", None) == "text")
+        parsed = parse_response(txt) or {}
+        comps = ground_components(parsed.get("components") or [])
+        tot = totals(comps)
+        score, reason = meal_score(parsed, tot)
+        nombre = (parsed.get("name") or "").strip()[:80]
+        # OJO: sin remember_estimate aquí — esa métrica aparea foto-de-Registro
+        # con la comida guardada; una foto conversacional la contaminaría
+        resumen = _json.dumps({
+            "nombre": nombre, "carbs_totales": tot["carbs"], "fibra": tot["fiber"],
+            "carbs_netos": max(0, tot["carbs"] - tot["fiber"]),
+            "proteina": tot["protein"], "grasa": tot["fat"],
+            "score": score, "score_razon": reason,
+            "componentes": [{"n": c["name"], "g": c["grams"], "ch": c["carbs"]}
+                            for c in comps][:8]}, ensure_ascii=False)
+        return resumen, bloque
+    except Exception:
+        return None, bloque
+
+
 @bp.route("/api/copilot/chat", methods=["POST"], endpoint="copilot_chat")
 def copilot_chat():
     err = _require_login()
@@ -1851,7 +2098,8 @@ def copilot_chat():
     import os
     data = request.get_json(silent=True) or {}
     message = (data.get("message") or "").strip()
-    if not message:
+    image = (data.get("image") or "").strip()
+    if not message and not image:
         return jsonify({"ok": False, "error": "Mensaje vacío"}), 400
 
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -1869,7 +2117,23 @@ def copilot_chat():
         content = (m.get("content") or "").strip()
         if role in ("user", "assistant") and content:
             msgs.append({"role": role, "content": content})
-    msgs.append({"role": "user", "content": message})
+
+    # foto adjunta: mismo tratamiento que el stream (el fallback no la pierde)
+    texto_usuario = message or "¿Qué ves en esta foto?"
+    if image:
+        from helpers import contar_uso as _cu
+        _cu("foto")
+        resumen_img, bloque_img = _analizar_imagen_para_chat(image, message)
+        if bloque_img:
+            pref = (f"[La persona adjuntó una FOTO de comida. Análisis automático "
+                    f"con macros anclados en la base nutricional: {resumen_img}]\n\n"
+                    if resumen_img else "[La persona adjuntó una FOTO de comida.]\n\n")
+            msgs.append({"role": "user",
+                         "content": [bloque_img, {"type": "text", "text": pref + texto_usuario}]})
+        else:
+            msgs.append({"role": "user", "content": texto_usuario})
+    else:
+        msgs.append({"role": "user", "content": texto_usuario})
 
     try:
         import json as _json

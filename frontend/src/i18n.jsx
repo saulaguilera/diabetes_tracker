@@ -130,6 +130,7 @@ const DICT = {
     'brief.yourMeals': 'Tus comidas de hoy', 'brief.disclaimer': 'Orbit solo describe y acompaña tus datos. No reemplaza a tu equipo médico.',
     // Copiloto
     'cop.greeting': 'Hola 👋 Soy tu copiloto. Puedo explicarte tus datos y acompañarte. Para dosis o decisiones médicas, siempre tu equipo de salud. ¿Qué quieres saber?',
+    'cop.photoReady': 'Foto lista — escribe algo o envíala directo',
     'cop.foundIntro': 'Encontré algo en tus datos:', 'cop.f1': 'Explícame más', 'cop.f2': '¿Qué puedo hacer con esto?',
     'cop.greet1': 'Hola{name} 💙 Estoy aquí para ayudarte a entender tu diabetes: tus números, tus comidas, tus días. Sin juicios y a tu ritmo. ¿Qué miramos juntos?',
     'cop.greet2': 'Hola{name} ✨ Tu glucosa cuenta una historia, y aquí la leemos juntos con calma. ¿Qué quieres entender hoy?',
@@ -293,6 +294,7 @@ const DICT = {
     'brief.empty': 'Log something today and it shows up here.',
     'brief.yourMeals': "Today's meals", 'brief.disclaimer': 'Orbit only describes and supports your data. It does not replace your care team.',
     'cop.greeting': "Hi 👋 I'm your copilot. I can explain your data and support you. For doses or medical decisions, always your care team. What would you like to know?",
+    'cop.photoReady': 'Photo ready — add a note or send it as is',
     'cop.foundIntro': 'I found something in your data:', 'cop.f1': 'Tell me more', 'cop.f2': 'What can I do about it?',
     'cop.greet1': "Hi{name} 💙 I'm here to help you make sense of your diabetes: your numbers, your meals, your days. No judgment, at your pace. What shall we look at together?",
     'cop.greet2': "Hi{name} ✨ Your glucose tells a story — let's read it together, calmly. What would you like to understand today?",

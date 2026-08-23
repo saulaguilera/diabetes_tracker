@@ -26,6 +26,17 @@ function checarVersion(res) {
   } catch {}
 }
 
+// streaming SSE del chat: devuelve el Response crudo (el caller lee el body)
+export async function apiStream(path, body) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', 'X-Orbit-TZ': TZ },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok || !res.body) throw new Error(`stream ${res.status}`)
+  return res
+}
+
 async function request(path, opts = {}) {
   const res = await fetch(`${BASE}${path}`, {
     credentials: 'same-origin',
