@@ -205,18 +205,28 @@ def get_notes() -> list[dict]:
         return []
 
 
-def add_note(text: str) -> bool:
-    """Guarda una nota corta (dedup, cap). Devuelve True si la guardó."""
+def sin_tildes(s: str) -> str:
+    """Normaliza para comparar: minúsculas y sin acentos («exámenes»≈«examenes»)."""
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", (s or "").lower())
+                   if unicodedata.category(c) != "Mn")
+
+
+def add_note(text: str) -> dict:
+    """Guarda una nota corta (dedup, cap). Si el cap expulsó a la más antigua,
+    la devuelve en «expulsada» para que el copiloto pueda AVISAR — en una app
+    de salud una nota clínica no puede desaparecer en silencio."""
     from helpers import _set_setting
     text = " ".join((text or "").split())[:240]
     if len(text) < 4:
-        return False
+        return {"ok": False}
     notes = get_notes()
-    if any(n["text"].lower() == text.lower() for n in notes):
-        return True   # ya está — idempotente
+    if any(sin_tildes(n["text"]) == sin_tildes(text) for n in notes):
+        return {"ok": True, "expulsada": None}   # ya está — idempotente
     notes.append({"ts": datetime.now().strftime("%Y-%m-%d"), "text": text})
+    expulsada = notes[0]["text"] if len(notes) > _MAX_NOTES else None
     _set_setting(_NOTES_KEY, json.dumps(notes[-_MAX_NOTES:], ensure_ascii=False))
-    return True
+    return {"ok": True, "expulsada": expulsada}
 
 
 def extract_remember_request(message: str) -> str | None:
@@ -261,6 +271,8 @@ def memory_context_lines() -> list[str]:
 
     notes = get_notes()
     if notes:
-        L.append("NOTAS QUE EL USUARIO PIDIÓ RECORDAR: "
-                 + " | ".join(f"[{n['ts']}] {n['text']}" for n in notes[-8:]))
+        # TODAS las notas (cap 20, cortas): el prompt promete «tal cual» y el
+        # usuario debe poder verlas y borrarlas todas — nada de retención oculta
+        L.append("NOTAS EN LA MEMORIA (todas): "
+                 + " | ".join(f"[{n['ts']}] {n['text']}" for n in notes))
     return L

@@ -120,3 +120,72 @@ class TestSaludDeDatos(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMemoriaEntreConversaciones(unittest.TestCase):
+    """recordar/olvidar: la memoria de largo plazo es del usuario."""
+
+    def setUp(self):
+        self.app = _make_app()
+        self.ctx = self.app.app_context()
+        self.ctx.push()
+        db.create_all()
+        db.session.add(User(username="ana", password_hash="x", display_name="ana"))
+        db.session.commit()
+        self.tok = set_user_context(1)
+
+    def tearDown(self):
+        reset_user_context(self.tok)
+        db.session.remove()
+        self.ctx.pop()
+
+    def test_recordar_guarda_y_aparece_en_el_contexto(self):
+        r = run_tool("recordar", {"nota": "Cambió su basal a 22U por indicación médica"})
+        self.assertTrue(r.get("ok"), r)
+        from utils.copilot_memory import get_notes, memory_context_lines
+        self.assertTrue(any("22U" in n["text"] for n in get_notes()))
+        self.assertTrue(any("22U" in l for l in memory_context_lines()))
+
+    def test_olvidar_borra_y_dice_QUE_borro(self):
+        run_tool("recordar", {"nota": "Está estresado por exámenes finales"})
+        run_tool("recordar", {"nota": "Cambió su basal a 22U"})
+        # sin tildes también matchea («examenes» → «exámenes»)
+        r = run_tool("olvidar", {"texto": "examenes"})
+        self.assertEqual(len(r.get("borradas")), 1)
+        self.assertIn("exámenes", r["borradas"][0])   # confirma el texto exacto
+        from utils.copilot_memory import get_notes
+        textos = [n["text"] for n in get_notes()]
+        self.assertTrue(any("22U" in t for t in textos))
+
+    def test_olvidar_todo_vacia_la_memoria(self):
+        run_tool("recordar", {"nota": "Nota uno importante"})
+        run_tool("recordar", {"nota": "Nota dos importante"})
+        r = run_tool("olvidar", {"texto": "*"})
+        self.assertTrue(r.get("memoria_vacia"))
+        self.assertEqual(len(r.get("borradas")), 2)
+        from utils.copilot_memory import get_notes
+        self.assertEqual(get_notes(), [])
+
+    def test_cap_lleno_reporta_la_expulsada(self):
+        for i in range(20):
+            run_tool("recordar", {"nota": f"Nota de relleno número {i:02d}"})
+        r = run_tool("recordar", {"nota": "La nota veintiuno que desplaza"})
+        self.assertTrue(r.get("ok"))
+        self.assertIn("00", r.get("expulsada_por_espacio", ""))   # salió la más vieja
+        self.assertIn("aviso", r)                                  # y el modelo debe avisar
+
+    def test_contexto_trae_TODAS_las_notas(self):
+        for i in range(12):
+            run_tool("recordar", {"nota": f"Nota persistente número {i:02d}"})
+        from utils.copilot_memory import memory_context_lines
+        linea = next(l for l in memory_context_lines() if "NOTAS" in l)
+        for i in range(12):   # las 12, no solo las últimas 8
+            self.assertIn(f"{i:02d}", linea)
+
+    def test_nota_vacia_no_se_guarda(self):
+        r = run_tool("recordar", {"nota": "  "})
+        self.assertIn("error", r)
+
+    def test_olvidar_sin_coincidencias_no_explota(self):
+        r = run_tool("olvidar", {"texto": "unicornios"})
+        self.assertEqual(r.get("borradas"), [])

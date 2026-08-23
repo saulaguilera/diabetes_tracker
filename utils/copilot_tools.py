@@ -556,11 +556,77 @@ def registrar_ejercicio(actividad, duracion_min, intensidad="media", hace_minuto
         "hora": ts.strftime("%H:%M")}}
 
 
+def recordar(nota) -> dict:
+    from utils.copilot_memory import add_note
+    nota = " ".join(str(nota or "").split())
+    if len(nota) < 4:
+        return {"error": "nota vacía — pregunta o reformula antes de guardar"}
+    r = add_note(nota)
+    if not r.get("ok"):
+        return {"error": "no se pudo guardar la nota"}
+    out = {"ok": True, "guardada": nota[:240]}
+    if r.get("expulsada"):
+        # el cap sacó la nota más antigua: AVISAR, jamás perder en silencio
+        out["expulsada_por_espacio"] = r["expulsada"]
+        out["aviso"] = ("La memoria estaba llena: salió la nota más antigua. "
+                        "Cuéntaselo a la persona por si aún le importa.")
+    return out
+
+
+def olvidar(texto) -> dict:
+    import json as _json
+    from helpers import _set_setting
+    from utils.copilot_memory import get_notes, sin_tildes, _NOTES_KEY
+    t = " ".join(str(texto or "").split())
+    notes = get_notes()
+    # borrado TOTAL: «olvida todo lo que sabes de mí» debe poder cumplirse
+    if t in ("*", "todo", "todas", "toda la memoria", "todo lo que sabes de mi",
+             "todo lo que sabes de mí"):
+        _set_setting(_NOTES_KEY, "[]")
+        return {"ok": True, "borradas": [n.get("text", "") for n in notes],
+                "memoria_vacia": True}
+    if len(t) < 3:
+        return {"error": "texto muy corto para buscar qué olvidar"}
+    tn = sin_tildes(t)   # «examenes» debe borrar «exámenes»
+    fuera = [n for n in notes if tn in sin_tildes(n.get("text", ""))]
+    quedan = [n for n in notes if tn not in sin_tildes(n.get("text", ""))]
+    if fuera:
+        _set_setting(_NOTES_KEY, _json.dumps(quedan, ensure_ascii=False))
+    # devolver los TEXTOS: el copiloto confirma exactamente qué se borró
+    return {"ok": True, "borradas": [n.get("text", "") for n in fuera]}
+
+
 _AVISO_REGISTRO = ("SOLO cuando la persona pide EXPLÍCITAMENTE anotar/registrar. "
                    "Si falta un dato esencial, pregunta antes de llamar. "
                    "Tras registrar, confirma exactamente lo guardado.")
 
 COPILOT_TOOLS = [
+    {
+        "name": "recordar",
+        "description": ("GUARDA en la memoria de largo plazo algo que la persona "
+                        "contó y que importará en FUTURAS conversaciones: cambios "
+                        "de tratamiento (basal nueva, sensor nuevo, indicación del "
+                        "médico), eventos de vida (exámenes, viaje largo, duelo), "
+                        "preocupaciones recurrentes o preferencias. UNA frase corta "
+                        "y factual, en tercera persona. NO guardes datos que ya "
+                        "viven en los registros (comidas/glucosa/bolos) ni "
+                        "trivialidades. Cuando guardes, dilo con naturalidad "
+                        "(«lo voy a tener presente 💙»)."),
+        "input_schema": {"type": "object", "properties": {
+            "nota": {"type": "string", "description": "La nota corta a recordar"}},
+            "required": ["nota"]},
+    },
+    {
+        "name": "olvidar",
+        "description": ("BORRA de la memoria las notas que contengan el texto "
+                        "dado (ignora tildes). Para borrar TODO usa texto='*'. "
+                        "El resultado trae los TEXTOS borrados: confírmalos a "
+                        "la persona tal cual. Úsala cuando pida olvidar o "
+                        "corregir algo."),
+        "input_schema": {"type": "object", "properties": {
+            "texto": {"type": "string", "description": "Fragmento a buscar en las notas"}},
+            "required": ["texto"]},
+    },
     {
         "name": "registrar_comida",
         "description": ("REGISTRA una comida en el historial de la persona. "
@@ -674,6 +740,8 @@ COPILOT_TOOLS = [
 ]
 
 _DISPATCH = {
+    "recordar":               lambda a: recordar(a.get("nota")),
+    "olvidar":                lambda a: olvidar(a.get("texto")),
     "registrar_comida":       lambda a: registrar_comida(
         a.get("nombre"), a.get("carbs"), a.get("protein", 0), a.get("fat", 0),
         a.get("fiber", 0), a.get("hace_minutos", 0)),

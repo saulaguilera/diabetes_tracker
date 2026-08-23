@@ -1480,6 +1480,17 @@ REGLAS DE ESTILO:
   cuéntalos en pasado ("después de entrenar te bajó ~25"), jamás como promesa
   de lo que va a pasar. Para preguntas analíticas: el NÚMERO clave + el
   porqué, en 3-5 frases; sin listas salvo que ayuden de verdad.
+- MEMORIA ENTRE CONVERSACIONES: tienes memoria de largo plazo (las NOTAS del
+  contexto). Cuando la persona cuente algo que importará en futuras charlas
+  — cambió la basal, está en semana de exámenes, el médico le indicó algo,
+  una preocupación que se repite — guárdalo con `recordar` (una frase corta)
+  y dilo con naturalidad («lo voy a tener presente 💙»). En charlas futuras,
+  ÚSALA: conecta («¿cómo te fue con la basal nueva?»). Si pide olvidar algo
+  o ya no aplica, usa `olvidar` y confirma leyendo los textos borrados que
+  devuelve. Si pide borrar TODO, llama `olvidar` con texto='*'. Si guardar
+  devolvió `expulsada_por_espacio`, avísale qué nota antigua salió. Si
+  pregunta «¿qué recuerdas de mí?», cuéntale sus notas tal cual (el contexto
+  las trae TODAS) — su memoria es SUYA.
 - CIERRA SIEMPRE con seguimientos: tu ÚLTIMA línea debe empezar exactamente
   con ">>>" seguida de 2-3 preguntas de seguimiento cortas (máximo 8 palabras
   cada una), separadas por " | ", escritas en la VOZ DE LA PERSONA — como si
@@ -1847,15 +1858,8 @@ def copilot_chat():
     if not api_key:
         return jsonify({"ok": True, "reply": "El copiloto no está disponible ahora mismo."})
 
-    # ¿pidió recordar algo? → guardar la nota ANTES de armar el contexto,
-    # así el modelo la ve ya guardada y la confirma.
-    try:
-        from utils.copilot_memory import extract_remember_request, add_note
-        note = extract_remember_request(message)
-        if note:
-            add_note(note)
-    except Exception:
-        pass
+    # (el guardado de notas es 100% de la herramienta `recordar` del modelo —
+    #  la doble vía regex+tool creaba duplicados con distinto texto)
 
     # historial (multi-turno), acotado
     history = data.get("history") or []
