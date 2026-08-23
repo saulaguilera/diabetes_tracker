@@ -50,8 +50,10 @@ def _responder(client, modelo, system, contexto, pregunta):
                  "text": "CONTEXTO ACTUAL DE LA PERSONA:\n" + contexto}],
         messages=[{"role": "user", "content": pregunta}],
     )
-    return "".join(b.text for b in r.content
-                   if getattr(b, "type", None) == "text").strip()
+    texto = "".join(b.text for b in r.content
+                    if getattr(b, "type", None) == "text").strip()
+    from blueprints.copilot_api import _separar_followups
+    return _separar_followups(texto)[0]
 
 
 _JUEZ = """Eres un evaluador estricto de un asistente para personas con diabetes tipo 1.

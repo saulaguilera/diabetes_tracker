@@ -108,13 +108,25 @@ export default function Copiloto({ theme }) {
     try {
       const r = await apiPost('/chat', { message: text, history })
       setMessages(m => [...m, { role: 'assistant', content: r.reply || '…',
-        usedData: (r.used_data || []).length > 0, justArrived: true }])
+        usedData: (r.used_data || []).length > 0, justArrived: true,
+        followups: r.followups || [] }])
     } catch (e) {
       setMessages(m => [...m, { role: 'assistant', content: t('cop.error'), justArrived: true }])
     } finally {
       setSending(false)
     }
   }
+
+  // ¿quedó un patrón esperando? → el copiloto lo cuenta él mismo al entrar
+  useEffect(() => {
+    apiPost('/chat/pending', {}).then(r => {
+      if (r && r.pending && r.pending.cuerpo) {
+        setMessages(m => [...m, { role: 'assistant', justArrived: true,
+          content: `🧠 ${t('cop.foundIntro')} ${r.pending.cuerpo}`,
+          followups: [t('cop.f1'), t('cop.f2')] }])
+      }
+    }).catch(() => {})
+  }, [])
 
   // el análisis con consultas tarda más que un saludo → avisar qué está pasando
   const [slowThinking, setSlowThinking] = useState(false)
@@ -153,18 +165,25 @@ export default function Copiloto({ theme }) {
         )}
       </div>
 
-      {/* preguntas sugeridas (al empezar) */}
-      {messages.length === 1 && !sending && (
-        <div style={{ flexShrink: 0, display: 'flex', gap: 8, overflowX: 'auto', padding: '4px 16px 2px' }}>
-          {SUGG_KEYS.map((k, i) => (
-            <button key={i} onClick={() => send(t(k))} style={{
-              flexShrink: 0, padding: '9px 14px', borderRadius: 100, cursor: 'pointer', fontFamily: SANS, fontSize: 13,
-              background: theme.surface, color: theme.inkSoft, border: `0.5px solid ${theme.border}`, whiteSpace: 'nowrap' }}>
-              {t(k)}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* chips: seguimientos de la última respuesta, o sugerencias al empezar */}
+      {!sending && (() => {
+        const last = messages[messages.length - 1]
+        const chips = (last && last.role === 'assistant' && last.followups && last.followups.length > 0)
+          ? last.followups
+          : (messages.length === 1 ? SUGG_KEYS.map(k => t(k)) : [])
+        if (!chips.length) return null
+        return (
+          <div style={{ flexShrink: 0, display: 'flex', gap: 8, overflowX: 'auto', padding: '4px 16px 2px' }}>
+            {chips.map((c, i) => (
+              <button key={i} onClick={() => send(c)} style={{
+                flexShrink: 0, padding: '9px 14px', borderRadius: 100, cursor: 'pointer', fontFamily: SANS, fontSize: 13,
+                background: theme.surface, color: theme.inkSoft, border: `0.5px solid ${theme.border}`, whiteSpace: 'nowrap' }}>
+                {c}
+              </button>
+            ))}
+          </div>
+        )
+      })()}
 
       {/* barra de entrada (sobre la nav) */}
       <div style={{ flexShrink: 0, padding: '10px 16px', display: 'flex', alignItems: 'flex-end', gap: 10,

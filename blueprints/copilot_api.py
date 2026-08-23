@@ -1038,6 +1038,13 @@ def _check_new_patterns():
     for p in nuevos:
         seen[p.get("tipo") or ""] = now.isoformat()
     _set_setting("notif_patterns_seen", _json.dumps(seen))
+    # el patrón queda ESPERANDO en el chat: al abrir el copiloto, él mismo lo
+    # cuenta y la notificación se convierte en conversación
+    try:
+        _set_setting("chat_pattern_pending", _json.dumps(
+            {"cuerpo": cuerpos[0], "at": now.isoformat()}, ensure_ascii=False))
+    except Exception:
+        pass
     db.session.commit()
 
     # push real al teléfono (si APNs está configurado y hay token registrado);
@@ -1048,11 +1055,39 @@ def _check_new_patterns():
             push_alert(titulo_notif, cuerpos[0])
         elif cuerpos:
             push_alert(titulo_notif, {
-                "es": f"Encontré {len(cuerpos)} patrones nuevos en tus datos — toca la campanita para verlos 🔔",
+                "es": f"Encontré {len(cuerpos)} patrones nuevos en tus datos — abre el copiloto y te los explico 💬",
                 "en": f"Found {len(cuerpos)} new patterns in your data — tap the bell to see them 🔔",
             }.get(lang, f"Encontré {len(cuerpos)} patrones nuevos en tus datos 🔔"))
     except Exception:
         pass   # el push nunca debe romper el escaneo
+
+
+@bp.route("/api/copilot/chat/pending", methods=["POST"],
+          endpoint="copilot_chat_pending")
+def copilot_chat_pending():
+    """El patrón que quedó esperando conversación. Se entrega UNA vez
+    (consumo al leer) y caduca a las 48h."""
+    err = _require_login()
+    if err:
+        return err
+    import json as _json
+    from helpers import _get_setting, _set_setting
+    raw = _get_setting("chat_pattern_pending")
+    if not raw:
+        return jsonify({"ok": True, "pending": None})
+    try:
+        d = _json.loads(raw)
+        _set_setting("chat_pattern_pending", "")   # consumido
+        edad_h = (ahora_usuario() - datetime.fromisoformat(d["at"])).total_seconds() / 3600
+        if edad_h > 48 or not (d.get("cuerpo") or "").strip():
+            return jsonify({"ok": True, "pending": None})
+        return jsonify({"ok": True, "pending": {"cuerpo": d["cuerpo"]}})
+    except Exception:
+        try:
+            _set_setting("chat_pattern_pending", "")
+        except Exception:
+            pass
+        return jsonify({"ok": True, "pending": None})
 
 
 @bp.route("/api/copilot/notifications", endpoint="copilot_notifications")
@@ -1445,6 +1480,12 @@ REGLAS DE ESTILO:
   cuéntalos en pasado ("después de entrenar te bajó ~25"), jamás como promesa
   de lo que va a pasar. Para preguntas analíticas: el NÚMERO clave + el
   porqué, en 3-5 frases; sin listas salvo que ayuden de verdad.
+- CIERRA SIEMPRE con seguimientos: tu ÚLTIMA línea debe empezar exactamente
+  con ">>>" seguida de 2-3 preguntas de seguimiento cortas (máximo 8 palabras
+  cada una), separadas por " | ", escritas en la VOZ DE LA PERSONA — como si
+  ella las escribiera ("¿me pasa seguido de noche?", "¿qué hago distinto?").
+  Deben nacer de TU respuesta y de sus datos, invitando a seguir explorando.
+  Nada de texto después de esa línea. (La app las muestra como botones.)
 - PREGUNTA PUNTUAL, RESPUESTA PUNTUAL: si piden un dato concreto ("¿cuál es
   mi promedio?", "¿cuánto llevo en rango?"), responde en 1-2 frases con el
   número exacto del contexto y para. Sin discurso alrededor. Y si comparas
@@ -1774,6 +1815,19 @@ def _chat_context():
     return "\n".join(L) if L else "Sin datos recientes disponibles."
 
 
+def _separar_followups(texto):
+    """Separa la línea «>>> a | b | c» del final de la respuesta.
+    Devuelve (texto_limpio, [chips]); tolerante a que el modelo la omita."""
+    if not texto or ">>>" not in texto:
+        return texto, []
+    cuerpo, _, cola = texto.rpartition(">>>")
+    chips = [c.strip() for c in cola.split("|")]
+    chips = [c for c in chips if 2 <= len(c) <= 80][:3]
+    if not cuerpo.strip():
+        return texto.replace(">>>", "").strip(), []
+    return cuerpo.strip(), chips
+
+
 @bp.route("/api/copilot/chat", methods=["POST"], endpoint="copilot_chat")
 def copilot_chat():
     err = _require_login()
@@ -1931,7 +1985,9 @@ def copilot_chat():
             reply = ("Me quedé sin respuesta ahí — prueba preguntarmelo de nuevo, "
                      "quizás en dos preguntas más cortas.")
 
-        return jsonify({"ok": True, "reply": reply,
+        reply, followups = _separar_followups(reply)
+
+        return jsonify({"ok": True, "reply": reply, "followups": followups,
                         "used_data": sorted(set(used))})
     except Exception as exc:
         return jsonify({"ok": False, "error": "No pude responder ahora. Intenta de nuevo."}), 502

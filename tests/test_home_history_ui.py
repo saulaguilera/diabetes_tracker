@@ -129,3 +129,48 @@ class TestContadoresDeUso(unittest.TestCase):
         with mock.patch("helpers._set_setting", side_effect=Exception("boom")):
             r = self.client.get("/api/copilot/home")
         self.assertEqual(r.status_code, 200)   # el conteo jamás tumba el endpoint
+
+
+class TestFollowupsYPatronPendiente(unittest.TestCase):
+    """Chips de seguimiento (línea >>>) y el patrón que espera conversación."""
+
+    def test_parser_de_followups(self):
+        from blueprints.copilot_api import _separar_followups
+        txt, chips = _separar_followups(
+            "Tu noche estuvo estable.\n>>> ¿me pasa seguido? | ¿qué hago distinto? | ¿y mis tardes?")
+        self.assertEqual(txt, "Tu noche estuvo estable.")
+        self.assertEqual(chips, ["¿me pasa seguido?", "¿qué hago distinto?", "¿y mis tardes?"])
+        # sin línea >>> → sin chips, texto intacto
+        txt2, chips2 = _separar_followups("Respuesta simple.")
+        self.assertEqual((txt2, chips2), ("Respuesta simple.", []))
+        # >>> al inicio por error del modelo → no vaciar la respuesta
+        txt3, chips3 = _separar_followups(">>> ¿a? | ¿b?")
+        self.assertTrue(txt3)
+        self.assertEqual(chips3, [])
+        # máximo 3 chips
+        _, chips4 = _separar_followups("x\n>>> a1 | b2 | c3 | d4 | e5")
+        self.assertEqual(len(chips4), 3)
+
+    def test_patron_pendiente_se_consume_una_vez(self):
+        app = _make_app()
+        with app.app_context():
+            db.create_all()
+            db.session.add(User(username="ana", password_hash="x", display_name="ana"))
+            db.session.commit()
+            client = app.test_client()
+            with client.session_transaction() as s:
+                s["logged_in"] = True; s["user_id"] = 1; s["username"] = "ana"
+            from helpers import set_user_context, reset_user_context, _set_setting
+            import json as _j
+            tok = set_user_context(1)
+            try:
+                _set_setting("chat_pattern_pending", _j.dumps(
+                    {"cuerpo": "El 87% de tus hipos empiezan de madrugada.",
+                     "at": datetime.now().isoformat()}))
+            finally:
+                reset_user_context(tok)
+            r1 = client.post("/api/copilot/chat/pending").get_json()
+            self.assertIn("87%", (r1.get("pending") or {}).get("cuerpo", ""))
+            r2 = client.post("/api/copilot/chat/pending").get_json()
+            self.assertIsNone(r2.get("pending"))   # consumido: solo una vez
+            db.session.remove()
