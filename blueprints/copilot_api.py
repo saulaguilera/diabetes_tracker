@@ -1861,7 +1861,10 @@ def copilot_stream_check():
         import time as _t
         yield ":" + (" " * 2048) + "\n\n"      # rompe buffers de proxies
         yield _sse({"type": "ping", "n": 1})
-        _t.sleep(0.25)
+        # la conexión queda ABIERTA 2.5s: un proxy que bufferea solo entrega
+        # al cierre → el ping1 le llega tarde al cliente y eso lo delata.
+        # (con 0.25s el proxy soltaba todo al instante y el sondeo mentía)
+        _t.sleep(2.5)
         yield _sse({"type": "ping", "n": 2})
 
     return Response(gen(), mimetype="text/event-stream",

@@ -34,6 +34,22 @@ const SUGG_KEYS = ['cop.s1', 'cop.s2', 'cop.s3', 'cop.s4', 'cop.s5']
 // La conversación se guarda en localStorage y dura 24h: sobrevive a cambiar de
 // pestaña, y al día siguiente arranca una nueva.
 const CHAT_KEY = 'orbit_chat_v1'
+
+// La respuesta puede llegar cuando el usuario ya se fue a otra pestaña (el
+// componente se DESMONTA al cambiar): escribirla directo a localStorage y
+// avisar — si el chat sigue montado se refresca; si no, lo verá al volver.
+function persistirRespuesta(finalMsg, startedAt) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CHAT_KEY) || 'null')
+    const base = (saved && Array.isArray(saved.messages)) ? saved.messages : []
+    const limpios = base.filter(m => !m.streaming)
+    localStorage.setItem(CHAT_KEY, JSON.stringify({
+      startedAt: (saved && saved.startedAt) || startedAt || Date.now(),
+      messages: [...limpios, finalMsg],
+    }))
+    window.dispatchEvent(new Event('orbit-chat-update'))
+  } catch {}
+}
 const DAY_MS = 24 * 60 * 60 * 1000
 
 function loadChat() {
@@ -129,7 +145,9 @@ export default function Copiloto({ theme }) {
     const img = foto
     if ((!text && !img) || sending) return
     const history = messages.map(m => ({ role: m.role, content: m.content }))
-    setMessages(m => [...m, { role: 'user', content: text || '📷', img }])
+    const userMsg = { role: 'user', content: text || '📷', img }
+    persistirRespuesta({ role: 'user', content: text || '📷' }, startedAtRef.current)
+    setMessages(m => [...m, userMsg])
     setInput(''); setFoto(null); setSending(true)
     const body = { message: text, history, ...(img ? { image: img } : {}) }
 
@@ -141,24 +159,38 @@ export default function Copiloto({ theme }) {
     const sid = Date.now() + Math.random()          // identidad de la burbuja
     let huboEventos = false
     const quitaBurbuja = (m) => m.filter(x => x.sid !== sid)
-    // esta red no deja fluir streams → directo al clásico (jamás colgarse)
-    if (sseOkRef.current === false) {
+    // sin veredicto del sondeo aún, o red que bufferea → clásico (jamás colgarse)
+    if (sseOkRef.current !== true) {
       try {
         const r = await apiPost('/chat', body)
-        setMessages(m => [...m, { role: 'assistant', content: r.reply || '…',
+        const final = { role: 'assistant', content: r.reply || '…',
           usedData: (r.used_data || []).length > 0, justArrived: true,
-          followups: r.followups || [] }])
+          followups: r.followups || [] }
+        persistirRespuesta(final, startedAtRef.current)
+        setMessages(m => [...m, final])
       } catch (e) {
-        setMessages(m => [...m, { role: 'assistant', content: t('cop.error'), justArrived: true }])
+        const final = { role: 'assistant', content: t('cop.error'), justArrived: true }
+        persistirRespuesta(final, startedAtRef.current)
+        setMessages(m => [...m, final])
       } finally { setSending(false) }
       return
     }
     const ctrl = new AbortController()
+    const tEnvio = Date.now()
     let ultimoEvento = Date.now()
-    // sin señales de vida por 60s → abortar y avisar (nada de spinner eterno)
+    // el status sale del server al instante: 15s sin NINGÚN evento = la red
+    // retiene el stream → abortar, marcar la sesión como no-stream y avisar.
+    // Con eventos ya fluyendo, 60s de silencio → abortar (nada de spinner eterno)
     const vigilante = setInterval(() => {
-      if (Date.now() - ultimoEvento > 60000) { try { ctrl.abort() } catch {} }
-    }, 5000)
+      const limite = huboEventos ? 60000 : 15000
+      if (Date.now() - ultimoEvento > limite) {
+        if (!huboEventos) {
+          sseOkRef.current = false
+          try { sessionStorage.setItem('orbit_sse', 'no') } catch {}
+        }
+        try { ctrl.abort() } catch {}
+      }
+    }, 3000)
     try {
       const res = await apiStream('/chat/stream', body, ctrl.signal)
       const reader = res.body.getReader()
@@ -202,6 +234,7 @@ export default function Copiloto({ theme }) {
             const final = { role: 'assistant', content: ev.reply || '…',
               usedData: (ev.used_data || []).length > 0,
               followups: ev.followups || [] }
+            persistirRespuesta(final, startedAtRef.current)
             setMessages(m => started
               ? m.map(x => x.sid === sid ? final : x)
               : [...m, final])
@@ -215,9 +248,14 @@ export default function Copiloto({ theme }) {
     } catch (e) {
       clearInterval(vigilante)
       setMessages(quitaBurbuja)
-      if (huboEventos) {
-        // el servidor ya pudo actuar: no reintentar solo (evita duplicados)
-        setMessages(m => [...m, { role: 'assistant', content: t('cop.error'), justArrived: true }])
+      // auto-reenvío SOLO si falló al toque y sin eventos (conexión muerta):
+      // pasados unos segundos, el servidor pudo haber procesado (incluso
+      // registrado) aunque nada nos llegara — reenviar duplicaría.
+      const falloInmediato = !huboEventos && (Date.now() - tEnvio < 8000)
+      if (!falloInmediato) {
+        const final = { role: 'assistant', content: t('cop.error'), justArrived: true }
+        persistirRespuesta(final, startedAtRef.current)
+        setMessages(m => [...m, final])
         setSending(false)
         return
       }
@@ -226,15 +264,34 @@ export default function Copiloto({ theme }) {
     // fallback: el stream nunca arrancó (red/proxy sin SSE) → endpoint clásico
     try {
       const r = await apiPost('/chat', body)
-      setMessages(m => [...m, { role: 'assistant', content: r.reply || '…',
+      const final = { role: 'assistant', content: r.reply || '…',
         usedData: (r.used_data || []).length > 0, justArrived: true,
-        followups: r.followups || [] }])
+        followups: r.followups || [] }
+      persistirRespuesta(final, startedAtRef.current)
+      setMessages(m => [...m, final])
     } catch (e) {
-      setMessages(m => [...m, { role: 'assistant', content: t('cop.error'), justArrived: true }])
+      const final = { role: 'assistant', content: t('cop.error'), justArrived: true }
+      persistirRespuesta(final, startedAtRef.current)
+      setMessages(m => [...m, final])
     } finally {
       setSending(false)
     }
   }
+
+  // al volver a la pestaña: recoger respuestas que llegaron mientras no estaba
+  useEffect(() => {
+    const recoger = () => {
+      if (sending) return
+      const saved = loadChat()
+      if (saved && saved.messages.length > messages.length) {
+        startedAtRef.current = saved.startedAt
+        setMessages(saved.messages.map((m, i) =>
+          i === saved.messages.length - 1 ? { ...m, justArrived: true } : m))
+      }
+    }
+    window.addEventListener('orbit-chat-update', recoger)
+    return () => window.removeEventListener('orbit-chat-update', recoger)
+  }, [messages, sending])
 
   // sondeo de streaming (una vez por sesión): si esta red bufferea SSE
   // (proxies de hotel/corporativos), el chat usa el endpoint clásico —
@@ -248,21 +305,23 @@ export default function Copiloto({ theme }) {
     ;(async () => {
       try {
         const ctrl = new AbortController()
-        const timer = setTimeout(() => ctrl.abort(), 4000)
+        const timer = setTimeout(() => ctrl.abort(), 6000)
+        const t0 = Date.now()
         const res = await apiStream('/stream-check', {}, ctrl.signal)
         const reader = res.body.getReader()
-        const t0 = Date.now()
         const dec = new TextDecoder()
-        let buf = ''
-        while (Date.now() - t0 < 3500) {
+        let buf = '', t1 = null
+        while (Date.now() - t0 < 5500) {
           const { done, value } = await reader.read()
           if (done) break
           buf += dec.decode(value, { stream: true })
-          if (buf.includes('"n": 1')) break     // el primer ping fluyó a tiempo
+          if (buf.includes('"n": 1')) { t1 = Date.now() - t0; break }
         }
         clearTimeout(timer)
         try { ctrl.abort() } catch {}
-        sseOkRef.current = buf.includes('"n": 1')
+        // el server retiene la conexión 2.5s tras el ping1: si ping1 llegó
+        // ANTES de eso, la red streamea; si llegó al cierre, es buffer
+        sseOkRef.current = t1 !== null && t1 < 2000
       } catch { sseOkRef.current = false }
       try { sessionStorage.setItem('orbit_sse', sseOkRef.current ? 'ok' : 'no') } catch {}
     })()
