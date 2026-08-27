@@ -38,17 +38,28 @@ const CHAT_KEY = 'orbit_chat_v1'
 // La respuesta puede llegar cuando el usuario ya se fue a otra pestaña (el
 // componente se DESMONTA al cambiar): escribirla directo a localStorage y
 // avisar — si el chat sigue montado se refresca; si no, lo verá al volver.
-function persistirRespuesta(finalMsg, startedAt) {
+function persistirRespuesta(finalMsg, startedAt, avisar = true) {
   try {
     const saved = JSON.parse(localStorage.getItem(CHAT_KEY) || 'null')
     const base = (saved && Array.isArray(saved.messages)) ? saved.messages : []
     const limpios = base.filter(m => !m.streaming)
+    // idempotente: si el último guardado ya es este mismo mensaje, no duplicar
+    const ult = limpios[limpios.length - 1]
+    if (ult && ult.role === finalMsg.role && ult.content === finalMsg.content) return
     localStorage.setItem(CHAT_KEY, JSON.stringify({
       startedAt: (saved && saved.startedAt) || startedAt || Date.now(),
       messages: [...limpios, finalMsg],
     }))
-    window.dispatchEvent(new Event('orbit-chat-update'))
+    // el aviso es SOLO para respuestas: avisar al guardar el mensaje del
+    // usuario disparaba la recogida a mitad del envío y duplicaba burbujas
+    if (avisar) window.dispatchEvent(new Event('orbit-chat-update'))
   } catch {}
+}
+
+// chats viejos pueden traer duplicados de la carrera corregida: sanear
+function dedupeConsecutivos(msgs) {
+  return msgs.filter((m, i) => !(i > 0 && msgs[i - 1].role === m.role
+    && msgs[i - 1].content === m.content))
 }
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -57,7 +68,7 @@ function loadChat() {
     const saved = JSON.parse(localStorage.getItem(CHAT_KEY) || 'null')
     if (saved && Array.isArray(saved.messages) && saved.messages.length &&
         Date.now() - saved.startedAt < DAY_MS) {
-      return saved
+      return { ...saved, messages: dedupeConsecutivos(saved.messages) }
     }
   } catch {}
   return null
@@ -146,7 +157,7 @@ export default function Copiloto({ theme }) {
     if ((!text && !img) || sending) return
     const history = messages.map(m => ({ role: m.role, content: m.content }))
     const userMsg = { role: 'user', content: text || '📷', img }
-    persistirRespuesta({ role: 'user', content: text || '📷' }, startedAtRef.current)
+    persistirRespuesta({ role: 'user', content: text || '📷' }, startedAtRef.current, false)
     setMessages(m => [...m, userMsg])
     setInput(''); setFoto(null); setSending(true)
     const body = { message: text, history, ...(img ? { image: img } : {}) }
@@ -283,7 +294,12 @@ export default function Copiloto({ theme }) {
     const recoger = () => {
       if (sending) return
       const saved = loadChat()
-      if (saved && saved.messages.length > messages.length) {
+      if (!saved || !saved.messages.length) return
+      const ultG = saved.messages[saved.messages.length - 1]
+      const ultE = messages[messages.length - 1]
+      const distinto = !ultE || ultG.role !== ultE.role || ultG.content !== ultE.content
+      if (saved.messages.length > messages.length ||
+          (saved.messages.length === messages.length && distinto)) {
         startedAtRef.current = saved.startedAt
         setMessages(saved.messages.map((m, i) =>
           i === saved.messages.length - 1 ? { ...m, justArrived: true } : m))
