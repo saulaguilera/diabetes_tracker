@@ -141,8 +141,26 @@ export default function Copiloto({ theme }) {
     const sid = Date.now() + Math.random()          // identidad de la burbuja
     let huboEventos = false
     const quitaBurbuja = (m) => m.filter(x => x.sid !== sid)
+    // esta red no deja fluir streams → directo al clásico (jamás colgarse)
+    if (sseOkRef.current === false) {
+      try {
+        const r = await apiPost('/chat', body)
+        setMessages(m => [...m, { role: 'assistant', content: r.reply || '…',
+          usedData: (r.used_data || []).length > 0, justArrived: true,
+          followups: r.followups || [] }])
+      } catch (e) {
+        setMessages(m => [...m, { role: 'assistant', content: t('cop.error'), justArrived: true }])
+      } finally { setSending(false) }
+      return
+    }
+    const ctrl = new AbortController()
+    let ultimoEvento = Date.now()
+    // sin señales de vida por 60s → abortar y avisar (nada de spinner eterno)
+    const vigilante = setInterval(() => {
+      if (Date.now() - ultimoEvento > 60000) { try { ctrl.abort() } catch {} }
+    }, 5000)
     try {
-      const res = await apiStream('/chat/stream', body)
+      const res = await apiStream('/chat/stream', body, ctrl.signal)
       const reader = res.body.getReader()
       const dec = new TextDecoder()
       let buf = '', acc = '', started = false, terminado = false
@@ -169,6 +187,8 @@ export default function Copiloto({ theme }) {
           if (!l.startsWith('data: ')) continue
           const ev = JSON.parse(l.slice(6))
           huboEventos = true
+          ultimoEvento = Date.now()
+          if (ev.type === 'ping') continue
           if (ev.type === 'delta') { acc += ev.t; pinta(acc) }
           else if (ev.type === 'rollback') {
             // era una ronda de consultas: quitar la burbuja parcial, no dejarla vacía
@@ -189,9 +209,11 @@ export default function Copiloto({ theme }) {
         }
       }
       if (!terminado) throw new Error('stream incompleto')
+      clearInterval(vigilante)
       setSending(false)
       return
     } catch (e) {
+      clearInterval(vigilante)
       setMessages(quitaBurbuja)
       if (huboEventos) {
         // el servidor ya pudo actuar: no reintentar solo (evita duplicados)
@@ -213,6 +235,38 @@ export default function Copiloto({ theme }) {
       setSending(false)
     }
   }
+
+  // sondeo de streaming (una vez por sesión): si esta red bufferea SSE
+  // (proxies de hotel/corporativos), el chat usa el endpoint clásico —
+  // más lento de ver, pero jamás se cuelga ni duplica registros
+  const sseOkRef = useRef(null)
+  useEffect(() => {
+    try {
+      const cached = sessionStorage.getItem('orbit_sse')
+      if (cached) { sseOkRef.current = cached === 'ok'; return }
+    } catch {}
+    ;(async () => {
+      try {
+        const ctrl = new AbortController()
+        const timer = setTimeout(() => ctrl.abort(), 4000)
+        const res = await apiStream('/stream-check', {}, ctrl.signal)
+        const reader = res.body.getReader()
+        const t0 = Date.now()
+        const dec = new TextDecoder()
+        let buf = ''
+        while (Date.now() - t0 < 3500) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buf += dec.decode(value, { stream: true })
+          if (buf.includes('"n": 1')) break     // el primer ping fluyó a tiempo
+        }
+        clearTimeout(timer)
+        try { ctrl.abort() } catch {}
+        sseOkRef.current = buf.includes('"n": 1')
+      } catch { sseOkRef.current = false }
+      try { sessionStorage.setItem('orbit_sse', sseOkRef.current ? 'ok' : 'no') } catch {}
+    })()
+  }, [])
 
   // ¿quedó un patrón esperando? → el copiloto lo cuenta él mismo al entrar
   useEffect(() => {

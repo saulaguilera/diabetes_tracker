@@ -1845,6 +1845,30 @@ def _separar_followups(texto):
     return cuerpo.strip(), chips
 
 
+@bp.route("/api/copilot/stream-check", methods=["POST"],
+          endpoint="copilot_stream_check")
+def copilot_stream_check():
+    """Sondeo de capacidad SSE: dos eventos con 250ms entre medio. Si el
+    cliente no recibe el primero al vuelo, su red bufferea streams (proxies
+    de hotel/corporativos) → la app usa el endpoint clásico en esa sesión.
+    Solo lectura: probar jamás tiene efectos."""
+    err = _require_login()
+    if err:
+        return err
+    from flask import Response
+
+    def gen():
+        import time as _t
+        yield ":" + (" " * 2048) + "\n\n"      # rompe buffers de proxies
+        yield _sse({"type": "ping", "n": 1})
+        _t.sleep(0.25)
+        yield _sse({"type": "ping", "n": 2})
+
+    return Response(gen(), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache",
+                             "X-Accel-Buffering": "no"})
+
+
 @bp.route("/api/copilot/chat/stream", methods=["POST"],
           endpoint="copilot_chat_stream")
 def copilot_chat_stream():
@@ -1904,6 +1928,7 @@ def copilot_chat_stream():
         used = []
         resp = None
         try:
+            yield ":" + (" " * 2048) + "\n\n"   # rompe buffers de proxies
             yield _sse({"type": "status", "fase": "pensando"})
             kw = {}
             for ronda in range(5):
@@ -1926,6 +1951,7 @@ def copilot_chat_stream():
                 if resp.stop_reason != "tool_use":
                     break
                 _ejecutar_tools(resp, msgs, used)
+                yield _sse({"type": "ping"})   # latido entre rondas
                 # 4 rondas de consultas bastan; la 5ª escribe sí o sí
                 if ronda == 3:
                     kw = {"tool_choice": {"type": "none"}}
@@ -1969,6 +1995,8 @@ def copilot_chat_stream():
             yield _sse({"type": "done", "reply": reply, "followups": followups,
                         "used_data": used})
         except Exception:
+            import logging
+            logging.getLogger(__name__).exception("chat/stream falló")
             try:
                 from models import db
                 db.session.rollback()
