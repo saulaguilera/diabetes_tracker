@@ -224,7 +224,7 @@ class UserSettings(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String(100), unique=True, nullable=False)
-    value = db.Column(db.String(500))
+    value = db.Column(db.Text)   # JSONs sin límite (kalman, logs de foto, notas) — String(500) truncaba en Postgres
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def __repr__(self):

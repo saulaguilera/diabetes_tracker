@@ -46,9 +46,17 @@ def _tablas():
     return db.metadata
 
 
-def migrar(destino):
+def migrar(destino, reset=False):
     src, dst = _engines(destino)
     meta = _tablas()
+
+    if reset:
+        # el destino pre-switch es desechable: rehacer desde cero
+        with dst.connect() as c:
+            c.execute(text("DROP SCHEMA public CASCADE"))
+            c.execute(text("CREATE SCHEMA public"))
+            c.commit()
+        print("  (esquema destino recreado desde cero)")
 
     # esquema fresco e idéntico al de models.py
     meta.create_all(dst)
@@ -122,9 +130,10 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--destino", required=True, help="URL postgresql:// de destino")
     ap.add_argument("--verificar", action="store_true", help="solo comparar, no migrar")
+    ap.add_argument("--reset", action="store_true", help="rehacer el esquema destino desde cero")
     args = ap.parse_args()
     if args.verificar:
         verificar(args.destino)
     else:
-        migrar(args.destino)
+        migrar(args.destino, reset=args.reset)
         print("\nAhora corre con --verificar antes del switch.")
