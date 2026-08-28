@@ -112,6 +112,11 @@ def run_backup() -> dict:
 
 def maybe_backup() -> dict | None:
     """Corre el backup si pasaron ≥24h del último. Pensada para el cron de sync."""
+    import os as _os
+    if (_os.environ.get("DATABASE_URL") or "").startswith("postgres"):
+        # con Postgres el respaldo lo gestiona Railway (retención del servicio);
+        # el pipeline de archivo SQLite ya no aplica
+        return {"skipped": "postgres"}
     from helpers import _get_setting, _set_setting
     last = _get_setting("backup_last")
     if last:

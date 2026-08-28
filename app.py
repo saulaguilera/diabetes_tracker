@@ -37,10 +37,17 @@ if os.environ.get("SENTRY_DSN"):
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "diabetes-tracker-secret-2024")
-app.config["SQLALCHEMY_DATABASE_URI"] = (
-    os.environ.get("DATABASE_URL") or
-    "sqlite:///" + os.path.join(os.environ.get("DATA_DIR", ""), "diabetes.db")
-)
+_db_url = os.environ.get("DATABASE_URL") or (
+    "sqlite:///" + os.path.join(os.environ.get("DATA_DIR", ""), "diabetes.db"))
+# Railway/Heroku a veces entregan "postgres://"; SQLAlchemy 2 exige "postgresql://"
+if _db_url.startswith("postgres://"):
+    _db_url = _db_url.replace("postgres://", "postgresql://", 1)
+app.config["SQLALCHEMY_DATABASE_URI"] = _db_url
+# Postgres: reciclar conexiones y verificar antes de usar (evita conexiones
+# muertas tras idle timeouts del pooler)
+if _db_url.startswith("postgresql"):
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "pool_pre_ping": True, "pool_recycle": 280}
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB max upload
 # Sesión larga: que iniciar sesión sea un evento raro, no una rutina.
