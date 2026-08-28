@@ -16,6 +16,9 @@ const TZ = (() => {
 // WebView), se recarga UNA vez para tomar la versión nueva
 function checarVersion(res) {
   try {
+    // con un chat en vuelo jamás recargar: mataría la respuesta que viene
+    // llegando — el próximo request tranquilo hará la recarga
+    if (window.__orbitChatEnviando) return
     const vivo = res.headers.get('X-Orbit-Bundle')
     if (!vivo) return
     const mio = [...document.scripts].map(s => s.src).find(s => s.includes('/assets/index-'))

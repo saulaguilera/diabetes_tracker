@@ -34,6 +34,10 @@ const SUGG_KEYS = ['cop.s1', 'cop.s2', 'cop.s3', 'cop.s4', 'cop.s5']
 // La conversación se guarda en localStorage y dura 24h: sobrevive a cambiar de
 // pestaña, y al día siguiente arranca una nueva.
 const CHAT_KEY = 'orbit_chat_v1'
+let chatGen = 0        // generación del chat: resetChat la sube y cualquier
+                       // closure viejo (aun de otra instancia) queda inválido
+let ctrlVivo = null    // stream en vuelo, para abortarlo desde resetChat
+const marcaEnvio = (v) => { try { window.__orbitChatEnviando = v } catch {} }
 
 // La respuesta puede llegar cuando el usuario ya se fue a otra pestaña (el
 // componente se DESMONTA al cambiar): escribirla directo a localStorage y
@@ -41,13 +45,17 @@ const CHAT_KEY = 'orbit_chat_v1'
 function persistirRespuesta(finalMsg, startedAt, avisar = true) {
   try {
     const saved = JSON.parse(localStorage.getItem(CHAT_KEY) || 'null')
-    const base = (saved && Array.isArray(saved.messages)) ? saved.messages : []
+    // simetría con loadChat: un blob vencido (24h) NO se hereda — la
+    // respuesta tardía abre conversación nueva con startedAt fresco
+    const fresco = saved && Array.isArray(saved.messages) &&
+      Date.now() - saved.startedAt < DAY_MS
+    const base = fresco ? saved.messages : []
     const limpios = base.filter(m => !m.streaming)
     // idempotente: si el último guardado ya es este mismo mensaje, no duplicar
     const ult = limpios[limpios.length - 1]
     if (ult && ult.role === finalMsg.role && ult.content === finalMsg.content) return
     localStorage.setItem(CHAT_KEY, JSON.stringify({
-      startedAt: (saved && saved.startedAt) || startedAt || Date.now(),
+      startedAt: fresco ? saved.startedAt : (startedAt || Date.now()),
       messages: [...limpios, finalMsg],
     }))
     // el aviso es SOLO para respuestas: avisar al guardar el mensaje del
@@ -66,9 +74,11 @@ const DAY_MS = 24 * 60 * 60 * 1000
 function loadChat() {
   try {
     const saved = JSON.parse(localStorage.getItem(CHAT_KEY) || 'null')
-    if (saved && Array.isArray(saved.messages) && saved.messages.length &&
-        Date.now() - saved.startedAt < DAY_MS) {
-      return { ...saved, messages: dedupeConsecutivos(saved.messages) }
+    if (saved && Array.isArray(saved.messages) && saved.messages.length) {
+      if (Date.now() - saved.startedAt < DAY_MS) {
+        return { ...saved, messages: dedupeConsecutivos(saved.messages) }
+      }
+      localStorage.removeItem(CHAT_KEY)   // vencido: purgar, no heredar
     }
   } catch {}
   return null
@@ -117,6 +127,16 @@ export default function Copiloto({ theme }) {
       if (messages.some(m => m.streaming)) return   // parciales no se persisten
       if (messages.length > 1) {
         const clean = messages.map(({ justArrived, img, streaming, sid, ...rest }) => rest)
+        // jamás sobrescribir una respuesta que otro closure persistió y este
+        // estado no tiene todavía — recoger() la traerá en el próximo tick
+        const saved = JSON.parse(localStorage.getItem(CHAT_KEY) || 'null')
+        if (saved && Array.isArray(saved.messages) && saved.messages.length) {
+          const ultG = saved.messages[saved.messages.length - 1]
+          if (ultG && ultG.role === 'assistant' &&
+              !clean.some(m => m.role === 'assistant' && m.content === ultG.content)) {
+            return
+          }
+        }
         localStorage.setItem(CHAT_KEY, JSON.stringify({ startedAt: startedAtRef.current, messages: clean }))
       }
     } catch {}
@@ -126,9 +146,14 @@ export default function Copiloto({ theme }) {
 
   // empezar una conversación nueva (manual o cuando venció el día)
   const resetChat = () => {
+    chatGen += 1                              // closures en vuelo: inválidos
+    try { ctrlVivo?.abort() } catch {}
+    ctrlVivo = null
+    marcaEnvio(false)
     try { localStorage.removeItem(CHAT_KEY) } catch {}
     startedAtRef.current = Date.now()
     setMessages([{ role: 'assistant', content: greetingFor(cachedName()) }])
+    setSending(false)
   }
 
   // Sube el input con el teclado en vez de empujar toda la pantalla.
@@ -155,6 +180,9 @@ export default function Copiloto({ theme }) {
     const text = (typeof textArg === 'string' ? textArg : input).trim()
     const img = foto
     if ((!text && !img) || sending) return
+    const gen = chatGen
+    const vivo = () => chatGen === gen        // ¿resetChat nos invalidó?
+    marcaEnvio(true)
     const history = messages.map(m => ({ role: m.role, content: m.content }))
     const userMsg = { role: 'user', content: text || '📷', img }
     persistirRespuesta({ role: 'user', content: text || '📷' }, startedAtRef.current, false)
@@ -174,25 +202,33 @@ export default function Copiloto({ theme }) {
     if (sseOkRef.current !== true) {
       try {
         const r = await apiPost('/chat', body)
+        if (!vivo()) return
         const final = { role: 'assistant', content: r.reply || '…',
           usedData: (r.used_data || []).length > 0, justArrived: true,
           followups: r.followups || [] }
         persistirRespuesta(final, startedAtRef.current)
         setMessages(m => [...m, final])
       } catch (e) {
+        if (!vivo()) return
         const final = { role: 'assistant', content: t('cop.error'), justArrived: true }
         persistirRespuesta(final, startedAtRef.current)
         setMessages(m => [...m, final])
-      } finally { setSending(false) }
+      } finally { setSending(false); marcaEnvio(false) }
       return
     }
     const ctrl = new AbortController()
+    ctrlVivo = ctrl
     const tEnvio = Date.now()
     let ultimoEvento = Date.now()
+    // iOS congela la página en background: al volver, el silencio acumulado
+    // NO es la red — darle al stream una ventana fresca en vez de castigarlo
+    const alVolver = () => { if (!document.hidden) ultimoEvento = Date.now() }
+    document.addEventListener('visibilitychange', alVolver)
     // el status sale del server al instante: 15s sin NINGÚN evento = la red
     // retiene el stream → abortar, marcar la sesión como no-stream y avisar.
     // Con eventos ya fluyendo, 60s de silencio → abortar (nada de spinner eterno)
     const vigilante = setInterval(() => {
+      if (document.hidden) { ultimoEvento = Date.now(); return }
       const limite = huboEventos ? 60000 : 15000
       if (Date.now() - ultimoEvento > limite) {
         if (!huboEventos) {
@@ -202,11 +238,17 @@ export default function Copiloto({ theme }) {
         try { ctrl.abort() } catch {}
       }
     }, 3000)
+    const pararVigilante = () => {
+      clearInterval(vigilante)
+      document.removeEventListener('visibilitychange', alVolver)
+      if (ctrlVivo === ctrl) ctrlVivo = null
+    }
     try {
       const res = await apiStream('/chat/stream', body, ctrl.signal)
       const reader = res.body.getReader()
       const dec = new TextDecoder()
       let buf = '', acc = '', started = false, terminado = false
+      var terminadoRef = { ok: false }   // visible en el catch (var: hoisted)
       const visiblePara = (texto) => {
         // holdback de la línea técnica de chips, incluso a medio llegar
         const corte = texto.indexOf('\n>>>')
@@ -214,6 +256,7 @@ export default function Copiloto({ theme }) {
         return vis.replace(/\n?>{1,3}\s*$/, '')   // '>' o '>>' colgando al final
       }
       const pinta = (texto) => {
+        if (!vivo()) return
         const visible = visiblePara(texto)
         setMessages(m => started
           ? m.map(x => x.sid === sid ? { ...x, content: visible } : x)
@@ -242,22 +285,37 @@ export default function Copiloto({ theme }) {
           else if (ev.type === 'error') throw new Error('stream error')
           else if (ev.type === 'done') {
             terminado = true
-            const final = { role: 'assistant', content: ev.reply || '…',
-              usedData: (ev.used_data || []).length > 0,
-              followups: ev.followups || [] }
-            persistirRespuesta(final, startedAtRef.current)
-            setMessages(m => started
-              ? m.map(x => x.sid === sid ? final : x)
-              : [...m, final])
+            terminadoRef.ok = true
+            if (vivo()) {
+              const final = { role: 'assistant', content: ev.reply || '…',
+                usedData: (ev.used_data || []).length > 0,
+                followups: ev.followups || [] }
+              persistirRespuesta(final, startedAtRef.current)
+              setMessages(m => started
+                ? m.map(x => x.sid === sid ? final : x)
+                : [...m, final])
+            }
+            break
           }
         }
+        if (terminado) break
       }
       if (!terminado) throw new Error('stream incompleto')
-      clearInterval(vigilante)
+      pararVigilante()
+      try { ctrl.abort() } catch {}   // soltar la conexión ya respondida
       setSending(false)
+      marcaEnvio(false)
       return
     } catch (e) {
-      clearInterval(vigilante)
+      pararVigilante()
+      if ((typeof terminadoRef !== 'undefined' && terminadoRef.ok) || !vivo()) {
+        // la respuesta buena ya se entregó, o resetChat nos invalidó:
+        // nada de burbujas de error póstumas
+        setSending(false)
+        marcaEnvio(false)
+        if (typeof terminadoRef === 'undefined' || !terminadoRef.ok) setMessages(quitaBurbuja)
+        return
+      }
       setMessages(quitaBurbuja)
       // auto-reenvío SOLO si falló al toque y sin eventos (conexión muerta):
       // pasados unos segundos, el servidor pudo haber procesado (incluso
@@ -268,6 +326,7 @@ export default function Copiloto({ theme }) {
         persistirRespuesta(final, startedAtRef.current)
         setMessages(m => [...m, final])
         setSending(false)
+        marcaEnvio(false)
         return
       }
     }
@@ -275,19 +334,34 @@ export default function Copiloto({ theme }) {
     // fallback: el stream nunca arrancó (red/proxy sin SSE) → endpoint clásico
     try {
       const r = await apiPost('/chat', body)
+      if (!vivo()) return
       const final = { role: 'assistant', content: r.reply || '…',
         usedData: (r.used_data || []).length > 0, justArrived: true,
         followups: r.followups || [] }
       persistirRespuesta(final, startedAtRef.current)
       setMessages(m => [...m, final])
     } catch (e) {
+      if (!vivo()) return
       const final = { role: 'assistant', content: t('cop.error'), justArrived: true }
       persistirRespuesta(final, startedAtRef.current)
       setMessages(m => [...m, final])
     } finally {
       setSending(false)
+      marcaEnvio(false)
     }
   }
+
+  // remontaje (cambio de pestaña) con un send de la instancia anterior aún en
+  // vuelo: heredar su spinner para que el usuario no reenvíe (duplicaría
+  // registros); al terminar aquel closure, soltar y recoger su respuesta
+  useEffect(() => {
+    if (!window.__orbitChatEnviando) return
+    setSending(true)
+    const t = setInterval(() => {
+      if (!window.__orbitChatEnviando) { clearInterval(t); setSending(false) }
+    }, 500)
+    return () => clearInterval(t)
+  }, [])
 
   // al volver a la pestaña: recoger respuestas que llegaron mientras no estaba
   useEffect(() => {
@@ -306,6 +380,7 @@ export default function Copiloto({ theme }) {
       }
     }
     window.addEventListener('orbit-chat-update', recoger)
+    if (!sending) recoger()   // avisos one-shot perdidos (desmonte/en-vuelo)
     return () => window.removeEventListener('orbit-chat-update', recoger)
   }, [messages, sending])
 
@@ -347,9 +422,13 @@ export default function Copiloto({ theme }) {
   useEffect(() => {
     apiPost('/chat/pending', {}).then(r => {
       if (r && r.pending && r.pending.cuerpo) {
-        setMessages(m => [...m, { role: 'assistant', justArrived: true,
+        const msg = { role: 'assistant', justArrived: true,
           content: `🧠 ${t('cop.foundIntro')} ${r.pending.cuerpo}`,
-          followups: [t('cop.f1'), t('cop.f2')] }])
+          followups: [t('cop.f1'), t('cop.f2')] }
+        // el backend lo consumió: persistir YA (si el componente muere antes
+        // del render, el patrón sobrevive en storage y recoger lo muestra)
+        persistirRespuesta(msg, startedAtRef.current, false)
+        setMessages(m => [...m, msg])
       }
     }).catch(() => {})
   }, [])
