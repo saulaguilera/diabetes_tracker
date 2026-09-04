@@ -100,6 +100,17 @@ export default function GlucoseWave({ series, markers = [], theme, low = 70, hig
     ? anclados.reduce((a, b) => Math.abs(b.tm - fT) < Math.abs(a.tm - fT) ? b : a)
     : null
   const focoOk = focoMk && Math.abs(focoMk.tm - fT) <= 25 * 60000 ? focoMk : null
+  // sin evento justo en el foco: el sonar suena igual en el punto de la curva
+  // del instante señalado ("cuando pasó eso")
+  let focoPt = null
+  if (showMarkers && !focoOk && !isNaN(fT) && times.length) {
+    let best = 0, dmin = Infinity
+    for (let i = 0; i < times.length; i++) {
+      const d = Math.abs(times[i] - fT)
+      if (d < dmin) { dmin = d; best = i }
+    }
+    if (dmin <= 20 * 60000) focoPt = pts[best]
+  }
   // los eventos van apareciendo a medida que la curva los alcanza
   const popDelay = (x) => `${(0.15 + (x / w) * 2.6).toFixed(2)}s`
 
@@ -162,6 +173,18 @@ export default function GlucoseWave({ series, markers = [], theme, low = 70, hig
             </g>
           )
         })}
+
+        {focoPt && (
+          <g>
+            <circle className="sonar" cx={focoPt[0]} cy={focoPt[1]} r="4" fill="none" stroke={c}
+              strokeWidth="1.2" style={{ animationDelay: anim ? '3s' : '0s' }}/>
+            <circle className="sonar" cx={focoPt[0]} cy={focoPt[1]} r="4" fill="none" stroke={c}
+              strokeWidth="1.2" style={{ animationDelay: anim ? '4.5s' : '1.5s' }}/>
+            <circle className={anim ? 'mk-pop' : undefined} cx={focoPt[0]} cy={focoPt[1]} r="3.2"
+              fill={c} stroke="#FFFFFF" strokeWidth="1.2"
+              style={anim ? { animationDelay: popDelay(focoPt[0]) } : undefined}/>
+          </g>
+        )}
 
         {/* guía vertical + punto al arrastrar */}
         {ap && (
