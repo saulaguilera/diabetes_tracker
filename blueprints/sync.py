@@ -85,6 +85,12 @@ def _do_libre_sync(email: str, password: str, provider: str = "libre") -> dict:
     Descarga lecturas de LibreLinkUp e inserta las nuevas en la base de datos.
     Retorna {"insertadas": int, "total": int, "error": str|None, "ultima": datetime|None}
     """
+    from helpers import current_user_id as _cui0
+    if not _cui0():
+        # sin tenant no hay zona horaria ni dueño legítimo: jamás insertar
+        # "por defecto" al usuario 1 (fuente de lecturas UTC duplicadas)
+        return {"insertadas": 0, "total": 0, "ultima": None,
+                "error": "sync sin contexto de usuario — ignorado"}
     from utils.cgm_connectors import fetch as cgm_fetch
     resultado = cgm_fetch(provider, email, password,
                           get_setting_fn=_get_setting,
@@ -133,7 +139,7 @@ def _do_libre_sync(email: str, password: str, provider: str = "libre") -> dict:
             # contexto, pero si el contexto llega vacío la lectura queda
             # huérfana (invisible para todos). Cinturón y tiradores.
             from helpers import current_user_id
-            _uid = current_user_id() or _SYNC_OWNER_USER_ID
+            _uid = current_user_id()
             db.session.add(GlucoseReading(
                 timestamp=ts,
                 value_mgdl=r["value_mgdl"],
@@ -309,18 +315,29 @@ def maybe_kick_background_sync(max_age_min: float = 6.0) -> bool:
     Respeta cooldown (4 min) y rate-limit de Abbott. Nunca bloquea al caller.
     Devuelve True si disparó.
     """
-    if not _LIBRE_EMAIL or not _LIBRE_PASSWORD:
+    # SOLO el usuario del request, con SUS credenciales y BAJO SU CONTEXTO en
+    # el hilo. Antes usaba las credenciales del entorno (usuario 1) en un hilo
+    # sin contexto: cualquier usuario con datos viejos (la cuenta demo, p.ej.)
+    # disparaba un sync que insertaba lecturas del dueño SIN zona horaria
+    # (UTC, +4h) — ecos duplicados y "última lectura" en el futuro.
+    from helpers import current_user_id, set_user_context, reset_user_context
+    from models import User
+    uid = current_user_id()
+    if not uid:
+        return False
+    user = db.session.get(User, uid)
+    provider, email, password = _cgm_config_for_user(user) if user else ("libre", "", "")
+    if not email:
         return False
     now = ahora_usuario()
     try:
-        rl = _get_setting("libre_rate_limited_at")
-        if rl and (now - datetime.fromisoformat(rl)).total_seconds() < 600:
-            return False
         last = _get_setting("libre_last_sync")
         if last and (now - datetime.fromisoformat(last)).total_seconds() < 240:
             return False
     except (ValueError, TypeError):
         pass
+    if _rate_limit_wait(_get_setting("libre_rate_limited_at"), 10) > 0:
+        return False
     ultima = GlucoseReading.query.order_by(GlucoseReading.timestamp.desc()).first()
     if ultima and (now - ultima.timestamp).total_seconds() < max_age_min * 60:
         return False   # datos frescos — no hace falta
@@ -334,10 +351,13 @@ def maybe_kick_background_sync(max_age_min: float = 6.0) -> bool:
 
     def _run():
         with app_obj.app_context():
+            tok = set_user_context(uid)
             try:
-                _do_libre_sync(_LIBRE_EMAIL, _LIBRE_PASSWORD)
+                _sync_one_user(email, password, True, provider)
             except Exception:
                 pass
+            finally:
+                reset_user_context(tok)
 
     threading.Thread(target=_run, daemon=True, name="kick-sync").start()
     return True

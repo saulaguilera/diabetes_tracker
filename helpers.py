@@ -155,6 +155,18 @@ def tz_usuario():
     return None
 
 
+def tz_servidor():
+    """Zona del PRODUCTO (env TZ, America/Santiago) vía ZoneInfo. La libc del
+    contenedor no resuelve TZ (datetime.now() == utcnow()), así que todo
+    fallback "hora local del server" debe pasar por aquí, no por datetime.now()."""
+    try:
+        from zoneinfo import ZoneInfo
+        import os as _os
+        return ZoneInfo(_os.environ.get("TZ") or "America/Santiago")
+    except Exception:
+        return None
+
+
 def ahora_usuario():
     """ahora_usuario() en la zona horaria DEL USUARIO (naive, como toda la DB).
     El server vive en America/Santiago; sin esto, a un usuario de viaje todas
@@ -162,7 +174,7 @@ def ahora_usuario():
     corridas. La invariante: los timestamps del usuario Y su 'ahora' van en la
     MISMA zona → las edades y ventanas dan bien, y la hora coincide con su
     reloj esté donde esté."""
-    tz = tz_usuario()
+    tz = tz_usuario() or tz_servidor()
     if tz is None:
         return datetime.now()
     return datetime.now(tz).replace(tzinfo=None)

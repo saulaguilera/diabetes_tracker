@@ -192,10 +192,11 @@ def _parse_reading(raw: dict) -> dict:
             # a la zona DEL USUARIO (auto-capturada de su teléfono); sin zona
             # guardada, a la hora local del servidor
             try:
-                from helpers import tz_usuario
-                _tz = tz_usuario()
+                from helpers import tz_usuario, tz_servidor
+                _tz = tz_usuario() or tz_servidor()
             except Exception:
                 _tz = None
+            # sin zona resoluble: libc del contenedor (que hoy es UTC) — último recurso
             ts = (aware.astimezone(_tz).replace(tzinfo=None) if _tz
                   else datetime.fromtimestamp(aware.timestamp()))
         except ValueError:
