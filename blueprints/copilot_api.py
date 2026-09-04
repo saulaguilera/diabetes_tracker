@@ -1524,6 +1524,11 @@ REGLAS DE ESTILO:
   fallando, EMPIEZA por aclararlo ("ojo: tu último dato es de hace 2 horas")
   antes de analizar el "ahora" — jamás presentes un dato viejo como actual.
   Si el sync falla, sugiere revisar Perfil → Tu sensor.
+- GRÁFICA DEL DÍA: cuando pregunten cómo estuvo un día (hoy, ayer, una fecha)
+  o pidan ver su curva, llama a resumen_del_dia — la app dibuja la gráfica de
+  glucosa de ese día junto a tu respuesta. Coméntala: la forma del día, las
+  subidas y bajadas y su porqué con los eventos registrados, sin dictar la
+  lista de números (ya la tienen a la vista).
 - Puedes REGISTRAR comidas, insulina y ejercicio cuando la persona te lo pida
   explícitamente ("anótame 40g de carbos", "regístrame 4 unidades", "apunta
   30 min de bici"): usa las herramientas de registro y confirma exactamente
@@ -1584,6 +1589,9 @@ def _chat_context():
     from helpers import ahora_usuario
     now = ahora_usuario()   # el "ahora" del USUARIO (clave al viajar)
     L = []
+    _dias = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+    L.append(f"HOY es {_dias[now.weekday()]} {now.strftime('%d/%m/%Y')}, "
+             f"hora local {now.strftime('%H:%M')}.")
 
     # ── quién es (nombre del perfil) ──────────────────────────────────────
     try:
@@ -1995,8 +2003,15 @@ def copilot_chat_stream():
                          "nuevo, quizás en dos preguntas más cortas.")
 
             reply, followups = _separar_followups(reply)
+            grafica = None
+            try:
+                from flask import g as _g
+                grafica = (getattr(_g, "copilot_fe", None) or [None])[-1]
+            except Exception:
+                pass
             yield _sse({"type": "done", "reply": reply, "followups": followups,
-                        "used_data": used})
+                        "used_data": used,
+                        **({"grafica": grafica} if grafica else {})})
         except Exception:
             import logging
             logging.getLogger(__name__).exception("chat/stream falló")
@@ -2286,8 +2301,15 @@ def copilot_chat():
 
         reply, followups = _separar_followups(reply)
 
+        grafica = None
+        try:
+            from flask import g as _g
+            grafica = (getattr(_g, "copilot_fe", None) or [None])[-1]
+        except Exception:
+            pass
         return jsonify({"ok": True, "reply": reply, "followups": followups,
-                        "used_data": sorted(set(used))})
+                        "used_data": sorted(set(used)),
+                        **({"grafica": grafica} if grafica else {})})
     except Exception as exc:
         return jsonify({"ok": False, "error": "No pude responder ahora. Intenta de nuevo."}), 502
 

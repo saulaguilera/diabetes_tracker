@@ -259,6 +259,146 @@ def estadisticas_periodo(days: int = 14, hora_desde=None, hora_hasta=None,
     return out
 
 
+_DIAS_ES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+
+_TAGS_DIA = {"estres": "Estrés", "enfermo": "Enfermedad", "mal_sueno": "Dormí mal",
+             "viaje": "Viaje", "alcohol": "Alcohol", "otro": "Contexto"}
+
+
+def resumen_del_dia(fecha: str | None = None) -> dict:
+    """Un día contado completo. El MODELO recibe solo el resumen (~300 tokens);
+    la serie decimada viaja a la app por la clave _frontend, que run_tool
+    saca del resultado ANTES de serializar — los puntos jamás entran al
+    contexto del modelo."""
+    from models import GlucoseReading, Meal, InsulinDose, Activity
+    from helpers import ahora_usuario
+
+    now = ahora_usuario()          # bordes de día en la zona del USUARIO
+    hoy = now.date()
+    nota_fecha = None
+    if fecha:
+        try:
+            dia = datetime.strptime(str(fecha).strip(), "%Y-%m-%d").date()
+        except Exception:
+            return {"error": "fecha inválida: usa YYYY-MM-DD, u omítela para hoy"}
+        if dia > hoy:
+            nota_fecha = f"{fecha} está en el futuro — muestro hoy"
+            dia = hoy
+        elif (hoy - dia).days > _MAX_DAYS:
+            nota_fecha = (f"la app guarda ~{_MAX_DAYS} días — muestro el más "
+                          "antiguo disponible")
+            dia = hoy - timedelta(days=_MAX_DAYS)
+    else:
+        dia = hoy
+
+    ini = datetime(dia.year, dia.month, dia.day)
+    fin = ini + timedelta(days=1)
+    reads = (GlucoseReading.query
+             .filter(GlucoseReading.timestamp >= ini,
+                     GlucoseReading.timestamp < fin,
+                     GlucoseReading.is_artifact == False)  # noqa: E712
+             .order_by(GlucoseReading.timestamp).all())
+
+    out = {"fecha": dia.isoformat(), "dia_semana": _DIAS_ES[dia.weekday()],
+           "lecturas": len(reads)}
+    if nota_fecha:
+        out["nota_fecha"] = nota_fecha
+    if len(reads) < 2:
+        out["nota"] = ("Sin lecturas suficientes ese día: de ESTE día no habrá "
+                       "gráfica — no aludas a una gráfica de este día.")
+        return out
+
+    times = [r.timestamp for r in reads]
+    values = [r.value_mgdl for r in reads]
+    n = len(values)
+    avg = sum(values) / n
+    sd = (sum((v - avg) ** 2 for v in values) / n) ** 0.5
+    i_min = min(range(n), key=lambda i: values[i])
+    i_max = max(range(n), key=lambda i: values[i])
+    out.update({
+        "tir_pct": round(100 * sum(1 for v in values if LOW <= v <= HIGH) / n),
+        "promedio": int(round(avg)),
+        "cv_pct": round(100 * sd / avg, 1) if avg else None,
+        "minimo": {"v": int(round(values[i_min])), "hora": times[i_min].strftime("%H:%M")},
+        "maximo": {"v": int(round(values[i_max])), "hora": times[i_max].strftime("%H:%M")},
+        "pct_bajo_70": round(100 * sum(1 for v in values if v < LOW) / n, 1),
+        "pct_sobre_180": round(100 * sum(1 for v in values if v > HIGH) / n, 1),
+    })
+    hipos = detect_hypo_events(times, values)
+    if hipos:
+        out["hipo_eventos"] = [{"hora": h["start"].strftime("%H:%M"),
+                                "min_v": int(round(h["min_v"]))} for h in hipos[:3]]
+    franjas = {}
+    for nombre, hf, hh in (("madrugada_0_6", 0, 6), ("manana_6_12", 6, 12),
+                           ("tarde_12_19", 12, 19), ("noche_19_24", 19, 24)):
+        st = slice_stats(times, values, hf, hh)
+        if st:
+            franjas[nombre] = {"tir_pct": st["tir_pct"], "promedio": st["promedio"]}
+    if franjas:
+        out["por_franja"] = franjas
+
+    # eventos del día: la narrativa causa→efecto (comí → subí, bolo → bajó)
+    marcas = []
+    try:
+        for m in Meal.query.filter(Meal.timestamp >= ini, Meal.timestamp < fin).all():
+            marcas.append({"cat": "comida", "ts": m.timestamp,
+                           "title": (m.name or "Comida")[:40],
+                           "badge": f"{int(m.carbs_g)}g" if m.carbs_g else ""})
+        for d in InsulinDose.query.filter(InsulinDose.timestamp >= ini,
+                                          InsulinDose.timestamp < fin).all():
+            marcas.append({"cat": "insulina", "ts": d.timestamp, "title": "Insulina",
+                           "badge": f"{d.units:g}U"})
+        for a in Activity.query.filter(Activity.timestamp >= ini,
+                                       Activity.timestamp < fin).all():
+            marcas.append({"cat": "ejercicio", "ts": a.timestamp,
+                           "title": (a.activity_type or "Ejercicio")[:40],
+                           "badge": f"{a.duration_min}m" if a.duration_min else ""})
+        from models import ContextTag
+        for t_ in ContextTag.query.filter(ContextTag.timestamp >= ini,
+                                          ContextTag.timestamp < fin).all():
+            marcas.append({"cat": "contexto", "ts": t_.timestamp,
+                           "title": _TAGS_DIA.get(t_.tag, t_.tag)[:40], "badge": ""})
+        marcas.sort(key=lambda m: m["ts"])
+    except Exception:
+        marcas = []
+    # mismo subconjunto para el modelo y para la gráfica: si divergieran, el
+    # modelo narraría eventos que la persona no ve marcados (o viceversa)
+    sel = marcas[-14:]
+    out["eventos"] = [{"hora": m["ts"].strftime("%H:%M"), "cat": m["cat"],
+                       "title": m["title"], "badge": m["badge"]}
+                      for m in sel]
+    if len(marcas) > len(sel):
+        out["eventos_totales"] = len(marcas)   # aviso de truncado (los más viejos)
+    out["nota"] = ("La app muestra UNA gráfica junto a tu respuesta: la del ÚLTIMO "
+                   "día que consultes con datos. Si este es ese día, nárrala (la "
+                   "forma del día, subidas/bajadas y su porqué con los eventos) sin "
+                   "dictar la lista de números; si consultaste varios días, da los "
+                   "números clave de los que quedaron sin gráfica. "
+                   "Retrospectivo: nada de dosis.")
+
+    # serie decimada para la app: buckets de 10 min conservando el punto más
+    # alejado del promedio (las excursiones no se planchan) + mín/máx globales
+    if n <= 148:
+        idx = list(range(n))
+    else:
+        buckets = {}
+        for i, t in enumerate(times):
+            k = (t.hour * 60 + t.minute) // 10
+            if k not in buckets or abs(values[i] - avg) > abs(values[buckets[k]] - avg):
+                buckets[k] = i
+        idx = sorted(set(buckets.values()) | {i_min, i_max})
+    out["_frontend"] = {
+        "kind": "grafica_dia", "fecha": dia.isoformat(),
+        "dia_semana": _DIAS_ES[dia.weekday()], "tir_pct": out["tir_pct"],
+        "series": [{"t": times[i].isoformat(), "v": int(round(values[i]))} for i in idx],
+        "markers": [{"cat": m["cat"], "t": m["ts"].isoformat(),
+                     "title": m["title"], "badge": m["badge"]}
+                    for m in sel],
+        "low": LOW, "high": HIGH,
+    }
+    return out
+
+
 def respuesta_a_comida(nombre: str, days: int = 90) -> dict:
     """Cómo respondió la glucosa a una comida (búsqueda por nombre)."""
     from models import Meal
@@ -695,6 +835,20 @@ COPILOT_TOOLS = [
             "dia_semana": {"type": "integer", "description": "0=lunes … 6=domingo (opcional)"}}},
     },
     {
+        "name": "resumen_del_dia",
+        "description": ("Resumen RETROSPECTIVO de un día concreto (hoy, ayer o una "
+                        "fecha): TIR, promedio, mín/máx con hora, hipos, franjas y "
+                        "los eventos registrados de ese día. La app MUESTRA "
+                        "automáticamente la gráfica de glucosa del día junto a tu "
+                        "respuesta: úsala cuando pregunten cómo estuvo un día o "
+                        "pidan ver su curva, y COMÉNTALA (la forma del día, las "
+                        "subidas y su porqué con los eventos) en vez de dictar "
+                        "números. Solo describe lo que ya pasó."),
+        "input_schema": {"type": "object", "properties": {
+            "fecha": {"type": "string",
+                      "description": "YYYY-MM-DD; omítela para hoy (el contexto trae la fecha actual)"}}},
+    },
+    {
         "name": "respuesta_a_comida",
         "description": ("Cómo respondió la glucosa a una comida específica en el pasado "
                         "(búsqueda por nombre): delta 1h/2h/3h por instancia y medianas."),
@@ -755,6 +909,7 @@ _DISPATCH = {
     "estadisticas_periodo":   lambda a: estadisticas_periodo(
         a.get("days", 14), a.get("hora_desde"), a.get("hora_hasta"), a.get("dia_semana")),
     "respuesta_a_comida":     lambda a: respuesta_a_comida(a.get("nombre", ""), a.get("days", 90)),
+    "resumen_del_dia":        lambda a: resumen_del_dia(a.get("fecha")),
     "relacion_carbos_insulina": lambda a: relacion_carbos_insulina(a.get("days", 90)),
     "impacto_de_contexto":    lambda a: impacto_de_contexto(a.get("tag"), a.get("days", 90)),
     "impacto_de_eventos":     lambda a: impacto_de_eventos(
@@ -768,7 +923,19 @@ def run_tool(name: str, args: dict) -> dict:
     if not fn:
         return {"error": f"consulta desconocida: {name}"}
     try:
-        return fn(args or {})
+        out = fn(args or {})
+        # canal lateral hacia la app (gráficas): se saca SIEMPRE del resultado
+        # antes de serializar — jamás entra al contexto del modelo
+        if isinstance(out, dict) and "_frontend" in out:
+            fe = out.pop("_frontend")
+            try:
+                from flask import g
+                if not hasattr(g, "copilot_fe"):
+                    g.copilot_fe = []
+                g.copilot_fe.append(fe)
+            except Exception:
+                pass   # sin request context (tests): la gráfica se descarta
+        return out
     except Exception as exc:
         try:
             from models import db

@@ -1,11 +1,12 @@
 // Copiloto.jsx — chat que SOLO explica y acompaña (nunca recomienda ni predice).
 // El candado real vive en el system prompt del backend (/api/copilot/chat).
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback, memo } from 'react'
 import { apiPost, apiGet, apiStream } from '../api.js'
 import { PAL, SANS } from '../theme.js'
 import { useLang } from '../i18n.jsx'
 import { Typewriter } from '../components/ui.jsx'
 import CopilotAvatar from '../components/CopilotAvatar.jsx'
+import GlucoseWave from '../components/GlucoseWave.jsx'
 
 // foto → dataURL comprimido (mismo criterio que Registro: 1280px)
 function fotoADataURL(file, max = 1280, quality = 0.8) {
@@ -53,11 +54,12 @@ function persistirRespuesta(finalMsg, startedAt, avisar = true) {
     const limpios = base.filter(m => !m.streaming)
     // idempotente: si el último guardado ya es este mismo mensaje, no duplicar
     const ult = limpios[limpios.length - 1]
-    if (ult && ult.role === finalMsg.role && ult.content === finalMsg.content) return
-    localStorage.setItem(CHAT_KEY, JSON.stringify({
-      startedAt: fresco ? saved.startedAt : (startedAt || Date.now()),
-      messages: [...limpios, finalMsg],
-    }))
+    const fg = (m) => (m && m.grafica && m.grafica.fecha) || ''
+    if (ult && ult.role === finalMsg.role && ult.content === finalMsg.content
+        && fg(ult) === fg(finalMsg)) return
+    // blob vencido o inexistente: ancla FRESCA (el startedAt del closure puede
+    // traer el timestamp viejo >24h y el blob nacería ya purgable)
+    guardarChat(fresco ? saved.startedAt : Date.now(), [...limpios, finalMsg])
     // el aviso es SOLO para respuestas: avisar al guardar el mensaje del
     // usuario disparaba la recogida a mitad del envío y duplicaba burbujas
     if (avisar) window.dispatchEvent(new Event('orbit-chat-update'))
@@ -65,9 +67,35 @@ function persistirRespuesta(finalMsg, startedAt, avisar = true) {
 }
 
 // chats viejos pueden traer duplicados de la carrera corregida: sanear
+// (dos respuestas de texto idéntico sobre DÍAS distintos no se colapsan)
 function dedupeConsecutivos(msgs) {
+  const fg = (m) => (m.grafica && m.grafica.fecha) || ''
   return msgs.filter((m, i) => !(i > 0 && msgs[i - 1].role === m.role
-    && msgs[i - 1].content === m.content))
+    && msgs[i - 1].content === m.content && fg(msgs[i - 1]) === fg(m)))
+}
+
+// las gráficas pesan (~5KB c/u): conservarlas solo en los 3 mensajes más
+// recientes que traigan una; los viejos degradan a solo-texto
+function podarCharts(msgs) {
+  let quedan = 3
+  const out = []
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i]
+    if (m.grafica && quedan > 0) { quedan -= 1; out.push(m) }
+    else if (m.grafica) { const { grafica, ...rest } = m; out.push(rest) }
+    else out.push(m)
+  }
+  return out.reverse()
+}
+
+// única puerta de escritura del chat: poda gráficas y, si el storage está
+// lleno, reintenta sin ninguna — el texto siempre gana la persistencia
+function guardarChat(startedAt, msgs) {
+  const blob = (ms) => JSON.stringify({ startedAt, messages: ms })
+  try { localStorage.setItem(CHAT_KEY, blob(podarCharts(msgs))) }
+  catch {
+    try { localStorage.setItem(CHAT_KEY, blob(msgs.map(({ grafica, ...r }) => r))) } catch {}
+  }
 }
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -137,12 +165,12 @@ export default function Copiloto({ theme }) {
             return
           }
         }
-        localStorage.setItem(CHAT_KEY, JSON.stringify({ startedAt: startedAtRef.current, messages: clean }))
+        guardarChat(startedAtRef.current, clean)
       }
     } catch {}
   }, [messages])
 
-  const scrollToBottom = () => { const el = listRef.current; if (el) el.scrollTop = el.scrollHeight }
+  const scrollToBottom = useCallback(() => { const el = listRef.current; if (el) el.scrollTop = el.scrollHeight }, [])
 
   // empezar una conversación nueva (manual o cuando venció el día)
   const resetChat = () => {
@@ -205,7 +233,8 @@ export default function Copiloto({ theme }) {
         if (!vivo()) return
         const final = { role: 'assistant', content: r.reply || '…',
           usedData: (r.used_data || []).length > 0, justArrived: true,
-          followups: r.followups || [] }
+          followups: r.followups || [],
+          ...(r.grafica ? { grafica: r.grafica } : {}) }
         persistirRespuesta(final, startedAtRef.current)
         setMessages(m => [...m, final])
       } catch (e) {
@@ -257,11 +286,73 @@ export default function Copiloto({ theme }) {
       }
       const pinta = (texto) => {
         if (!vivo()) return
-        const visible = visiblePara(texto)
         setMessages(m => started
-          ? m.map(x => x.sid === sid ? { ...x, content: visible } : x)
-          : [...m, { sid, role: 'assistant', content: visible, streaming: true }])
+          ? m.map(x => x.sid === sid ? { ...x, content: texto } : x)
+          : [...m, { sid, role: 'assistant', content: texto, streaming: true }])
         started = true
+      }
+
+      // ── revelado fluido (tipo ChatGPT): el texto de red se acumula en
+      // `objetivo` y un loop rAF lo revela con catch-up proporcional — calmo
+      // al día con el stream, acelera con el backlog, jamás se rezaga. Con
+      // prefers-reduced-motion apagado por completo (comportamiento clásico).
+      let reduce = false
+      try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch {}
+      var rafId = null                 // var: visibles en el catch (hoisted)
+      var finalPendiente = null        // mensaje final esperando el drenado
+      var finalizado = false
+      let objetivo = '', mostrado = 0, lastTick = 0, lastPaint = 0
+      var backstopId = null
+      const pararSuavizado = () => { if (rafId) { cancelAnimationFrame(rafId); rafId = null } }
+      const finalize = () => {
+        if (finalizado) return
+        finalizado = true
+        if (backstopId) { clearTimeout(backstopId); backstopId = null }
+        pararSuavizado()
+        if (vivo() && finalPendiente) {
+          const f = finalPendiente
+          setMessages(m => started ? m.map(x => x.sid === sid ? f : x) : [...m, f])
+        }
+        setSending(false)
+        marcaEnvio(false)
+      }
+      // el backstop se RE-ARMA con cada avance pintado: solo dispara si el
+      // drenado lleva 4s sin progresar (rAF congelado en background, etc.) —
+      // jamás trunca un drenado sano de una respuesta larga
+      const armaBackstop = () => {
+        if (backstopId) clearTimeout(backstopId)
+        backstopId = setTimeout(finalize, 4000)
+      }
+      const tick = (ts) => {
+        rafId = null
+        if (!vivo() || finalizado) { if (!vivo() && finalPendiente) finalize(); return }
+        const target = visiblePara(objetivo)
+        if (mostrado > target.length) mostrado = target.length
+        const dt = lastTick ? Math.min(0.1, (ts - lastTick) / 1000) : 0.016
+        lastTick = ts
+        if (mostrado < target.length) {
+          const pend = target.length - mostrado
+          const cps = Math.min(finalPendiente ? 2400 : 700,
+                               40 + pend * (finalPendiente ? 9 : 3))
+          mostrado = Math.min(target.length, mostrado + Math.max(1, cps * dt))
+          let corte = Math.floor(mostrado)
+          // no partir un emoji: borde en high surrogate → avanzar 1
+          const cc = target.charCodeAt(corte - 1)
+          if (cc >= 0xD800 && cc <= 0xDBFF) corte = Math.min(target.length, corte + 1)
+          if (ts - lastPaint >= 55 || corte >= target.length) {
+            lastPaint = ts
+            pinta(target.slice(0, corte))
+            if (finalPendiente) armaBackstop()   // hay progreso: renovar plazo
+          }
+        }
+        if (mostrado >= target.length) {
+          if (finalPendiente) { finalize(); return }
+          return   // al día: dormir hasta el próximo delta
+        }
+        rafId = requestAnimationFrame(tick)
+      }
+      const arranca = () => {
+        if (!rafId && !finalizado) { lastTick = 0; rafId = requestAnimationFrame(tick) }
       }
       while (true) {
         const { done, value } = await reader.read()
@@ -275,10 +366,15 @@ export default function Copiloto({ theme }) {
           huboEventos = true
           ultimoEvento = Date.now()
           if (ev.type === 'ping') continue
-          if (ev.type === 'delta') { acc += ev.t; pinta(acc) }
+          if (ev.type === 'delta') {
+            acc += ev.t
+            if (reduce) pinta(visiblePara(acc))
+            else { objetivo = acc; arranca() }
+          }
           else if (ev.type === 'rollback') {
             // era una ronda de consultas: quitar la burbuja parcial, no dejarla vacía
-            acc = ''
+            acc = ''; objetivo = ''; mostrado = 0
+            pararSuavizado()
             if (started) { setMessages(quitaBurbuja); started = false }
           }
           else if (ev.type === 'status') setSlowThinking(ev.fase === 'consultando')
@@ -289,11 +385,39 @@ export default function Copiloto({ theme }) {
             if (vivo()) {
               const final = { role: 'assistant', content: ev.reply || '…',
                 usedData: (ev.used_data || []).length > 0,
-                followups: ev.followups || [] }
+                followups: ev.followups || [],
+                ...(ev.grafica ? { grafica: ev.grafica } : {}) }
+              // lo irreversible PRIMERO: la verdad en storage jamás espera
+              // a una animación (desmonte a mitad de drenado = cero pérdida)
               persistirRespuesta(final, startedAtRef.current)
-              setMessages(m => started
-                ? m.map(x => x.sid === sid ? final : x)
-                : [...m, final])
+              // el server entrega el reply .strip()eado: comparar sin el
+              // whitespace inicial que los deltas sí pudieron traer
+              const revelado = visiblePara(objetivo)
+                .slice(0, Math.floor(mostrado)).trimStart()
+              const drenable = !reduce && started && !document.hidden &&
+                (ev.reply || '').startsWith(revelado)
+              if (!drenable) {
+                // swap directo (reduced-motion, sin texto streameado, pestaña
+                // oculta, o el reply final divergió de lo revelado — jamás
+                // "reescribir" texto ante los ojos de la persona)
+                pararSuavizado()
+                setMessages(m => started
+                  ? m.map(x => x.sid === sid ? final : x)
+                  : [...m, { ...final, justArrived: true }])
+              } else {
+                // la gráfica entra YA a la burbuja en vuelo (rise-in) mientras
+                // el texto restante se termina de revelar; el swap final —con
+                // chips— aterriza cuando la última palabra se posa
+                if (ev.grafica) {
+                  setMessages(m => m.map(x =>
+                    x.sid === sid ? { ...x, grafica: ev.grafica } : x))
+                }
+                objetivo = ev.reply
+                mostrado = revelado.length   // re-anclar en el texto ya limpio
+                finalPendiente = final
+                arranca()
+                armaBackstop()
+              }
             }
             break
           }
@@ -303,19 +427,26 @@ export default function Copiloto({ theme }) {
       if (!terminado) throw new Error('stream incompleto')
       pararVigilante()
       try { ctrl.abort() } catch {}   // soltar la conexión ya respondida
-      setSending(false)
-      marcaEnvio(false)
+      if (!finalPendiente) {          // sin drenado pendiente: liberar ya
+        setSending(false)
+        marcaEnvio(false)
+      }
       return
     } catch (e) {
       pararVigilante()
       if ((typeof terminadoRef !== 'undefined' && terminadoRef.ok) || !vivo()) {
         // la respuesta buena ya se entregó, o resetChat nos invalidó:
         // nada de burbujas de error póstumas
+        if (typeof finalPendiente !== 'undefined' && finalPendiente && !finalizado) {
+          return   // el drenado sigue vivo: finalize liberará sending
+        }
+        try { if (rafId) cancelAnimationFrame(rafId) } catch {}
         setSending(false)
         marcaEnvio(false)
         if (typeof terminadoRef === 'undefined' || !terminadoRef.ok) setMessages(quitaBurbuja)
         return
       }
+      try { if (rafId) cancelAnimationFrame(rafId) } catch {}
       setMessages(quitaBurbuja)
       // auto-reenvío SOLO si falló al toque y sin eventos (conexión muerta):
       // pasados unos segundos, el servidor pudo haber procesado (incluso
@@ -337,7 +468,8 @@ export default function Copiloto({ theme }) {
       if (!vivo()) return
       const final = { role: 'assistant', content: r.reply || '…',
         usedData: (r.used_data || []).length > 0, justArrived: true,
-        followups: r.followups || [] }
+        followups: r.followups || [],
+        ...(r.grafica ? { grafica: r.grafica } : {}) }
       persistirRespuesta(final, startedAtRef.current)
       setMessages(m => [...m, final])
     } catch (e) {
@@ -460,7 +592,7 @@ export default function Copiloto({ theme }) {
       <div ref={listRef} style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', padding: '8px 18px 8px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         {messages.map((m, i) => (
           <Bubble key={i} theme={theme} role={m.role} text={m.content} usedData={m.usedData}
-            img={m.img} animate={m.justArrived} onScroll={scrollToBottom}/>
+            img={m.img} grafica={m.grafica} animate={m.justArrived} onScroll={scrollToBottom}/>
         ))}
         {sending && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: theme.inkFaint, fontSize: 12.5, paddingLeft: 44 }}>
@@ -544,9 +676,30 @@ export default function Copiloto({ theme }) {
   )
 }
 
-function Bubble({ theme, role, text, usedData, img, animate, onScroll }) {
-  const { t } = useLang()
+// "Martes 2 sep" desde la fecha ISO, en el idioma de la UI
+function etiquetaFecha(iso, lang) {
+  try {
+    const [y, mo, d] = String(iso).split('-').map(Number)
+    const d0 = new Date(y, mo - 1, d)
+    if (!y || !mo || !d || isNaN(d0.getTime())) return iso || ''
+    const txt = d0.toLocaleDateString(
+      lang === 'en' ? 'en-US' : 'es-ES', { weekday: 'long', day: 'numeric', month: 'short' })
+    return txt.charAt(0).toUpperCase() + txt.slice(1)
+  } catch { return iso || '' }
+}
+
+const Bubble = memo(function Bubble({ theme, role, text, usedData, img, grafica, animate, onScroll }) {
+  const { t, lang, gUnit, gVal } = useLang()
   const isUser = role === 'user'
+  // gráfica del día: solo con serie real — sin datos, ni hueco ni cabecera
+  const conGrafica = !isUser && grafica && Array.isArray(grafica.series)
+    && grafica.series.length >= 2
+  // en tema claro los tonos brillantes no contrastan: variantes oscuras
+  const tirColor = conGrafica && Number.isFinite(grafica.tir_pct)
+    ? (grafica.tir_pct >= 70 ? (theme.dark ? '#34D399' : '#059669')
+      : grafica.tir_pct >= 50 ? (theme.dark ? '#FBBF24' : '#B45309')
+      : (theme.dark ? '#F87171' : '#DC2626'))
+    : null
   return (
     <div className="msg-in" style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexDirection: isUser ? 'row-reverse' : 'row' }}>
       {!isUser && (
@@ -554,13 +707,33 @@ function Bubble({ theme, role, text, usedData, img, animate, onScroll }) {
           <CopilotAvatar size={34}/>
         </div>
       )}
-      <div style={{ maxWidth: '78%' }}>
+      <div style={{ maxWidth: conGrafica ? '88%' : '78%', width: conGrafica ? '88%' : undefined }}>
         <div style={{
           padding: '11px 14px', borderRadius: 18, fontSize: 14.5, lineHeight: 1.5,
           background: isUser ? theme.accent : theme.surface,
           color: isUser ? '#0A0C1E' : theme.ink,
           borderBottomRightRadius: isUser ? 6 : 18, borderBottomLeftRadius: isUser ? 18 : 6,
           border: isUser ? 'none' : `0.5px solid ${theme.border}`, whiteSpace: 'pre-wrap' }}>
+          {conGrafica && (
+            <div className="rise-in" style={{ marginBottom: text ? 10 : 2, marginTop: 2 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline',
+                justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                <span style={{ fontSize: 10.5, letterSpacing: '0.08em',
+                  textTransform: 'uppercase', color: theme.inkFaint }}>
+                  {etiquetaFecha(grafica.fecha, lang)}
+                </span>
+                {tirColor && (
+                  <span style={{ fontSize: 11, fontWeight: 600, color: tirColor,
+                    whiteSpace: 'nowrap' }}>
+                    {grafica.tir_pct}% {t('cop.tirPill')}
+                  </span>
+                )}
+              </div>
+              <GlucoseWave series={grafica.series} markers={grafica.markers || []}
+                theme={theme} low={grafica.low || 70} high={grafica.high || 180}
+                h={120} live={false} unitLabel={gUnit} fmtVal={gVal}/>
+            </div>
+          )}
           {img && <img src={img} alt="" style={{ maxWidth: '100%', borderRadius: 12,
             marginBottom: text && text !== '📷' ? 8 : 0, display: 'block' }}/>}
           {/* el copiloto "escribe" su respuesta recién llegada; lo demás va directo */}
@@ -576,4 +749,4 @@ function Bubble({ theme, role, text, usedData, img, animate, onScroll }) {
       </div>
     </div>
   )
-}
+})

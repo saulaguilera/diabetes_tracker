@@ -1,6 +1,6 @@
 // GlucoseWave.jsx — onda de glucosa 24h: curva suave, sin recuadro, fundida con
 // el fondo. Destello "ahora" animado + tooltip al arrastrar el dedo (valor/hora).
-import { useRef, useState } from 'react'
+import { useRef, useState, useId } from 'react'
 import { PAL } from '../theme.js'
 import { CatIcon } from './EventSheet.jsx'
 
@@ -28,8 +28,10 @@ function hhmm(t) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-export default function GlucoseWave({ series, markers = [], theme, low = 70, high = 180, w = 320, h = 150 }) {
+export default function GlucoseWave({ series, markers = [], theme, low = 70, high = 180, w = 320, h = 150, live = true, unitLabel = 'mg/dL', fmtVal = (v) => Math.round(v) }) {
   const wrapRef = useRef(null)
+  // ids únicos: varias ondas en la misma página (chat) no pueden compartir defs
+  const uid = useId().replace(/:/g, '')
   const [active, setActive] = useState(null)
 
   if (!series || series.length < 2) {
@@ -75,11 +77,11 @@ export default function GlucoseWave({ series, markers = [], theme, low = 70, hig
       onPointerLeave={() => setActive(null)}>
       <svg width="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: 'block', overflow: 'visible' }}>
         <defs>
-          <linearGradient id="gwArea" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={`gwArea${uid}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={c} stopOpacity="0.22"/>
             <stop offset="100%" stopColor={c} stopOpacity="0"/>
           </linearGradient>
-          <filter id="gwGlow" x="-10%" y="-50%" width="120%" height="220%"><feGaussianBlur stdDeviation="2.4"/></filter>
+          <filter id={`gwGlow${uid}`} x="-10%" y="-50%" width="120%" height="220%"><feGaussianBlur stdDeviation="2.4"/></filter>
         </defs>
 
         {/* guías 70/180 — hairlines tenues, sin recuadro */}
@@ -87,8 +89,8 @@ export default function GlucoseWave({ series, markers = [], theme, low = 70, hig
         <line x1="0" y1={yLow} x2={w} y2={yLow} stroke={theme.inkFaint} strokeWidth="0.5" strokeDasharray="1 8" opacity="0.4"/>
 
         {/* área + línea (se funde con el fondo) */}
-        <path d={area} fill="url(#gwArea)"/>
-        <path d={line} fill="none" stroke={c} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.35" filter="url(#gwGlow)"/>
+        <path d={area} fill={`url(#gwArea${uid})`}/>
+        <path d={line} fill="none" stroke={c} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.35" filter={`url(#gwGlow${uid})`}/>
         <path d={line} fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
 
         {/* guía vertical + punto al arrastrar */}
@@ -101,7 +103,7 @@ export default function GlucoseWave({ series, markers = [], theme, low = 70, hig
         )}
 
         {/* destello "ahora" — pulso animado */}
-        {!ap && (
+        {!ap && live && (
           <g>
             <circle cx={last[0]} cy={last[1]} r="4" fill={c} className="now-pulse"/>
             <circle cx={last[0]} cy={last[1]} r="3.4" fill="#FFFFFF"/>
@@ -138,8 +140,8 @@ export default function GlucoseWave({ series, markers = [], theme, low = 70, hig
             background: theme.dark ? 'rgba(12,14,34,0.92)' : 'rgba(255,255,255,0.95)',
             border: `0.5px solid ${theme.borderStrong}`, borderRadius: 12, padding: '5px 10px',
             boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
-            <span style={{ fontSize: 16, fontWeight: 500, color: theme.ink, fontVariantNumeric: 'tabular-nums' }}>{Math.round(av.v)}</span>
-            <span style={{ fontSize: 11, color: theme.inkSoft, marginLeft: 4 }}>mg/dL</span>
+            <span style={{ fontSize: 16, fontWeight: 500, color: theme.ink, fontVariantNumeric: 'tabular-nums' }}>{fmtVal(av.v)}</span>
+            <span style={{ fontSize: 11, color: theme.inkSoft, marginLeft: 4 }}>{unitLabel}</span>
             {hhmm(av.t) && <span style={{ fontSize: 11, color: theme.inkFaint, marginLeft: 8 }}>{hhmm(av.t)}</span>}
             {/* qué pasó en ese momento (±25 min): comida, bolo, ejercicio… */}
             {cercanos.slice(0, 3).map((mk, i) => (
