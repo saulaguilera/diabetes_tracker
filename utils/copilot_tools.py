@@ -265,11 +265,26 @@ _TAGS_DIA = {"estres": "Estrés", "enfermo": "Enfermedad", "mal_sueno": "Dormí 
              "viaje": "Viaje", "alcohol": "Alcohol", "otro": "Contexto"}
 
 
-def resumen_del_dia(fecha: str | None = None) -> dict:
-    """Un día contado completo. El MODELO recibe solo el resumen (~300 tokens);
-    la serie decimada viaja a la app por la clave _frontend, que run_tool
-    saca del resultado ANTES de serializar — los puntos jamás entran al
-    contexto del modelo."""
+def _parse_hora(h):
+    """'19' / '19:30' / 19 / 19.5 → horas float 0-24; None si no aplica."""
+    if h is None or h == "":
+        return None
+    try:
+        if isinstance(h, str) and ":" in h:
+            hh, mm = h.split(":", 1)
+            return max(0.0, min(24.0, int(hh) + int(mm) / 60))
+        return max(0.0, min(24.0, float(h)))
+    except (TypeError, ValueError):
+        return None
+
+
+def resumen_del_dia(fecha: str | None = None, hora_desde=None, hora_hasta=None,
+                    foco_hora=None) -> dict:
+    """Un día contado completo — o un SECTOR de él (ventana horaria alrededor
+    de un evento: una comida, una hipo, la noche). El MODELO recibe solo el
+    resumen (~300 tokens); la serie decimada viaja a la app por la clave
+    _frontend, que run_tool saca del resultado ANTES de serializar — los
+    puntos jamás entran al contexto del modelo."""
     from models import GlucoseReading, Meal, InsulinDose, Activity
     from helpers import ahora_usuario
 
@@ -293,6 +308,27 @@ def resumen_del_dia(fecha: str | None = None) -> dict:
 
     ini = datetime(dia.year, dia.month, dia.day)
     fin = ini + timedelta(days=1)
+
+    # ── sector: ventana horaria (p.ej. la cena, 19-23h); cruza medianoche
+    #    si hasta <= desde (22-2 = la noche) ──
+    h_desde, h_hasta = _parse_hora(hora_desde), _parse_hora(hora_hasta)
+    ventana = None
+    if h_desde is not None and h_hasta is not None:
+        ini = datetime(dia.year, dia.month, dia.day) + timedelta(hours=h_desde)
+        fin = datetime(dia.year, dia.month, dia.day) + timedelta(hours=h_hasta)
+        if fin <= ini:
+            fin += timedelta(days=1)
+        # "¿qué pasó anoche?" sin fecha: la ventana anclada en HOY aún no
+        # ocurre — la intención es la de AYER, retroceder un día entero
+        if ini > now:
+            ini -= timedelta(days=1)
+            fin -= timedelta(days=1)
+            dia = ini.date()
+            nota_fecha = ((nota_fecha + "; ") if nota_fecha else "") +                 "esa franja de hoy aún no ocurre — muestro la del día anterior"
+        def _hhmm(h):
+            tm = int(round(h * 60)) % (24 * 60)   # sin truncado float: 13:49 es 13:49
+            return f"{tm // 60:02d}:{tm % 60:02d}"
+        ventana = {"desde": _hhmm(h_desde), "hasta": _hhmm(h_hasta)}
     reads = (GlucoseReading.query
              .filter(GlucoseReading.timestamp >= ini,
                      GlucoseReading.timestamp < fin,
@@ -301,11 +337,13 @@ def resumen_del_dia(fecha: str | None = None) -> dict:
 
     out = {"fecha": dia.isoformat(), "dia_semana": _DIAS_ES[dia.weekday()],
            "lecturas": len(reads)}
+    if ventana:
+        out["ventana"] = f"{ventana['desde']}–{ventana['hasta']}"
     if nota_fecha:
         out["nota_fecha"] = nota_fecha
     if len(reads) < 2:
-        out["nota"] = ("Sin lecturas suficientes ese día: de ESTE día no habrá "
-                       "gráfica — no aludas a una gráfica de este día.")
+        out["nota"] = ("Sin lecturas suficientes en ese día/franja: de esto no "
+                       "habrá gráfica — no aludas a una gráfica de este día.")
         return out
 
     times = [r.timestamp for r in reads]
@@ -328,14 +366,15 @@ def resumen_del_dia(fecha: str | None = None) -> dict:
     if hipos:
         out["hipo_eventos"] = [{"hora": h["start"].strftime("%H:%M"),
                                 "min_v": int(round(h["min_v"]))} for h in hipos[:3]]
-    franjas = {}
-    for nombre, hf, hh in (("madrugada_0_6", 0, 6), ("manana_6_12", 6, 12),
-                           ("tarde_12_19", 12, 19), ("noche_19_24", 19, 24)):
-        st = slice_stats(times, values, hf, hh)
-        if st:
-            franjas[nombre] = {"tir_pct": st["tir_pct"], "promedio": st["promedio"]}
-    if franjas:
-        out["por_franja"] = franjas
+    if not ventana:
+        franjas = {}
+        for nombre, hf, hh in (("madrugada_0_6", 0, 6), ("manana_6_12", 6, 12),
+                               ("tarde_12_19", 12, 19), ("noche_19_24", 19, 24)):
+            st = slice_stats(times, values, hf, hh)
+            if st:
+                franjas[nombre] = {"tir_pct": st["tir_pct"], "promedio": st["promedio"]}
+        if franjas:
+            out["por_franja"] = franjas
 
     # eventos del día: la narrativa causa→efecto (comí → subí, bolo → bajó)
     marcas = []
@@ -369,11 +408,13 @@ def resumen_del_dia(fecha: str | None = None) -> dict:
                       for m in sel]
     if len(marcas) > len(sel):
         out["eventos_totales"] = len(marcas)   # aviso de truncado (los más viejos)
-    out["nota"] = ("La app muestra UNA gráfica junto a tu respuesta: la del ÚLTIMO "
-                   "día que consultes con datos. Si este es ese día, nárrala (la "
-                   "forma del día, subidas/bajadas y su porqué con los eventos) sin "
-                   "dictar la lista de números; si consultaste varios días, da los "
-                   "números clave de los que quedaron sin gráfica. "
+    out["nota"] = (("Esta consulta es un SECTOR del día: la gráfica que verá la "
+                    "persona muestra SOLO esa ventana. " if ventana else "")
+                   + "La app muestra UNA gráfica junto a tu respuesta: la de tu "
+                   "ÚLTIMA consulta con datos. Si es esta, nárrala (la forma, "
+                   "subidas/bajadas y su porqué con los eventos) sin dictar la "
+                   "lista de números; si consultaste varios días/sectores, da "
+                   "los números clave de los que quedaron sin gráfica. "
                    "Retrospectivo: nada de dosis.")
 
     # serie decimada para la app: buckets de 10 min conservando el punto más
@@ -387,9 +428,19 @@ def resumen_del_dia(fecha: str | None = None) -> dict:
             if k not in buckets or abs(values[i] - avg) > abs(values[buckets[k]] - avg):
                 buckets[k] = i
         idx = sorted(set(buckets.values()) | {i_min, i_max})
+    foco_iso = None
+    fh = _parse_hora(foco_hora)
+    if fh is not None:
+        foco_dt = datetime(dia.year, dia.month, dia.day) + timedelta(hours=fh)
+        if ventana and foco_dt < ini:
+            foco_dt += timedelta(days=1)      # foco tras la medianoche (22-2h)
+        if ini <= foco_dt < fin:
+            foco_iso = foco_dt.isoformat()
     out["_frontend"] = {
         "kind": "grafica_dia", "fecha": dia.isoformat(),
         "dia_semana": _DIAS_ES[dia.weekday()], "tir_pct": out["tir_pct"],
+        **({"ventana": ventana} if ventana else {}),
+        **({"foco": foco_iso} if foco_iso else {}),
         "series": [{"t": times[i].isoformat(), "v": int(round(values[i]))} for i in idx],
         "markers": [{"cat": m["cat"], "t": m["ts"].isoformat(),
                      "title": m["title"], "badge": m["badge"]}
@@ -836,17 +887,31 @@ COPILOT_TOOLS = [
     },
     {
         "name": "resumen_del_dia",
-        "description": ("Resumen RETROSPECTIVO de un día concreto (hoy, ayer o una "
-                        "fecha): TIR, promedio, mín/máx con hora, hipos, franjas y "
-                        "los eventos registrados de ese día. La app MUESTRA "
-                        "automáticamente la gráfica de glucosa del día junto a tu "
-                        "respuesta: úsala cuando pregunten cómo estuvo un día o "
-                        "pidan ver su curva, y COMÉNTALA (la forma del día, las "
-                        "subidas y su porqué con los eventos) en vez de dictar "
-                        "números. Solo describe lo que ya pasó."),
+        "description": ("Resumen RETROSPECTIVO de un día (hoy, ayer o una fecha) o "
+                        "de un SECTOR del día: TIR, promedio, mín/máx con hora, "
+                        "hipos y los eventos registrados. La app MUESTRA "
+                        "automáticamente la gráfica de glucosa junto a tu "
+                        "respuesta. LLÁMALA SIEMPRE que pregunten cómo estuvo un "
+                        "día (incluido HOY: aunque el contexto ya traiga números, "
+                        "la gráfica SOLO aparece si llamas esta herramienta) o "
+                        "pidan ver su curva. Para preguntas sobre un MOMENTO "
+                        "concreto (una comida, una hipo, la noche, 'qué pasó "
+                        "después de X') pide SOLO esa ventana con "
+                        "hora_desde/hora_hasta (≈1h antes y 3h después del evento; "
+                        "la ventana ARRANCA en fecha y cruza hacia el día "
+                        "siguiente — 'anoche' ⇒ fecha de AYER con 22:00–02:00) "
+                        "y marca foco_hora con la hora del evento — la gráfica "
+                        "mostrará ese sector con el momento resaltado. COMÉNTALA "
+                        "(la forma, las subidas y su porqué con los eventos) en "
+                        "vez de dictar números. Solo describe lo que ya pasó."),
         "input_schema": {"type": "object", "properties": {
             "fecha": {"type": "string",
-                      "description": "YYYY-MM-DD; omítela para hoy (el contexto trae la fecha actual)"}}},
+                      "description": "YYYY-MM-DD; omítela para hoy (el contexto trae la fecha actual)"},
+            "hora_desde": {"type": "string",
+                           "description": "inicio de la ventana 'HH:MM' (con hora_hasta; si hasta<=desde cruza medianoche)"},
+            "hora_hasta": {"type": "string", "description": "fin de la ventana 'HH:MM'"},
+            "foco_hora": {"type": "string",
+                          "description": "hora del evento a resaltar 'HH:MM' (p.ej. la de la comida, sale en eventos)"}}},
     },
     {
         "name": "respuesta_a_comida",
@@ -909,7 +974,8 @@ _DISPATCH = {
     "estadisticas_periodo":   lambda a: estadisticas_periodo(
         a.get("days", 14), a.get("hora_desde"), a.get("hora_hasta"), a.get("dia_semana")),
     "respuesta_a_comida":     lambda a: respuesta_a_comida(a.get("nombre", ""), a.get("days", 90)),
-    "resumen_del_dia":        lambda a: resumen_del_dia(a.get("fecha")),
+    "resumen_del_dia":        lambda a: resumen_del_dia(
+        a.get("fecha"), a.get("hora_desde"), a.get("hora_hasta"), a.get("foco_hora")),
     "relacion_carbos_insulina": lambda a: relacion_carbos_insulina(a.get("days", 90)),
     "impacto_de_contexto":    lambda a: impacto_de_contexto(a.get("tag"), a.get("days", 90)),
     "impacto_de_eventos":     lambda a: impacto_de_eventos(

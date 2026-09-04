@@ -127,5 +127,72 @@ class TestResumenDelDia(unittest.TestCase):
             self.ctx.push()   # tearDown lo saca
 
 
+    def test_sector_ventana_y_foco(self):
+        hoy = ahora_usuario().date()
+        self._sembrar_dia(hoy)
+        out = run_tool("resumen_del_dia", {"fecha": hoy.isoformat(),
+                                           "hora_desde": "13:00",
+                                           "hora_hasta": "16:30",
+                                           "foco_hora": "14:15"})
+        self.assertEqual(out.get("ventana"), "13:00–16:30")
+        fe = (getattr(g, "copilot_fe", None) or [None])[-1]
+        self.assertEqual(fe["ventana"], {"desde": "13:00", "hasta": "16:30"})
+        # la serie queda DENTRO de la ventana
+        horas = [int(p["t"][11:13]) for p in fe["series"]]
+        self.assertTrue(all(13 <= h < 17 for h in horas), sorted(set(horas)))
+        # el foco apunta al instante del evento
+        self.assertTrue(fe["foco"].endswith("T14:15:00"), fe["foco"])
+        # la excursión de las 14h (base+90) domina el máximo del sector
+        self.assertGreaterEqual(out["maximo"]["v"], 190)
+
+    def test_sector_cruza_medianoche(self):
+        hoy = ahora_usuario().date()
+        ayer = hoy - timedelta(days=1)
+        self._sembrar_dia(ayer)
+        self._sembrar_dia(hoy)
+        out = run_tool("resumen_del_dia", {"fecha": ayer.isoformat(),
+                                           "hora_desde": "22:00",
+                                           "hora_hasta": "02:00",
+                                           "foco_hora": "01:00"})
+        fe = (getattr(g, "copilot_fe", None) or [None])[-1]
+        # lecturas de las 22-23h de ayer Y de las 0-2h de hoy
+        fechas_horas = {(p["t"][:10], int(p["t"][11:13])) for p in fe["series"]}
+        self.assertTrue(any(f == ayer.isoformat() and h >= 22 for f, h in fechas_horas))
+        self.assertTrue(any(f == hoy.isoformat() and h < 2 for f, h in fechas_horas))
+        # el foco 01:00 cae del lado de HOY
+        self.assertTrue(fe["foco"].startswith(hoy.isoformat()), fe["foco"])
+
+    def test_anoche_sin_fecha_retrocede_un_dia(self):
+        hoy = ahora_usuario().date()
+        ayer = hoy - timedelta(days=1)
+        self._sembrar_dia(ayer)
+        # a cualquier hora del día, "anoche" (22-02) sin fecha: la ventana
+        # anclada en hoy está (al menos en parte) en el futuro → ayer
+        out = run_tool("resumen_del_dia", {"hora_desde": "22:00",
+                                           "hora_hasta": "02:00"})
+        # según la hora actual la ventana puede o no estar 100% en el futuro;
+        # si retrocedió, la fecha reportada es la de ayer y hay datos
+        if out.get("fecha") == ayer.isoformat():
+            self.assertGreater(out["lecturas"], 2)
+            self.assertIn("aún no ocurre", out.get("nota_fecha", ""))
+
+    def test_etiqueta_ventana_sin_truncado(self):
+        hoy = ahora_usuario().date()
+        self._sembrar_dia(hoy)
+        out = run_tool("resumen_del_dia", {"fecha": hoy.isoformat(),
+                                           "hora_desde": "13:49",
+                                           "hora_hasta": "16:20"})
+        self.assertEqual(out.get("ventana"), "13:49–16:20")
+
+    def test_dia_completo_no_trae_ventana(self):
+        hoy = ahora_usuario().date()
+        self._sembrar_dia(hoy)
+        out = run_tool("resumen_del_dia", {})
+        self.assertNotIn("ventana", out)
+        fe = (getattr(g, "copilot_fe", None) or [None])[-1]
+        self.assertNotIn("ventana", fe)
+        self.assertIn("por_franja", out)
+
+
 if __name__ == "__main__":
     unittest.main()

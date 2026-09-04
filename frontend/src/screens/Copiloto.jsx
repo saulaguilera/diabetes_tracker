@@ -740,6 +740,7 @@ const Bubble = memo(function Bubble({ theme, role, text, usedData, img, grafica,
                 <span style={{ fontSize: 10.5, letterSpacing: '0.08em',
                   textTransform: 'uppercase', color: theme.inkFaint }}>
                   {etiquetaFecha(grafica.fecha, lang)}
+                  {grafica.ventana && ` · ${grafica.ventana.desde}–${grafica.ventana.hasta}`}
                 </span>
                 {tirColor && (
                   <span style={{ fontSize: 11, fontWeight: 600, color: tirColor,
@@ -750,7 +751,8 @@ const Bubble = memo(function Bubble({ theme, role, text, usedData, img, grafica,
               </div>
               <GlucoseWave series={grafica.series} markers={grafica.markers || []}
                 theme={theme} low={grafica.low || 70} high={grafica.high || 180}
-                h={120} live={false} unitLabel={gUnit} fmtVal={gVal}/>
+                h={120} live={false} unitLabel={gUnit} fmtVal={gVal}
+                focusT={grafica.foco || null}/>
             </div>
           )}
           {img && <img src={img} alt="" style={{ maxWidth: '100%', borderRadius: 12,

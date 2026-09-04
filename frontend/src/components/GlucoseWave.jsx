@@ -28,7 +28,7 @@ function hhmm(t) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-export default function GlucoseWave({ series, markers = [], theme, low = 70, high = 180, w = 320, h = 150, live = true, unitLabel = 'mg/dL', fmtVal = (v) => Math.round(v) }) {
+export default function GlucoseWave({ series, markers = [], theme, low = 70, high = 180, w = 320, h = 150, live = true, unitLabel = 'mg/dL', fmtVal = (v) => Math.round(v), focusT = null }) {
   const wrapRef = useRef(null)
   // ids únicos: varias ondas en la misma página (chat) no pueden compartir defs
   const uid = useId().replace(/:/g, '')
@@ -50,6 +50,22 @@ export default function GlucoseWave({ series, markers = [], theme, low = 70, hig
   const area = `${line} L ${w},${h} L 0,${h} Z`
   const yLow = Y(low), yHigh = Y(high)
   const last = pts[pts.length - 1]
+
+  // foco: "cuando pasó eso" — banda anclada al instante del evento en el
+  // MISMO eje que la curva (índice + interpolación local): con huecos de
+  // sensor, la proporción temporal global marcaría el tramo equivocado
+  let fx = null
+  if (focusT && series.length > 1) {
+    const ft = new Date(focusT).getTime()
+    const ts = series.map(p => new Date(p.t).getTime())
+    if (!isNaN(ft) && ft >= ts[0] && ft <= ts[ts.length - 1]) {
+      let j = 0
+      while (j < ts.length - 2 && ts[j + 1] < ft) j++
+      const span = ts[j + 1] - ts[j]
+      const frac = span > 0 ? Math.min(1, Math.max(0, (ft - ts[j]) / span)) : 0
+      fx = ((j + frac) / (ts.length - 1)) * w
+    }
+  }
 
   const at = (clientX) => {
     const r = wrapRef.current.getBoundingClientRect()
@@ -87,6 +103,16 @@ export default function GlucoseWave({ series, markers = [], theme, low = 70, hig
         {/* guías 70/180 — hairlines tenues, sin recuadro */}
         <line x1="0" y1={yHigh} x2={w} y2={yHigh} stroke={theme.inkFaint} strokeWidth="0.5" strokeDasharray="1 8" opacity="0.4"/>
         <line x1="0" y1={yLow} x2={w} y2={yLow} stroke={theme.inkFaint} strokeWidth="0.5" strokeDasharray="1 8" opacity="0.4"/>
+
+        {/* banda de foco: el momento del que habla el copiloto */}
+        {fx != null && (
+          <g>
+            <rect x={Math.max(0, fx - 14)} y="0" width="28" height={h}
+              fill={c} opacity="0.08" rx="6"/>
+            <line x1={fx} y1="0" x2={fx} y2={h} stroke={c} strokeWidth="0.8"
+              strokeDasharray="2 5" opacity="0.55"/>
+          </g>
+        )}
 
         {/* área + línea (se funde con el fondo) */}
         <path d={area} fill={`url(#gwArea${uid})`}/>
