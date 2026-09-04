@@ -128,7 +128,7 @@ class TestResumenDelDia(unittest.TestCase):
 
 
     def test_sector_ventana_y_foco(self):
-        hoy = ahora_usuario().date()
+        hoy = ahora_usuario().date() - timedelta(days=1)   # ayer: ventana siempre pasada
         self._sembrar_dia(hoy)
         out = run_tool("resumen_del_dia", {"fecha": hoy.isoformat(),
                                            "hora_desde": "13:00",
@@ -177,7 +177,7 @@ class TestResumenDelDia(unittest.TestCase):
             self.assertIn("aún no ocurre", out.get("nota_fecha", ""))
 
     def test_etiqueta_ventana_sin_truncado(self):
-        hoy = ahora_usuario().date()
+        hoy = ahora_usuario().date() - timedelta(days=1)
         self._sembrar_dia(hoy)
         out = run_tool("resumen_del_dia", {"fecha": hoy.isoformat(),
                                            "hora_desde": "13:49",

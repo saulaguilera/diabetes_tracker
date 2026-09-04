@@ -28,7 +28,7 @@ function hhmm(t) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-export default function GlucoseWave({ series, markers = [], theme, low = 70, high = 180, w = 320, h = 150, live = true, unitLabel = 'mg/dL', fmtVal = (v) => Math.round(v), focusT = null, animateIn = false }) {
+export default function GlucoseWave({ series, markers = [], theme, low = 70, high = 180, w = 320, h = 150, live = true, unitLabel = 'mg/dL', fmtVal = (v) => Math.round(v), focusT = null, animateIn = false, showMarkers = false }) {
   const wrapRef = useRef(null)
   // la animación de entrada se decide AL MONTAR y no cambia: si el mensaje
   // streaming se swapea por el final a mitad del trazado, la curva termina
@@ -85,6 +85,24 @@ export default function GlucoseWave({ series, markers = [], theme, low = 70, hig
   const marks = markers
     .map(mk => ({ ...mk, tm: new Date(mk.t).getTime() }))
     .filter(mk => !isNaN(mk.tm))
+  // marcadores SOBRE la curva (chat): cada evento anclado al punto más cercano
+  // en el tiempo; el del foco lleva un sonar (anillo que se expande)
+  const anclados = showMarkers ? marks.map(mk => {
+    let best = 0, dmin = Infinity
+    for (let i = 0; i < times.length; i++) {
+      const d = Math.abs(times[i] - mk.tm)
+      if (d < dmin) { dmin = d; best = i }
+    }
+    return dmin <= 20 * 60000 ? { ...mk, i: best } : null
+  }).filter(Boolean) : []
+  const fT = focusT ? new Date(focusT).getTime() : NaN
+  const focoMk = !isNaN(fT) && anclados.length
+    ? anclados.reduce((a, b) => Math.abs(b.tm - fT) < Math.abs(a.tm - fT) ? b : a)
+    : null
+  const focoOk = focoMk && Math.abs(focoMk.tm - fT) <= 25 * 60000 ? focoMk : null
+  // los eventos van apareciendo a medida que la curva los alcanza
+  const popDelay = (x) => `${(0.15 + (x / w) * 2.6).toFixed(2)}s`
+
   // eventos cerca del punto tocado (±25 min) — los muestra la lupa
   const cercanos = av ? marks.filter(mk =>
     Math.abs(mk.tm - new Date(av.t).getTime()) <= 25 * 60000) : []
@@ -122,6 +140,28 @@ export default function GlucoseWave({ series, markers = [], theme, low = 70, hig
         <path className={anim ? 'wave-area-in' : undefined} d={area} fill={`url(#gwArea${uid})`}/>
         <path className={anim ? 'wave-draw-glow' : 'wave-breathe'} pathLength="1" d={line} fill="none" stroke={c} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.35" filter={`url(#gwGlow${uid})`}/>
         <path className={anim ? 'wave-draw' : undefined} pathLength="1" d={line} fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+
+        {/* eventos sobre la curva + sonar en el foco */}
+        {anclados.map((mk, k) => {
+          const [mx, my] = pts[mk.i]
+          const col = MARKER_COLOR[mk.cat] || c
+          const esFoco = focoOk && mk === focoOk
+          return (
+            <g key={k}>
+              {esFoco && (
+                <>
+                  <circle className="sonar" cx={mx} cy={my} r="4" fill="none" stroke={col}
+                    strokeWidth="1.2" style={{ animationDelay: anim ? '3s' : '0s' }}/>
+                  <circle className="sonar" cx={mx} cy={my} r="4" fill="none" stroke={col}
+                    strokeWidth="1.2" style={{ animationDelay: anim ? '4.5s' : '1.5s' }}/>
+                </>
+              )}
+              <circle className={anim ? 'mk-pop' : undefined} cx={mx} cy={my}
+                r={esFoco ? 4.6 : 3.4} fill={col} stroke="#FFFFFF" strokeWidth="1.3"
+                style={anim ? { animationDelay: popDelay(mx) } : undefined}/>
+            </g>
+          )
+        })}
 
         {/* guía vertical + punto al arrastrar */}
         {ap && (

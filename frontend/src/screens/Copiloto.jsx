@@ -605,9 +605,11 @@ export default function Copiloto({ theme }) {
             onScroll={scrollToBottom}/>
         ))}
         {sending && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: theme.inkFaint, fontSize: 12.5, paddingLeft: 44 }}>
-            <div className="ai-orbit" style={{ width: 14, height: 14, borderRadius: '50%', border: `2px solid ${theme.accent}44`, borderTopColor: theme.accent }}/>
-            {slowThinking ? t('cop.analyzing') : t('cop.thinking')}
+          <div className="rise-in" style={{ display: 'flex', alignItems: 'center', gap: 10, color: theme.inkFaint, fontSize: 12.5, paddingLeft: 6 }}>
+            <div style={{ width: 22, height: 22, display: 'grid', placeItems: 'center' }}>
+              <CopilotAvatar size={22}/>
+            </div>
+            <span className="thinking-text">{slowThinking ? t('cop.analyzing') : t('cop.thinking')}</span>
           </div>
         )}
       </div>
@@ -757,7 +759,7 @@ const Bubble = memo(function Bubble({ theme, role, text, usedData, img, grafica,
               <GlucoseWave series={grafica.series} markers={grafica.markers || []}
                 theme={theme} low={grafica.low || 70} high={grafica.high || 180}
                 h={120} live={false} unitLabel={gUnit} fmtVal={gVal}
-                focusT={grafica.foco || null} animateIn={grafAnim}/>
+                focusT={grafica.foco || null} animateIn={grafAnim} showMarkers/>
             </div>
           )}
           {img && <img src={img} alt="" style={{ maxWidth: '100%', borderRadius: 12,

@@ -1948,7 +1948,8 @@ def copilot_chat_stream():
         try:
             yield ":" + (" " * 2048) + "\n\n"   # rompe buffers de proxies
             yield _sse({"type": "status", "fase": "pensando"})
-            kw = {}
+            kw = ({"tool_choice": {"type": "tool", "name": "resumen_del_dia"}}
+                  if _quiere_grafica(message) else {})
             for ronda in range(5):
                 hubo_tool = False
                 with client.messages.stream(model=model, max_tokens=4000,
@@ -1969,6 +1970,7 @@ def copilot_chat_stream():
                 if resp.stop_reason != "tool_use":
                     break
                 _ejecutar_tools(resp, msgs, used)
+                kw = {}   # la gráfica ya salió (o no aplicaba): el resto, libre
                 # la tool capturó una gráfica: avisar YA para que la app pinte
                 # el esqueleto de carga mientras el modelo escribe (la gráfica
                 # real sigue viajando SOLO en el done — esto es puro aviso)
@@ -2044,6 +2046,31 @@ def copilot_chat_stream():
                     headers={"Cache-Control": "no-cache",
                              "X-Accel-Buffering": "no",
                              "Connection": "keep-alive"})
+
+
+import re as _re
+_RX_GRAFICA = _re.compile(
+    r"(gr[aá]fic|curva|mu[eé]strame|ver mi|c[oó]mo (estuvo|fue|me fue|estuve|anduve|"
+    r"vengo|va|viene|estoy)|mi d[ií]a|el d[ií]a|hoy|ayer|anoche|esta (ma[ñn]ana|tarde|"
+    r"noche)|la noche|madrugada|el (lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|"
+    r"domingo)|\\b\\d{1,2} de (enero|febrero|marzo|abril|mayo|junio|julio|agosto|"
+    r"septiembre|octubre|noviembre|diciembre)|after|yesterday|today|tonight|last night|"
+    r"my day|chart|graph|show me|how (was|did)|"
+    # momentos concretos: comidas, subidas/bajadas señaladas, "qué pasó después de"
+    r"qu[eé] pas[oó]|despu[eé]s de|afect|almuerzo|desayun|\\bcen[aé]|comida de|"
+    r"merienda|colaci[oó]n|snack|es[ae] (bajada|subida|pico|hipo)|"
+    r"la (bajada|subida) de|what happened|lunch|dinner|breakfast|that (drop|spike|low))", _re.I)
+# pedidos de REGISTRO: jamás forzar la gráfica ("regístrame el almuerzo: 40g")
+_RX_REGISTRO = _re.compile(r"(reg[ií]str|an[oó]ta|apunta|guarda|log (this|my)|record)", _re.I)
+
+
+def _quiere_grafica(msg: str) -> bool:
+    """Preguntas de día/momento → la gráfica NO es opcional: se fuerza la
+    herramienta en la primera ronda (el modelo, con la glucosa de 24h ya en el
+    contexto, tendía a responder sin llamarla y la persona no veía nada)."""
+    if not msg or _RX_REGISTRO.search(msg):
+        return False
+    return bool(_RX_GRAFICA.search(msg))
 
 
 def _sse(d):
@@ -2247,12 +2274,14 @@ def copilot_chat():
             out[-1] = ult
             return out
 
-        def _call(force_text=False):
+        def _call(force_text=False, force_tool=None):
             # max_tokens es un TOPE (no un gasto): en Sonnet 5 el razonamiento
             # interno automático consume del mismo tope que el texto visible,
             # así que 900 recortaba respuestas a mitad de frase (o se comía TODO
             # el tope pensando y la respuesta salía vacía → el "…"). 4000 da aire.
             kw = {"tool_choice": {"type": "none"}} if force_text else {}
+            if force_tool:
+                kw = {"tool_choice": {"type": "tool", "name": force_tool}}
             return client.messages.create(
                 model=model, max_tokens=4000, system=system,
                 messages=_con_marca_de_cache(msgs), tools=COPILOT_TOOLS, **kw,
@@ -2273,7 +2302,7 @@ def copilot_chat():
                                     "content": _json.dumps(out, ensure_ascii=False)})
             msgs.append({"role": "user", "content": results})
 
-        resp = _call()
+        resp = _call(force_tool="resumen_del_dia" if _quiere_grafica(message) else None)
         used = []
         # Loop de tool use: el modelo decide qué consultar; cap 3 rondas.
         for _ in range(3):
