@@ -300,7 +300,16 @@ def sync_all(email: str, password: str, get_setting_fn=None, set_setting_fn=None
                 set_setting_fn("libre_patient_id", patient_id)
 
         try:
-            readings = get_readings(token, base_url, patient_id, account_id)
+            try:
+                readings = get_readings(token, base_url, patient_id, account_id)
+            except requests.RequestException as exc1:
+                if "429" not in str(exc1):
+                    raise
+                # la ventana del 1015 de Cloudflare suele durar SEGUNDOS:
+                # un segundo intento espaciado atraviesa la mayoría de ellas
+                import time as _t
+                _t.sleep(2.5)
+                readings = get_readings(token, base_url, patient_id, account_id)
         except requests.RequestException as exc:
             if "429" not in str(exc):
                 # id cacheado posiblemente viejo (re-vinculó el sensor):
