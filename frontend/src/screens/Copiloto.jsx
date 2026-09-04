@@ -601,7 +601,8 @@ export default function Copiloto({ theme }) {
         {messages.map((m, i) => (
           <Bubble key={i} theme={theme} role={m.role} text={m.content} usedData={m.usedData}
             img={m.img} grafica={m.grafica} chartLoading={m.chartLoading}
-            animate={m.justArrived} onScroll={scrollToBottom}/>
+            animate={m.justArrived} grafAnim={!!(m.justArrived || m.streaming)}
+            onScroll={scrollToBottom}/>
         ))}
         {sending && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: theme.inkFaint, fontSize: 12.5, paddingLeft: 44 }}>
@@ -697,12 +698,15 @@ function etiquetaFecha(iso, lang) {
   } catch { return iso || '' }
 }
 
-const Bubble = memo(function Bubble({ theme, role, text, usedData, img, grafica, chartLoading, animate, onScroll }) {
+const Bubble = memo(function Bubble({ theme, role, text, usedData, img, grafica, chartLoading, animate, grafAnim: grafAnimProp, onScroll }) {
   const { t, lang, gUnit, gVal } = useLang()
   const isUser = role === 'user'
   // gráfica del día: solo con serie real — sin datos, ni hueco ni cabecera
   const conGrafica = !isUser && grafica && Array.isArray(grafica.series)
     && grafica.series.length >= 2
+  // animar la entrada solo cuando la gráfica es NUEVA (recién llegada o aún
+  // en streaming) — restaurada desde storage entra estática (sin re-show)
+  const grafAnim = conGrafica && !!grafAnimProp
   // en tema claro los tonos brillantes no contrastan: variantes oscuras
   const tirColor = conGrafica && Number.isFinite(grafica.tir_pct)
     ? (grafica.tir_pct >= 70 ? (theme.dark ? '#34D399' : '#059669')
@@ -735,7 +739,8 @@ const Bubble = memo(function Bubble({ theme, role, text, usedData, img, grafica,
           )}
           {conGrafica && (
             <div className="rise-in" style={{ marginBottom: text ? 10 : 2, marginTop: 2 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline',
+              <div className={grafAnim ? 'wave-fade' : undefined}
+                style={{ display: 'flex', alignItems: 'baseline',
                 justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
                 <span style={{ fontSize: 10.5, letterSpacing: '0.08em',
                   textTransform: 'uppercase', color: theme.inkFaint }}>
@@ -752,7 +757,7 @@ const Bubble = memo(function Bubble({ theme, role, text, usedData, img, grafica,
               <GlucoseWave series={grafica.series} markers={grafica.markers || []}
                 theme={theme} low={grafica.low || 70} high={grafica.high || 180}
                 h={120} live={false} unitLabel={gUnit} fmtVal={gVal}
-                focusT={grafica.foco || null}/>
+                focusT={grafica.foco || null} animateIn={grafAnim}/>
             </div>
           )}
           {img && <img src={img} alt="" style={{ maxWidth: '100%', borderRadius: 12,

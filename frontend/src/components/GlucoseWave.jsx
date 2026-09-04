@@ -28,8 +28,12 @@ function hhmm(t) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-export default function GlucoseWave({ series, markers = [], theme, low = 70, high = 180, w = 320, h = 150, live = true, unitLabel = 'mg/dL', fmtVal = (v) => Math.round(v), focusT = null }) {
+export default function GlucoseWave({ series, markers = [], theme, low = 70, high = 180, w = 320, h = 150, live = true, unitLabel = 'mg/dL', fmtVal = (v) => Math.round(v), focusT = null, animateIn = false }) {
   const wrapRef = useRef(null)
+  // la animación de entrada se decide AL MONTAR y no cambia: si el mensaje
+  // streaming se swapea por el final a mitad del trazado, la curva termina
+  // de dibujarse igual (nada de cortes ni re-animaciones)
+  const [anim] = useState(animateIn)
   // ids únicos: varias ondas en la misma página (chat) no pueden compartir defs
   const uid = useId().replace(/:/g, '')
   const [active, setActive] = useState(null)
@@ -101,13 +105,13 @@ export default function GlucoseWave({ series, markers = [], theme, low = 70, hig
         </defs>
 
         {/* guías 70/180 — hairlines tenues, sin recuadro */}
-        <line x1="0" y1={yHigh} x2={w} y2={yHigh} stroke={theme.inkFaint} strokeWidth="0.5" strokeDasharray="1 8" opacity="0.4"/>
-        <line x1="0" y1={yLow} x2={w} y2={yLow} stroke={theme.inkFaint} strokeWidth="0.5" strokeDasharray="1 8" opacity="0.4"/>
+        <line className={anim ? 'wave-fade' : undefined} x1="0" y1={yHigh} x2={w} y2={yHigh} stroke={theme.inkFaint} strokeWidth="0.5" strokeDasharray="1 8" opacity="0.4"/>
+        <line className={anim ? 'wave-fade' : undefined} x1="0" y1={yLow} x2={w} y2={yLow} stroke={theme.inkFaint} strokeWidth="0.5" strokeDasharray="1 8" opacity="0.4"/>
 
         {/* banda de foco: el momento del que habla el copiloto */}
         {fx != null && (
-          <g>
-            <rect x={Math.max(0, fx - 14)} y="0" width="28" height={h}
+          <g className={anim ? 'foco-in' : undefined}>
+            <rect className="foco-breathe" x={Math.max(0, fx - 14)} y="0" width="28" height={h}
               fill={c} opacity="0.08" rx="6"/>
             <line x1={fx} y1="0" x2={fx} y2={h} stroke={c} strokeWidth="0.8"
               strokeDasharray="2 5" opacity="0.55"/>
@@ -115,9 +119,9 @@ export default function GlucoseWave({ series, markers = [], theme, low = 70, hig
         )}
 
         {/* área + línea (se funde con el fondo) */}
-        <path d={area} fill={`url(#gwArea${uid})`}/>
-        <path d={line} fill="none" stroke={c} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.35" filter={`url(#gwGlow${uid})`}/>
-        <path d={line} fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <path className={anim ? 'wave-area-in' : undefined} d={area} fill={`url(#gwArea${uid})`}/>
+        <path className={anim ? 'wave-draw-glow' : 'wave-breathe'} pathLength="1" d={line} fill="none" stroke={c} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.35" filter={`url(#gwGlow${uid})`}/>
+        <path className={anim ? 'wave-draw' : undefined} pathLength="1" d={line} fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
 
         {/* guía vertical + punto al arrastrar */}
         {ap && (
