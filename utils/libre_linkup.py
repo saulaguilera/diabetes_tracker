@@ -281,29 +281,43 @@ def sync_all(email: str, password: str, get_setting_fn=None, set_setting_fn=None
                 save_token_cache(token, base_url, expires_ms, set_setting_fn)
                 set_setting_fn("libre_account_id", account_id)
 
-        connections = get_connections(token, base_url, account_id)
-
-        if not connections:
-            # Si el token cacheado devolvió lista vacía, forzar re-login
-            if get_setting_fn and set_setting_fn:
-                set_setting_fn("libre_token", "")
-            return {"readings": [], "error": "No hay sensores vinculados en LibreLinkUp."}
-
-        # Usar el primer paciente (en uso personal, eres tú mismo)
-        patient = connections[0]
-        patient_id = patient.get("patientId") or patient.get("id")
+        # patient_id CACHEADO → /graph directo: la MITAD de requests por ciclo
+        # (menos presión sobre el límite por-IP de Cloudflare, que es
+        # compartido con todo Railway) y /connections queda como rescate
+        patient = None
+        patient_id = (get_setting_fn("libre_patient_id") or "") if get_setting_fn else ""
+        if not patient_id:
+            connections = get_connections(token, base_url, account_id)
+            if not connections:
+                # Si el token cacheado devolvió lista vacía, forzar re-login
+                if get_setting_fn and set_setting_fn:
+                    set_setting_fn("libre_token", "")
+                return {"readings": [], "error": "No hay sensores vinculados en LibreLinkUp."}
+            # Usar el primer paciente (en uso personal, eres tú mismo)
+            patient = connections[0]
+            patient_id = patient.get("patientId") or patient.get("id")
+            if set_setting_fn and patient_id:
+                set_setting_fn("libre_patient_id", patient_id)
 
         try:
             readings = get_readings(token, base_url, patient_id, account_id)
         except requests.RequestException as exc:
-            # Cloudflare limita /graph por IP (error 1015) aunque /connections
-            # sí responda (la IP de egreso de Railway es compartida): rescatar
-            # la lectura ACTUAL que ya vino en el payload de connections — una
-            # lectura por ciclo mantiene vivo el flujo hasta que /graph vuelva.
-            # (Visto sep-2026: u7 quedó 6 días a oscuras por esto.)
+            if "429" not in str(exc):
+                # id cacheado posiblemente viejo (re-vinculó el sensor):
+                # limpiarlo para que el próximo ciclo re-descubra vía connections
+                if set_setting_fn:
+                    set_setting_fn("libre_patient_id", "")
+                raise
+            # Cloudflare limita /graph por IP (error 1015; visto sep-2026: u7
+            # quedó 6 días a oscuras): rescatar la lectura ACTUAL del payload
+            # de /connections — una lectura por ciclo mantiene vivo el flujo
+            # hasta que /graph vuelva.
+            if patient is None:
+                connections = get_connections(token, base_url, account_id)
+                patient = connections[0] if connections else {}
             cur = (patient.get("glucoseMeasurement")
                    or patient.get("GlucoseMeasurement"))
-            if "429" in str(exc) and cur:
+            if cur:
                 readings = [_parse_reading(cur)]
             else:
                 raise

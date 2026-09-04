@@ -550,7 +550,7 @@ def api_sync_libre_reset():
         return jsonify({"error": "No autorizado"}), 401
     for key in ("libre_token", "libre_base_url", "libre_token_expiry",
                 "libre_account_id", "libre_last_sync", "libre_rate_limited_at",
-                "libre_429_streak"):
+                "libre_429_streak", "libre_patient_id"):
         _set_setting(key, "")
     return jsonify({"ok": True, "mensaje": "Caché borrado. Aprieta ↺ para hacer login fresco."})
 
