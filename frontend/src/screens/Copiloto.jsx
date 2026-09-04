@@ -284,11 +284,14 @@ export default function Copiloto({ theme }) {
         let vis = corte >= 0 ? texto.slice(0, corte) : texto
         return vis.replace(/\n?>{1,3}\s*$/, '')   // '>' o '>>' colgando al final
       }
+      let chartPendiente = false   // el server avisó: gráfica en camino
       const pinta = (texto) => {
         if (!vivo()) return
         setMessages(m => started
-          ? m.map(x => x.sid === sid ? { ...x, content: texto } : x)
-          : [...m, { sid, role: 'assistant', content: texto, streaming: true }])
+          ? m.map(x => x.sid === sid ? { ...x, content: texto,
+              ...(chartPendiente ? { chartLoading: true } : {}) } : x)
+          : [...m, { sid, role: 'assistant', content: texto, streaming: true,
+              ...(chartPendiente ? { chartLoading: true } : {}) }])
         started = true
       }
 
@@ -376,6 +379,11 @@ export default function Copiloto({ theme }) {
             acc = ''; objetivo = ''; mostrado = 0
             pararSuavizado()
             if (started) { setMessages(quitaBurbuja); started = false }
+            if (chartPendiente) pinta('')   // el esqueleto sobrevive la ronda
+          }
+          else if (ev.type === 'chart_pending') {
+            chartPendiente = true
+            pinta(visiblePara(objetivo).slice(0, Math.floor(mostrado)))
           }
           else if (ev.type === 'status') setSlowThinking(ev.fase === 'consultando')
           else if (ev.type === 'error') throw new Error('stream error')
@@ -592,7 +600,8 @@ export default function Copiloto({ theme }) {
       <div ref={listRef} style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', padding: '8px 18px 8px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         {messages.map((m, i) => (
           <Bubble key={i} theme={theme} role={m.role} text={m.content} usedData={m.usedData}
-            img={m.img} grafica={m.grafica} animate={m.justArrived} onScroll={scrollToBottom}/>
+            img={m.img} grafica={m.grafica} chartLoading={m.chartLoading}
+            animate={m.justArrived} onScroll={scrollToBottom}/>
         ))}
         {sending && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: theme.inkFaint, fontSize: 12.5, paddingLeft: 44 }}>
@@ -688,7 +697,7 @@ function etiquetaFecha(iso, lang) {
   } catch { return iso || '' }
 }
 
-const Bubble = memo(function Bubble({ theme, role, text, usedData, img, grafica, animate, onScroll }) {
+const Bubble = memo(function Bubble({ theme, role, text, usedData, img, grafica, chartLoading, animate, onScroll }) {
   const { t, lang, gUnit, gVal } = useLang()
   const isUser = role === 'user'
   // gráfica del día: solo con serie real — sin datos, ni hueco ni cabecera
@@ -707,13 +716,23 @@ const Bubble = memo(function Bubble({ theme, role, text, usedData, img, grafica,
           <CopilotAvatar size={34}/>
         </div>
       )}
-      <div style={{ maxWidth: conGrafica ? '88%' : '78%', width: conGrafica ? '88%' : undefined }}>
+      <div style={{ maxWidth: (conGrafica || chartLoading) ? '88%' : '78%',
+        width: (conGrafica || chartLoading) ? '88%' : undefined }}>
         <div style={{
           padding: '11px 14px', borderRadius: 18, fontSize: 14.5, lineHeight: 1.5,
           background: isUser ? theme.accent : theme.surface,
           color: isUser ? '#0A0C1E' : theme.ink,
           borderBottomRightRadius: isUser ? 6 : 18, borderBottomLeftRadius: isUser ? 18 : 6,
           border: isUser ? 'none' : `0.5px solid ${theme.border}`, whiteSpace: 'pre-wrap' }}>
+          {chartLoading && !conGrafica && (
+            <div className="rise-in" style={{ marginBottom: text ? 10 : 2, marginTop: 2 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span className="chart-shimmer" style={{ width: 92, height: 10, borderRadius: 5 }}/>
+                <span className="chart-shimmer" style={{ width: 64, height: 10, borderRadius: 5 }}/>
+              </div>
+              <div className="chart-shimmer" style={{ width: '100%', height: 120, borderRadius: 12 }}/>
+            </div>
+          )}
           {conGrafica && (
             <div className="rise-in" style={{ marginBottom: text ? 10 : 2, marginTop: 2 }}>
               <div style={{ display: 'flex', alignItems: 'baseline',

@@ -41,6 +41,10 @@ body::after {
 .guide-twinkle { animation: guideTwinkle 4.5s ease-in-out infinite; }
 
 @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
+@keyframes chartShimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+.chart-shimmer { display:block;
+  background: linear-gradient(100deg, rgba(148,163,184,0.10) 40%, rgba(148,163,184,0.26) 50%, rgba(148,163,184,0.10) 60%);
+  background-size: 200% 100%; animation: chartShimmer 1.5s ease-in-out infinite; }
 @keyframes slideUp { from{transform:translateY(60px); opacity:0} to{transform:translateY(0); opacity:1} }
 
 /* ── transiciones de entrada/salida (que nada aparezca ni muera de golpe) ── */
@@ -77,6 +81,7 @@ body::after {
 /* respetar la preferencia de reducir movimiento */
 @media (prefers-reduced-motion: reduce) {
   .msg-in, .rise-in { animation: none; }
+  .chart-shimmer { animation: none; }
   .tw-caret { display: none; }
   .onb-word, .onb-pop { animation: none; opacity: 1; }
   .onb-heart, .onb-nebula { animation: none; }

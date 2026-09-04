@@ -1938,6 +1938,7 @@ def copilot_chat_stream():
     def gen():
         used = []
         resp = None
+        chart_avisada = False
         try:
             yield ":" + (" " * 2048) + "\n\n"   # rompe buffers de proxies
             yield _sse({"type": "status", "fase": "pensando"})
@@ -1962,6 +1963,17 @@ def copilot_chat_stream():
                 if resp.stop_reason != "tool_use":
                     break
                 _ejecutar_tools(resp, msgs, used)
+                # la tool capturó una gráfica: avisar YA para que la app pinte
+                # el esqueleto de carga mientras el modelo escribe (la gráfica
+                # real sigue viajando SOLO en el done — esto es puro aviso)
+                if not chart_avisada:
+                    try:
+                        from flask import g as _g
+                        if getattr(_g, "copilot_fe", None):
+                            chart_avisada = True
+                            yield _sse({"type": "chart_pending"})
+                    except Exception:
+                        pass
                 yield _sse({"type": "ping"})   # latido entre rondas
                 # 4 rondas de consultas bastan; la 5ª escribe sí o sí
                 if ronda == 3:

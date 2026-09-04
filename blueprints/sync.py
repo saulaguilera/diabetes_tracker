@@ -549,7 +549,8 @@ def api_sync_libre_reset():
     if not session.get("logged_in"):
         return jsonify({"error": "No autorizado"}), 401
     for key in ("libre_token", "libre_base_url", "libre_token_expiry",
-                "libre_account_id", "libre_last_sync", "libre_rate_limited_at"):
+                "libre_account_id", "libre_last_sync", "libre_rate_limited_at",
+                "libre_429_streak"):
         _set_setting(key, "")
     return jsonify({"ok": True, "mensaje": "Caché borrado. Aprieta ↺ para hacer login fresco."})
 
@@ -1063,8 +1064,17 @@ def _sync_one_user(email: str, password: str, is_manual: bool, provider: str = "
 
     now = ahora_usuario()
 
+    # 429s CONSECUTIVOS → backoff exponencial (10→20→40→…→tope 6h). Reintentar
+    # cada 10 min fijos mantuvo el bucket de Abbott saturado 6 DÍAS seguidos
+    # (u7, ago-sep 2026): el bloqueo solo se suelta con silencio real.
+    try:
+        _streak = int(_get_setting("libre_429_streak") or 0)
+    except (TypeError, ValueError):
+        _streak = 0
+    _espera_min = min(_RATELIMIT_MIN * (2 ** max(0, _streak - 1)), 360)
+
     # Rate-limit de Abbott: se respeta incluso en sync manual
-    wait = _rate_limit_wait(_get_setting("libre_rate_limited_at"), _RATELIMIT_MIN)
+    wait = _rate_limit_wait(_get_setting("libre_rate_limited_at"), _espera_min)
     if wait < 0:
         _set_setting("libre_rate_limited_at", "")   # legacy/corrupto → limpiar
     elif wait > 0:
@@ -1094,9 +1104,12 @@ def _sync_one_user(email: str, password: str, is_manual: bool, provider: str = "
 
     resultado = _do_libre_sync(email, password, provider)
 
-    # Limpiar rate-limit si el sync fue exitoso
-    if not resultado.get("error") or "429" not in (resultado.get("error") or ""):
+    # 429 → alargar la racha; cualquier otro resultado → cooldown y racha a cero
+    if "429" in (resultado.get("error") or ""):
+        _set_setting("libre_429_streak", str(_streak + 1))
+    else:
         _set_setting("libre_rate_limited_at", "")
+        _set_setting("libre_429_streak", "")
 
     return resultado
 
