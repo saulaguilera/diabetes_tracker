@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import flask
 from models import db, User, Meal, InsulinDose, Activity, GlucoseReading
-from helpers import set_user_context, reset_user_context
+from helpers import set_user_context, reset_user_context, ahora_usuario
 from utils.copilot_tools import run_tool
 
 
@@ -46,7 +46,7 @@ class TestRegistroDesdeElChat(unittest.TestCase):
         self.assertEqual(m.carbs_g, 25)
         self.assertEqual(m.fiber_g, 3)
         # timestamp desplazado ~30 min hacia atrás
-        self.assertLess(abs((datetime.now() - timedelta(minutes=30)
+        self.assertLess(abs((ahora_usuario() - timedelta(minutes=30)
                              - m.timestamp).total_seconds()), 90)
 
     def test_comida_sin_carbos_pide_el_dato(self):
@@ -80,7 +80,7 @@ class TestRegistroDesdeElChat(unittest.TestCase):
                                           "hace_minutos": 99999})
         self.assertTrue(r.get("ok"))
         m = Meal.query.one()
-        self.assertLess(abs((datetime.now() - timedelta(minutes=1440)
+        self.assertLess(abs((ahora_usuario() - timedelta(minutes=1440)
                              - m.timestamp).total_seconds()), 90)
 
 
@@ -100,7 +100,7 @@ class TestSaludDeDatos(unittest.TestCase):
         self.ctx.pop()
 
     def test_contexto_avisa_dato_atrasado(self):
-        db.session.add(GlucoseReading(timestamp=datetime.now() - timedelta(hours=3),
+        db.session.add(GlucoseReading(timestamp=ahora_usuario() - timedelta(hours=3),
                                       value_mgdl=120, source="test"))
         db.session.commit()
         from blueprints.copilot_api import _chat_context
@@ -109,7 +109,7 @@ class TestSaludDeDatos(unittest.TestCase):
         self.assertIn("ATRASADO", ctx)
 
     def test_contexto_fresco_sin_alarma(self):
-        db.session.add(GlucoseReading(timestamp=datetime.now() - timedelta(minutes=4),
+        db.session.add(GlucoseReading(timestamp=ahora_usuario() - timedelta(minutes=4),
                                       value_mgdl=110, source="test"))
         db.session.commit()
         from blueprints.copilot_api import _chat_context

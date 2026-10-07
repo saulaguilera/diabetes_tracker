@@ -42,6 +42,10 @@ _db_url = os.environ.get("DATABASE_URL") or (
 # Railway/Heroku a veces entregan "postgres://"; SQLAlchemy 2 exige "postgresql://"
 if _db_url.startswith("postgres://"):
     _db_url = _db_url.replace("postgres://", "postgresql://", 1)
+# driver EXPLÍCITO: SQLAlchemy 2.1 cambió el default de "postgresql://" a
+# psycopg3 (no instalado) y tumbó la app en un redeploy sin cambios de código
+if _db_url.startswith("postgresql://"):
+    _db_url = _db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 app.config["SQLALCHEMY_DATABASE_URI"] = _db_url
 # Postgres: reciclar conexiones y verificar antes de usar (evita conexiones
 # muertas tras idle timeouts del pooler)
